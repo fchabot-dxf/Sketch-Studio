@@ -19,6 +19,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { launchBrowser, startServer, sleep } from './helpers/cdp-browser.js';
 import worker from '../analytics/src/index.js';
+import { fileSourceTypes } from './helpers/file-fusion-types-live.js'; // TASK 882
 
 const require = createRequire(import.meta.url);
 const { buildSite } = require('../scripts/build-site.cjs');
@@ -161,6 +162,7 @@ try {
   await waitFor(`!!window.fusionJavaScriptHandler && !!document.getElementById('btn-fusion-add-selection') && !document.getElementById('view-prepare').hidden`, 'F: the Fusion Prepare bar');
   await until(() => points.length >= f0 + 1, 'F: the visit');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(realSolid)})`);
+  await fileSourceTypes(evalJs, '/src'); // TASK 882: the import makes no operation: file the types Fusion hinted, so the export has cuts (the built site serves the modules from /src; no stage change: this test counts the stage events)
   await waitFor(`/8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'F: the real solid imported (8 regions)');
   await until(() => points.length >= f0 + 2, 'F: import:fusion');
   await openStage('review');

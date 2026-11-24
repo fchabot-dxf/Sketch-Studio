@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openPocketPage } from './pocket-live.js';
 import { sleep } from './cdp-browser.js';
+import { fileSourceTypesAndRemount } from './file-fusion-types-live.js'; // TASK 882
 
 const IN = 25.4;
 
@@ -187,6 +188,7 @@ export async function fusionPhase(t) {
   await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fs.readFileSync(new URL('../fixtures/sa7-slope/02-drafted-pocket.json', import.meta.url), 'utf8'))})`);
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'Fusion: the drafted pocket imported');
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await clickWorld(60, -40);
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && document.querySelector('.cut-type-cur').textContent === 'Pocket'`, 'Fusion: the pocket\'s card');
   await pickClearing('linked');

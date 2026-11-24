@@ -13,6 +13,7 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { sleep } from './cdp-browser.js';
+import { fileSourceTypesAndRemount } from './file-fusion-types-live.js'; // TASK 882
 import { setupPockets } from './pocket-live.js';
 import { probe, tipProblems } from './tooltip-live.js';
 
@@ -33,6 +34,7 @@ export async function hintsPhase(t, { fusion = false, part = 'all' } = {}) {
     await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
     await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('02-drafted-pocket'))})`);
     await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'Fusion: the drafted pocket imported');
+    await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
     await clickWorld(60, -40);
     await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && document.querySelector('.cut-type-cur').textContent === 'Pocket'`, 'Fusion: the imported pocket\'s card');
   } else await setupPockets(t, D);

@@ -6,6 +6,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 import { resetBufferLive } from './helpers/reset-buffer.js';
 
 const EVIDENCE_DIR = path.resolve('.evidence/806');
@@ -145,6 +146,7 @@ async function run({ width, height, tag }) {
 
     await pushSelection(INITIAL);
     await goStage('prepare');
+    await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
     await openOpsSheet();
 
     const initialOps = await opsInfo();

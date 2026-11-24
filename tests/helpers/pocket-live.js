@@ -13,6 +13,7 @@
 // openPocketPage() = the browser, the page, the download folder and the page tools; setupPockets() = the drawing and the rectangle pocket every phase starts from.
 // Screenshots to .evidence/745/ (EVIDENCE_DIR overrides).
 import assert from 'node:assert';
+import { fileSourceTypesAndRemount } from './file-fusion-types-live.js'; // TASK 882
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -405,6 +406,7 @@ export async function fusionPhase(t) {
   await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => m.V2_PLAN.clear())`);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('02-drafted-pocket'))})`);
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'Fusion: the drafted pocket imported');
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await clickWorld(60, -40);
   await waitFor(`!document.querySelector('#prepare-panel .cut-card').hidden && document.querySelector('.cut-type-cur').textContent === 'Pocket'`, 'Fusion: the imported pocket\'s card');
   const fusion = {};

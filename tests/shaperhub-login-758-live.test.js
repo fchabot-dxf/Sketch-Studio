@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/758');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -285,6 +286,7 @@ try {
   const planFusion = async (label) => {
     await openStage('prepare');
     await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/06-countersink'))})`);
+    await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
     await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, label + ': the Fusion selection imported');
     await clickWorld(60, -40);
     await selected(label);

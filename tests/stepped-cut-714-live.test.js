@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const EVIDENCE_DIR = path.resolve('.evidence/714');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -92,6 +93,7 @@ try {
 
   // 1. the drafted pocket as imported: Pocket (straight)
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('02-drafted-pocket'))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the drafted pocket imported');
   const imported = await plan();
   console.log('imported plan: ' + JSON.stringify(imported));
@@ -146,6 +148,7 @@ try {
   // 4. the outline chamfered top and bottom: Stepped outside, the undercut cut straight
   await openStage('prepare');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('x2-outline-chamfer-top-bottom'))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/Replaced with Body1: 1 region/.test(document.getElementById('prepare-notice').textContent)`, 'x2 imported');
   await clickWorld(60, -40);
   const x2Menu = await menuIds();

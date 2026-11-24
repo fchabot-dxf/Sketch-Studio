@@ -19,6 +19,7 @@ import { resetBufferLive } from './helpers/reset-buffer.js';
 import { probe } from './helpers/tooltip-live.js';
 import { openOpLive, typeLive } from './helpers/prepare-open-live.js';
 import * as M from './helpers/stl-mesh.js';
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/817');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -207,6 +208,7 @@ try {
   await waitFor(`!!window.fusionJavaScriptHandler`, 'the Fusion handler');
   const plate = fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(plate)})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`document.getElementById('prepare-notice') && /8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the plate imported (8 regions)');
   const same = await evalJs(`Promise.all(['/apps/shaper/src/export-payload.js', '/apps/shaper/src/cut-plan.js', '/apps/shaper/src/op-derive.js', '/apps/shaper/src/op-paths.js'].map((u) => import(u))).then(async ([ep, cp, od, op]) => {
     const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) && !(x instanceof Map) ? Object.fromEntries(Object.keys(x).sort().map((q) => [q, x[q]])) : x instanceof Map ? [...x] : typeof x === 'function' ? undefined : x));

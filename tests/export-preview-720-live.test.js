@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const BEFORE = process.env.TASK720_BEFORE === '1';
 const EVIDENCE_DIR = path.resolve(BEFORE ? '.evidence/720/before' : '.evidence/720');
@@ -126,6 +127,7 @@ try {
   await clickEl('#review-view-2d');
   await openStage('prepare');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/06-countersink'))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/Body1: 2 regions|Replaced with Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, '06 imported');
   await clickWorld(60, -40);
   await setPlan('roughing');

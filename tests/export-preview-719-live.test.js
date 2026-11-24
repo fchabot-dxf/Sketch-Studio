@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const BEFORE = process.env.TASK719_BEFORE === '1';
 const EVIDENCE_DIR = path.resolve(BEFORE ? '.evidence/719/before' : '.evidence/719');
@@ -112,6 +113,7 @@ try {
 
   // 1. the real solid: 4 pockets at 4 / 6 / 8 / 10 mm
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('real-solid-plate-711'))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the real solid imported');
   await waitFor(`document.querySelectorAll('#review-2d-canvas .rv2d-doc *').length > 0`, 'the 2D view rebuilt');
   const solid = await pocketLooks();
@@ -140,6 +142,7 @@ try {
   // 2. the R3 floor fillet as a Stepped pocket: Coarse, then Fine
   await openStage('prepare');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/03-pocket-floor-fillet'))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'R3 imported');
   await clickWorld(60, -40);
   await setPlan('roughing');
@@ -187,6 +190,7 @@ try {
   };
   await openStage('prepare');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/x2-outline-chamfer-top-bottom'))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/Replaced with Body1: 1 region/.test(document.getElementById('prepare-notice').textContent)`, 'x2 imported');
   await clickWorld(60, -40);
   await setPlan('roughing');
@@ -208,6 +212,7 @@ try {
 
   await openStage('prepare');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/06-countersink'))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/Replaced with Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, '06 imported');
   await clickWorld(60, -40);
   await setPlan('roughing');

@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882
 
 const EVIDENCE_DIR = path.resolve('.evidence/864');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -160,6 +161,7 @@ async function run({ width, height, tag }) {
 
     // Candidate action (3a): Add selection Body1 (Single Solid Body) and convert its Outside op to an Inside cut
     await handleFusion('selection_data', { ...BODY1, docToken: 'tok-bromont-1' });
+    await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
     await openOpsSheet();
     ops = await opsInfo();
     stockOp = ops.find((o) => o.type === 'stock');
@@ -178,6 +180,7 @@ async function run({ width, height, tag }) {
 
     // Candidate action (3b): Add selection Body1 Top Face
     await handleFusion('selection_data', { ...BODY1_TOP_FACE, docToken: 'tok-bromont-1' });
+    await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
     await openOpsSheet();
     ops = await opsInfo();
     stockOp = ops.find((o) => o.type === 'stock');

@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const EVIDENCE_DIR = path.resolve('.evidence/729');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -115,6 +116,7 @@ try {
   await waitFor(`!!window.fusionJavaScriptHandler && !!document.getElementById('btn-fusion-add-selection') && !document.getElementById('view-prepare').hidden`, 'the Fusion Prepare bar');
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'mm'))`);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(realSolid)})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the real solid imported (8 regions)');
 
   // 1. the Export step on 3D, the default look

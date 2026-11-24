@@ -6,6 +6,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 import { resetBufferLive } from './helpers/reset-buffer.js';
 
 const EVIDENCE_DIR = path.resolve('.evidence/799');
@@ -91,6 +92,7 @@ try {
   };
 
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(JSON.stringify(selPayload))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
 
   // Immediately during debounce / in-flight send, spinner must be visible.
   await waitFor(`document.getElementById('shaper-fusion-spin').hidden === false && document.getElementById('shaper-fusion-bar').dataset.syncing === 'true'`, 'spinner visible while syncing');

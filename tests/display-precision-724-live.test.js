@@ -12,6 +12,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const EVIDENCE_DIR = path.resolve('.evidence/724');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -78,6 +79,7 @@ try {
   await waitFor(`!!window.fusionJavaScriptHandler && !!document.getElementById('btn-fusion-add-selection')`, 'the Fusion Prepare bar');
   await evalJs(`(() => { localStorage.removeItem('sketch-studio-settings'); return import('/packages/core/settings-manager.js').then((m) => { m.default.set('DOC_UNIT', 'mm'); m.default.set('LENGTH_PRECISION', null); m.default.set('ANGLE_PRECISION', null); }); })()`);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('02-drafted-pocket'))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the drafted pocket imported');
   await clickEl('.sk-header-tab[data-tab="prepare"]');
   await waitFor(`!document.getElementById('view-prepare').hidden`, 'the prepare stage');
@@ -226,6 +228,7 @@ try {
   await waitForApp('design-canvas');
   await waitFor(`!!window.fusionJavaScriptHandler`, 'the Fusion bar');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('02-drafted-pocket'))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'imported');
   await clickEl('.sk-header-tab[data-tab="prepare"]');
   await clickWorld(60, -40);

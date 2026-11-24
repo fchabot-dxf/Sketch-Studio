@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 const EVIDENCE_DIR = path.resolve('.evidence/717');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/sa7-slope/${name}.json`, import.meta.url), 'utf8');
@@ -91,6 +92,7 @@ try {
   await waitFor(`!!window.fusionJavaScriptHandler && !!document.getElementById('btn-fusion-add-selection') && !document.getElementById('view-prepare').hidden`, 'the Fusion Prepare bar');
   await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'mm'))`);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('03-pocket-floor-fillet'))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the R3 floor fillet pocket imported');
   await clickWorld(60, -40);
   await clickEl('#prepare-panel .cut-type-trigger');

@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const EVIDENCE_DIR = path.resolve('.evidence/711');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -43,6 +44,7 @@ try {
   await waitForApp('design-canvas');
   await waitFor(`!!window.fusionJavaScriptHandler`, 'the Fusion handler');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(payload)})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`document.getElementById('prepare-notice') && /8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the import notice (8 regions)');
 
   // the Outline region (holes: []) is a derived-loop target, unchanged by task 711

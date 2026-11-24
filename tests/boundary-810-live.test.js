@@ -104,7 +104,7 @@ const pathsMinX = () => evalJs(`(() => { const els = [...document.querySelectorA
 
 async function phase() {
   await openStage('prepare');
-  await evalJs(`import('/apps/shaper/src/fusion-import.js').then((m) => m.importFusionSelection(${JSON.stringify(PAYLOAD)}, { controller: window.__designController }))`);
+  await evalJs(`import('/apps/shaper/src/fusion-import.js').then((m) => m.importFusionSelection(${JSON.stringify(PAYLOAD)}, { controller: window.__designController, file: true }))`); // TASK 882: set-up: the payload's types filed as operations
   await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { const r = [...m.V2_PLAN.values()].find((x) => x.levels); Object.assign(r, { cutType: 'roughing', toolDia: 6.35, stepDepth: 1, roughLayout: 'nested', smoothing: 0 }); })`);
   await openStage('design'); await openStage('prepare'); // Prepare mounts the imported design
   await waitFor(`document.getElementById('prepare-notice').hidden`, 'the notice gone', 10000);

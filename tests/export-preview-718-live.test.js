@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const EVIDENCE_DIR = path.resolve('.evidence/718');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -137,6 +138,7 @@ try {
 
   // 2. the real solid sent while 2D shows: the view updates (the Review's rebuild trigger)
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(realSolid)})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the real solid imported (8 regions)');
   await waitFor(`document.querySelectorAll('#review-2d-canvas .rv2d-doc *').length > 0`, 'the 2D view rebuilt');
   const solidShown = await shownElements();
@@ -183,6 +185,7 @@ try {
   // 4. the R3 floor fillet as a Stepped pocket, adaptive Coarse (real clicks in Prepare, as task 717)
   await openStage('prepare');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(r3Fillet)})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the R3 floor fillet pocket imported');
   await clickWorld(60, -40);
   await clickEl('#prepare-panel .cut-type-trigger');

@@ -19,6 +19,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const EVIDENCE_DIR = path.resolve('.evidence/754/live');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -172,6 +173,7 @@ try {
   await waitFor(`!!window.fusionJavaScriptHandler && !document.getElementById('view-prepare').hidden`, 'the Fusion Prepare bar');
   await S(`(S.set('DOC_UNIT', 'mm'), S.set('GRID_MODE', 'lines'), true)`);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(realSolid)})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the real solid imported (8 regions)');
   await openStage('review');
   await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'the 3D build', 15000);
@@ -265,6 +267,7 @@ try {
   await waitForApp('design-canvas');
   await waitFor(`!document.getElementById('view-review').hidden && /triangles/.test(document.getElementById('review-info').textContent)`, 'phone: the Export step, 3D', 15000);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(realSolid)})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await sleep(500);
   await clickEl('#review-reset'); await sleep(400);
   const ph = await state();

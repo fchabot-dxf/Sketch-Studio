@@ -5,6 +5,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const EVIDENCE_DIR = path.resolve('.evidence/795c');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -99,6 +100,7 @@ async function run({ width, height }) {
     // 1. Send SA-15 payload with 2 summary.items rows.
     await pushSelection(INITIAL);
     await waitFor(`document.querySelectorAll('#shaper-fusion-selections .shaper-fusion-sel').length === 2`, '2 summary.items rows rendered');
+    await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
     assert.deepStrictEqual(await rowsInfo(), [
       { id: 'sel-sa15-live', group: 'face', text: 'Tray · 2 faces' },
       { id: 'sel-sa15-live', group: 'sloped-face', text: 'Tray · 4 sloped faces' },

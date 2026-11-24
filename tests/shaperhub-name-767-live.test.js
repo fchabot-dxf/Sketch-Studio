@@ -23,6 +23,7 @@ import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 import { createFakeShaperApi, FAKE_LOGIN } from './shaperhub-fake-api.js';
 import { handleShaperUpload } from '../packages/core/shaper-cloud.js';
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/767');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -311,6 +312,7 @@ try {
   await waitForApp('design-canvas');
   await waitFor(`!!window.fusionJavaScriptHandler && !document.getElementById('view-prepare').hidden`, 'fusion: the Fusion Prepare stage');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/06-countersink'))})`);
+  await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
   await waitFor(`/Body1: 2 regions/.test(document.getElementById('prepare-notice').textContent)`, 'fusion: the Fusion selection imported');
   await clickWorld(60, -40);
   await selected('fusion');

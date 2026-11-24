@@ -15,6 +15,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import * as M from './helpers/stl-mesh.js';
+import { fileSourceTypesAndRemount } from './helpers/file-fusion-types-live.js'; // TASK 882: a Fusion selection makes no operation: the set-up files the hinted types
 
 const EVIDENCE_DIR = path.resolve('.evidence/823');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -138,6 +139,7 @@ try {
     await waitFor(`!!window.fusionJavaScriptHandler`, 'the Fusion handler'); await sleep(500); // (a phone reload opens on the Export step, as review-grid-754-live does)
     await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('DOC_UNIT', 'mm'))`);
     await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(realSolid)})`);
+    await fileSourceTypesAndRemount({ evalJs, waitFor }); // TASK 882: the import makes no operation: file the types Fusion hinted (what the old import did)
     await waitFor(`/8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the real solid imported');
     for (let i = 0; i < 5 && await evalJs(`document.getElementById('view-review').hidden`); i++) { await clickEl('.sk-header-tab[data-tab="review"]'); await sleep(300); }
     await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'the 3D build', 15000);

@@ -9,6 +9,7 @@ import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { reviewGridSpec, designCanvasColors, gridMaterialSource, GRID_FADE } from './review-grid.js';
 import { mountDisclosure, isPhone, CARET_SVG } from './disclosure.js'; // TASK 757: the info folds on a phone (the Operations sheet's fold)
 import { createOrbitStage } from './orbit-stage.js'; // TASK 808: the one three.js stage (renderer, lights, camera, orbit navigation) the Review and the STL Orient view share
+import { dbg } from '#core/debug.js'; // TASK 880: the build's numbers (triangles, levels, time) go to the debug log, never on screen
 
 export const TILE_MM = 400;        // one repeat of the birch image covers 400 x 400 mm of board (a plausible plywood grain scale)
 export const WOOD_URL = new URL('../assets/birch-plywood.jpg', import.meta.url).href;
@@ -131,7 +132,7 @@ const GRID_SETTING_KEYS = new Set(['GRID_MODE', 'GRID_SIZE', 'GRID_MAJOR_STEP', 
  * mountReviewView({ host, info, getInputs, look, designCanvas, emptyText }) -> Promise<{ refresh, reset, top, fit, setLook, inspect, screenOf, destroy, setSim, lastBuild, look }>
  *   (TASK 801: setSim = the Export simulation's wood and passes, see below)
  *   host       the element the canvas is appended to
- *   info       element receiving the one-line build summary (and the "not shown" notes)
+ *   info       element receiving the build's notes (the board's shape, the cuts outside the stock, the "not shown" ones); TASK 880: no build numbers (dbg only)
  *   getInputs  () => { stock, items, bounds, notes? }  (see buildRelief; notes = extra info lines, TASK 714: the stepped cuts' steps / undercuts)
  *   look       the initial look state { id, colors } (TASK 729, normaliseLook; default Plywood); setLook(state) swaps the MATERIALS only (no geometry rebuild)
  *   designCanvas  the Design canvas element (TASK 754): the background and the grid colours are read from its own tokens (review-grid.js)
@@ -372,7 +373,9 @@ export async function mountReviewView({ host, info, getInputs, look: initialLook
     lastSig = sig;
     lastBuild = { ms, stages: rel.stats.ms, triangles: rel.stats.triangles, levels: rel.stats.levels, skipped: rel.stats.skipped, unsetThrough: rel.stats.unsetThrough, marks: rel.marks.length, outsideStock: rel.stats.outsideStock, partlyOutside: rel.stats.partlyOutside, board: rel.stats.board };
     const notShown = rel.stats.skipped.filter((s) => s.reason === 'no-depth').length;
-    const lines = [`${rel.stats.triangles} triangles · ${rel.stats.levels} level${rel.stats.levels === 1 ? '' : 's'} · built in ${ms.toFixed(0)} ms`];
+    // TASK 880 (owner turn 3485): the build's numbers are not shown; they go to the debug log, and the tests and the perf runs read them from lastBuild (inspect seam)
+    dbg.log('shaper', `3D build: ${rel.stats.triangles} triangles, ${rel.stats.levels} level${rel.stats.levels === 1 ? '' : 's'}, ${ms.toFixed(0)} ms`);
+    const lines = [];
     if (rel.stats.board === 'profile') lines.push('Board: your Stock loop (any shape), extruded to its thickness');
     const nOut = rel.stats.outsideStock.length, nPart = rel.stats.partlyOutside.length;
     if (nOut) lines.push(`${nOut} cut${nOut === 1 ? '' : 's'} lie${nOut === 1 ? 's' : ''} wholly outside the stock: nothing is cut there`);

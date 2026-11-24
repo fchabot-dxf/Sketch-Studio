@@ -421,10 +421,11 @@ import { findCornerAtJoint, applyFillet } from '#core/fillet.js';
 
     // Select all 8 shapes of the frame
     state.selectedShapes = new Set(state.shapes.map(s => s.id));
+    lastToast = '';
     const r2 = doCombine(state, notify);
     assert(r2 && r2.id === 'profile-1', 'doCombine creates profile');
     assert(state.profiles.length === 1, 'state has 1 profile');
-    assert(lastToast.includes('Combined into Profile 1 (1 hole)'), 'toast announces success');
+    assert(lastToast === '', 'TASK 878: a Combine that worked says nothing (the profile shows): ' + lastToast);
 
     // Select shape not in any profile to uncombine
     state.selectedShapes = new Set(['unrelated-shape']);
@@ -434,10 +435,11 @@ import { findCornerAtJoint, applyFillet } from '#core/fillet.js';
 
     // Select shape in the profile to uncombine
     state.selectedShapes = new Set(['so1']);
+    lastToast = '';
     const u2 = doUncombine(state, notify);
     assert(u2 === 1, 'uncombine returns 1 profile removed');
     assert(state.profiles.length === 0, 'state has 0 profiles after uncombine');
-    assert(lastToast.includes('Uncombined 1 profile'), 'toast announces uncombine count');
+    assert(lastToast === '', 'TASK 878: an Uncombine that worked says nothing: ' + lastToast);
   }
 
   // 11. Renderer draw() purity: state.profiles is deep-equal before and after draw (filleted valid + deleted-hole invalid)

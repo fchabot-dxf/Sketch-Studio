@@ -91,7 +91,7 @@ const rawCount = (text) => RAW.reduce((n, re) => n + (text.match(re) || []).leng
 // widget-local keys, out of the declaration by agreement (TASK 727 ruling 5): file -> [count, reason]
 const EXEMPT = {
   'packages/ui/account-avatar.js': [2, 'the account menu popover: Esc closes it, Tab stays inside it (a widget-local key, like the footer confirm)'],
-  'packages/ui/app-footer.js': [2, 'the Clear-sketch confirm modal: Esc = its Cancel, Tab focus trap'],
+  'packages/ui/app-footer.js': [3, 'the Clear-sketch confirm modal: Esc = its Cancel, Tab focus trap; TASK 880: Esc closes the folded stage controls card'],
   'packages/ui/app-sidebar.js': [9, 'the drawer: inline rename / ask inputs (Enter / Esc), Enter on the name, Esc closes it, Tab focus trap'],
   'packages/ui/context-menu.js': [13, 'the open context menu: arrows / Enter / Esc / submenu navigation'],
   'packages/ui/design-info-panel.js': [2, 'the inline rename input: Enter / Esc'],

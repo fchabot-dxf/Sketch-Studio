@@ -10,6 +10,7 @@ import { resetBufferLive } from './helpers/reset-buffer.js';
 import { previewLive } from './helpers/prepare-open-live.js'; // TASK 817: the open operation's paths are drawn on its Preview
 import { createFakeShaperApi, FAKE_LOGIN, FAKE_TOKEN } from './shaperhub-fake-api.js';
 import { handleShaperUpload } from '../packages/core/shaper-cloud.js';
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/772');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -187,7 +188,7 @@ try {
   await hoverEl('#review-view-3d');
   await waitFor(`(() => { const t = document.querySelector('.sk-tooltip:not([hidden])'); return !!t && /3D/i.test(t.textContent); })()`, 'Export 3D tooltip');
 
-  await clickEl('#btn-sync-shaper');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-sync-shaper');
   await waitFor(`document.getElementById('shaper-sync-modal').open`, 'Sync modal open');
 
   // Browse folders with login -> loads '/', shows #sync-session, hides #sync-creds
@@ -225,7 +226,7 @@ try {
   // Reopening Sync preserves the in-memory session; rotating token on server -> Refresh detects 401 -> clears session cleanly to re-auth
   await clickEl('#sync-btn-cancel');
   await waitFor(`!document.getElementById('shaper-sync-modal').open`, 'closed');
-  await clickEl('#btn-sync-shaper');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-sync-shaper');
   await waitFor(`document.getElementById('shaper-sync-modal').open && !document.getElementById('sync-session').hidden`, 'Session persists across modal reopen in page memory');
   api.rotateToken('rotated-jwt-772');
   await clickEl('#sync-btn-refresh');
@@ -254,7 +255,7 @@ try {
     if (!cp.planEntries().length) cp.V2_PLAN.set('loop:' + lf.findLoops(st)[0].id, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 }); })()`);
   await clickEl('.sk-header-tab[data-tab="review"]');
   await waitFor(`!document.getElementById('view-review').hidden`, 'phone Export tab');
-  await clickEl('#btn-sync-shaper');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-sync-shaper');
   await waitFor(`document.getElementById('shaper-sync-modal').open`, 'phone Sync modal open');
   await typeVal('#sync-email', FAKE_LOGIN.email);
   await typeVal('#sync-password', FAKE_LOGIN.password);

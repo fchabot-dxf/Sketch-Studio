@@ -81,7 +81,7 @@ const mid = (app, id) => { const st = app.state, s = st.shapes.find((x) => x.id 
     eq([enterSelectedGroup(st), st.enteredGroupId, st.selectedShapes.size], ['group-1', 'group-1', 0], 'Enter group: R entered, nothing selected');
     eq(groupCommands(st).leave, true, 'Leave group offered while R is entered');
     eq([leaveEnteredGroup(st), st.enteredGroupId], [true, null], 'Leave group: back to the top');
-    eq(said, ['warning: Select 2+ shapes to group', 'success: Grouped 9 shapes → Group 3', 'success: Ungrouped 1 group'], 'the messages');
+    eq(said, ['warning: Select 2+ shapes to group'], 'the messages: TASK 878: only the refusal (a done Group / Ungroup says nothing)');
     // the menu entries, declared once (context-menu.js): what applies only
     const ids = (kind) => contextMenuItems(kind, { target: {}, actions: { ...groupMenuActions(st), lockState: () => ({ locked: false }), toggleLock() {}, deleteSelection() {} } }).map((i) => i.id);
     select(st, rIds);

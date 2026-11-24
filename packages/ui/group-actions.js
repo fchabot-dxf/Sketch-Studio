@@ -14,14 +14,12 @@ const clearSelection = (state) => {
 };
 
 /** Group: the selected shapes become ONE new group (a whole selected group goes in whole: #core/group-model.js makeGroup). One undo step.
- *  notify(message, level): the host's status line. -> the group, or null (fewer than two things selected). */
+ *  notify(message, level): the host's status line, for a refusal (TASK 878: a done command says nothing). -> the group, or null (fewer than two things selected). */
 export function groupSelection(state, notify = () => {}) {
   if (!groupCommands(state).group) { notify('Select 2+ shapes to group', 'warning'); return null; }
   const sel = [...state.selectedShapes];
   if (typeof state.saveState === 'function') state.saveState('group');
-  const g = makeGroup(state, sel);
-  notify(`Grouped ${sel.length} shapes → ${g.name}`, 'success');
-  return g;
+  return makeGroup(state, sel); // TASK 878: the new group shows on the canvas and in the browser: no message
 }
 
 /** Ungroup: each group the selection holds (groupCommands().ungroup) is dissolved ONE level. One undo step. -> how many were dissolved. */
@@ -29,8 +27,7 @@ export function ungroupSelection(state, notify = () => {}) {
   const cmds = groupCommands(state), gids = cmds.ungroup;
   if (!gids.length) { notify(cmds.text ? 'A text is one object: Convert to shapes (its menu) turns it into curves' : 'No group on the selection', 'warning'); return 0; } // TASK 845
   if (typeof state.saveState === 'function') state.saveState('ungroup');
-  for (const gid of gids) ungroup(state, gid);
-  notify(`Ungrouped ${gids.length} group${gids.length === 1 ? '' : 's'}`, 'success');
+  for (const gid of gids) ungroup(state, gid); // TASK 878: seen on the canvas: no message
   return gids.length;
 }
 
@@ -66,8 +63,7 @@ export function toggleGroupLock(state, kind, gid = groupCommands(state).enter, n
   const on = !now[kind];
   if (typeof state.saveState === 'function') state.saveState(on ? 'lock group' : 'unlock group');
   setGroupLock(state, gid, kind, on);
-  track('group-lock');
-  notify(`${g.name}: ${GROUP_LOCKS[kind].label} ${on ? 'on' : 'off'}`, 'success');
+  track('group-lock'); // TASK 878: the padlock shows the new state: no message
   return { on };
 }
 

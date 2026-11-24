@@ -23,6 +23,7 @@ import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 import { createFakeShaperApi, FAKE_LOGIN } from './shaperhub-fake-api.js';
 import { handleShaperUpload } from '../packages/core/shaper-cloud.js';
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/767');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -140,7 +141,7 @@ const dialogState = () => evalJs(`(() => { const shown = (id) => { const e = doc
     question: shown('sync-exists'), actions: shown('sync-actions') }; })()`);
 const openSignIn = async (label) => {
   await openStage('review');
-  await clickEl('#btn-sync-shaper');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-sync-shaper');
   await waitFor(`document.getElementById('shaper-sync-modal').open`, label + ': the sign-in dialog opens');
   await sleep(150);
 };
@@ -195,7 +196,7 @@ try {
   await planRectangle('desktop');
   await openStage('review');
   // Generate Shaper SVG: bromont.svg, and the panel names it
-  const gen = await downloaded('Generate', () => clickEl('#btn-generate-svg'));
+  const gen = await downloaded('Generate', () => pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg'));
   const genLine = await evalJs(`({ text: document.getElementById('simexport-status').textContent, strong: document.querySelector('#simexport-status strong').textContent, link: document.querySelector('#simexport-status a').href })`);
   console.log('desktop: Generate saved ' + JSON.stringify(gen) + ', panel ' + JSON.stringify(genLine));
   assert.deepStrictEqual(gen, ['bromont.svg'], 'Generate Shaper SVG saves bromont.svg');

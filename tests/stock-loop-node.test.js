@@ -43,7 +43,7 @@ try {
   assert(!!stockKey(), 'the L loop becomes the Stock');
   const keyA = stockKey();
   assert.ok(keyA && keyA.startsWith('loop:'), 'the L loop is now the Stock: ' + keyA);
-  assert.match(notice(), /now the Stock/);
+  assert.strictEqual(notice(), '', 'TASK 878: the Stock shows on the drawing: no notice');
   // the card for a Stock: ONE field (Thickness), no offset / bit / shape rows
   const rows = [...doc.querySelectorAll('.cut-rows > .cut-row')].filter((r) => doc.defaultView.getComputedStyle(r).display !== 'none').map((r) => (r.dataset.param || r.dataset.row) + ':' + r.querySelector('.cut-field-label').textContent);
   console.log('stock card rows:', JSON.stringify(rows));
@@ -57,13 +57,12 @@ try {
   assert.ok(!!q('#prepare-canvas .sk-edge-stock'), 'the unselected Stock loop has its edge class');
   assert.ok(!!q('#prepare-canvas .sk-stock-label'), 'and carries its STOCK label');
 
-  // a SECOND Stock moves the role (one per document) and says so; Ctrl+Z undoes the move
+  // a SECOND Stock moves the role (one per document: the Stock type's hint says so; TASK 878: no notice); Ctrl+Z undoes the move
   clickAt(180, 20);                      // the rectangle C
   pickType('stock');
-  assert(/Stock moved to this loop/.test(notice()), 'the Stock moved notice');
+  assert.strictEqual(notice(), '', 'TASK 878: no Stock moved notice');
   const keyC = stockKey();
   assert.notStrictEqual(keyC, keyA, 'the role moved to the second loop');
-  assert.match(notice(), /Stock moved to this loop/);
   assert.strictEqual([...V2_PLAN.values()].filter((r) => r.cutType === 'stock').length, 1, 'exactly one Stock');
   app.key('z', { ctrl: true });
   assert.strictEqual(stockKey(), keyA, 'Ctrl+Z gives the Stock role back to the L loop');

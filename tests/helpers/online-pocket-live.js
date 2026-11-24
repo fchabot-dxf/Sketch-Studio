@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openPocketPage } from './pocket-live.js';
 import { sleep } from './cdp-browser.js';
+import { REVIEW_BUILT } from './review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 const IN = 25.4;
 
@@ -126,7 +127,7 @@ export async function linePhase(t, label) {
   await shot(`${D}-export-2d.png`, t.phone ? null : '#review-stage', t.phone ? 1 : 1.5);
   // Export 3D: the info has the tabs note, nothing of a lead-in; the tabs stand
   await clickEl('#review-view-3d');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, label + ': the 3D board');
+  await waitFor(REVIEW_BUILT, label + ': the 3D board');
   const info = await evalJs(`document.getElementById('review-info').textContent`);
   console.log(label + ' 3D info: ' + info);
   assert.ok(!/lead-in/i.test(info) && info.includes(`Tabs: 3 gaps of ${tw} ${u} left uncut`), label + ': the 3D info: the tabs, no lead-in');

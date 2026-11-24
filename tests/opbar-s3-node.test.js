@@ -8,7 +8,7 @@
 //     the new one's; the Stock keeps the one-Stock move (nothing selected: an empty Stock replaces it);
 //  3. OUT OF DATE: a Design edit generates NOTHING (no paths job): the operations are out of date (the row's mark, its tooltip the table's), their last paths kept
 //     (drawn faint); Recalculate with nothing selected = every one (jobs, marks gone); with a row selected = only it; an Undo back to generated inputs = up to date at once;
-//     nothing to do = "All toolpaths are up to date."; OK of an edit generates that operation; a document read is not out of date;
+//     nothing to do = no job and no notice (TASK 878); OK of an edit generates that operation; a document read is not out of date;
 //  4. the Export step's wait (export-payload.js whenGenerated): an out-of-date ticked operation = the line "n operations are out of date" with the Recalculate action;
 //     the file only after it.
 import assert from 'node:assert/strict';
@@ -202,8 +202,9 @@ try {
   clickAt('none');
   pressEl('#op-recalculate');
   eq(marks(), [], '3: Recalculate with nothing selected: every out-of-date operation, the marks gone');
+  j0 = jobs; const said0 = notice();
   pressEl('#op-recalculate');
-  eq(notice(), 'All toolpaths are up to date.', '3: nothing to do: the plain line');
+  eq([notice(), jobs - j0], [said0, 0], '3: nothing to do: no job, and (TASK 878) no notice of its own (the line is as it was): no row shows an Out of date mark');
   // OK of an edit session generates that operation
   designEdit(() => { st.joints.get('Aj1').x = 55; st.joints.get('Aj2').x = 55; });
   ok(marks().includes(pocketId), '3: edited again: the Pocket out of date');

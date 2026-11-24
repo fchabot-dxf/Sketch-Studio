@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 await (async () => {
   const cdp = await launchBrowser({
@@ -71,13 +72,13 @@ await (async () => {
       const b = findLoops(st).map((l) => ({ ...l, polygon: loopPolygon(l, st, sb) })).find((l) => Math.min(...l.polygon.map((p) => p.x)) === 10);
       plan.V2_PLAN.set(plan.keyOf('loop', b.id), { cutType: 'pocket', cutDepth: 5, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 }); })()`);
     await openMode('review');
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'review built');
+    await waitFor(REVIEW_BUILT, 'review built');
     const infoText = await evalJs(`document.getElementById('review-info').textContent`);
     console.log('review info:', infoText);
     assert.match(infoText, /Board: your Stock loop/, 'the Review builds the board from the Stock loop');
     assert.strictEqual(await evalJs(`document.getElementById('review-stock-thickness').disabled`), true, 'the thickness is set on the loop, not here');
     assert.strictEqual(await evalJs(`document.getElementById('review-stock-thickness').value`), '0.5');
-    assert.match(await evalJs(`document.getElementById('review-stock-note').textContent`), /Stock loop/);
+    assert.match(await evalJs(`import('/apps/shaper/src/hint.js').then((m) => m.hintFor(document.getElementById('review-stock-label')))`), /The board is your Stock loop/); // TASK 880: the note is the Thickness label's tooltip
     await clickEl('#review-top'); await sleep(400);
     const topShot = await shot('review-stock-top.png');
     await clickEl('#review-reset'); await sleep(400);

@@ -188,14 +188,14 @@ try {
     assert.ok(handleEl(), 'F9: valid 0.05 restores handle');
     assert.strictEqual(doneBtn().disabled, false, 'F9: valid 0.05 re-enables .sk-done');
 
-    // Apply R = 5 via valid typing + Enter -> F18 toast & rendered dim label match "R 5.0"
+    // Apply R = 5 via valid typing + Enter -> F18 the rendered dim label says "R 5" (TASK 878: no "Fillet applied" toast: the fillet and its label show)
     replaceText('5');
     clearToasts(doc);
     let legacyDrawCalls = 0;
     win.__requestDraw = () => { legacyDrawCalls++; };
     app.enter();
     assert.strictEqual(legacyDrawCalls, 0, 'F23: hidden window.__requestDraw fallback must not be called');
-    assert.ok(toastTexts(doc).some((t) => t.includes('Fillet applied (R 5)')), `F18: toast expected "Fillet applied (R 5)", got ${JSON.stringify(toastTexts(doc))}`);
+    assert.deepStrictEqual(toastTexts(doc), [], `F18: TASK 878: no toast after a fillet that applied, got ${JSON.stringify(toastTexts(doc))}`);
     const dimLabel = doc.querySelector('.dim-label');
     assert.ok(dimLabel && dimLabel.textContent.trim() === 'R 5', `F18: dim label expected "R 5", got "${dimLabel && dimLabel.textContent.trim()}"`);
 

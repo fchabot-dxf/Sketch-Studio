@@ -18,6 +18,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
+import { REVIEW_BUILT, reviewBuilt } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
+import { pressExportAction, showExportSettings } from './helpers/export-actions.js'; // TASK 880: the Export settings are the footer's
 
 const EVIDENCE_DIR = path.resolve('.evidence/729');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -55,7 +57,7 @@ const openStage = async (id) => {
 };
 const download = async () => {
   for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
-  await clickEl('#btn-generate-svg');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg');
   let file = null;
   for (let i = 0; i < 100 && !file; i++) { const f = fs.readdirSync(dlDir).find((n) => n.endsWith('.svg')); if (f) file = path.join(dlDir, f); else await sleep(100); }
   assert.ok(file, 'the export downloaded');
@@ -119,7 +121,7 @@ try {
 
   // 1. the Export step on 3D, the default look
   await openStage('review');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'the 3D build', 15000);
+  await waitFor(REVIEW_BUILT, 'the 3D build', 15000);
   await waitFor(`import('/apps/shaper/src/main.js').then((m) => { const i = m.currentReviewView().inspect(); return i.mapLoaded && i.edgeLoaded; })`, 'the plywood photos', 15000);
   await clickEl('#review-reset'); await sleep(300);
   const s0 = await state();
@@ -217,7 +219,7 @@ try {
   // 5. reload: remembered
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?host=fusion`);
   await waitForApp('design-canvas');
-  await waitFor(`!document.getElementById('view-review').hidden && /triangles/.test(document.getElementById('review-info').textContent)`, 'the reloaded page on the Export step, 3D', 15000);
+  await waitFor(reviewBuilt({ when: "!document.getElementById('view-review').hidden" }), 'the reloaded page on the Export step, 3D', 15000);
   const r = await state();
   console.log('reload: ' + JSON.stringify({ look: r.look, select: r.select, stored: r.stored }));
   assert.deepStrictEqual([r.look.id, r.select, r.look.colors.solid, r.look.colors.acrylic], ['walnut', 'walnut', '#3c8d5a', '#1b1c1f'], 'reload: the look and each look\'s colour are remembered');
@@ -229,12 +231,13 @@ try {
   touchMode = true;
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?host=fusion`);
   await waitForApp('design-canvas');
-  await waitFor(`!document.getElementById('view-review').hidden && /triangles/.test(document.getElementById('review-info').textContent)`, 'phone: the Export step, 3D', 15000);
+  await waitFor(reviewBuilt({ when: "!document.getElementById('view-review').hidden" }), 'phone: the Export step, 3D', 15000);
   // (a page that reopens straight on the Export step builds the 3D view before the Fusion design is back, and only a first build frames the
   // camera: seen on this branch, the framing code is not touched by task 729; Reset frames the board for the screenshot)
   await clickEl('#review-reset'); await sleep(300);
   const p0 = await state();
   assert.strictEqual(p0.look.id, 'walnut', 'phone: the remembered look');
+  await showExportSettings({ evalJs, waitFor }, clickEl); // TASK 880: the Material is the footer's: one footer button opens it on a phone
   await pickMaterial('acrylic');
   await clickEl('#review-look-colors button[data-hex="#d8eef2"]');
   await sleep(300);

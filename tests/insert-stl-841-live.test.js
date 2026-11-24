@@ -14,6 +14,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import * as M from './helpers/stl-mesh.js';
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 // the Insert STL tests' part: a 40 x 30 x 12 block (z 0..12) with a 20 x 14 x 4 pocket at (8..28, 8..22), off centre (a turn shows); built here, never an owner's file
 const smallBlock = () => M.lofted({
   outer: [{ z: 12, pts: M.rect(0, 0, 40, 30) }, { z: 0, pts: M.rect(0, 0, 40, 30) }],
@@ -148,7 +149,7 @@ async function phase(name) {
   const plateOnly = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.planEntries({ ticked: true }).length)`);
   assert.strictEqual(plateOnly, 2, name + ': two operations to show (the Outside, the Roughing)');
   await openStage('review');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, name + ': the Review built', 60000);
+  await waitFor(REVIEW_BUILT, name + ': the Review built', 60000);
   await sleep(800);
   const info = await evalJs(`document.getElementById('review-info').textContent`);
   console.log(`${name}: review ${JSON.stringify(info)}`);

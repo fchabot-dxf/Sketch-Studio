@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from './cdp-browser.js';
 import { openPocketPage } from './pocket-live.js';
+import { REVIEW_BUILT } from './review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 const SWIFTSHADER = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']; // the 3D view in headless
 
@@ -148,7 +149,7 @@ export async function toolTablePhase({ phone }) {
     assert.deepStrictEqual(bowlRec, ['bowl', 12.7, 4.7625], 'the operation holds the bowl: shape, diameter, corner radius');
     await openMode('review');
     await clickEl('#review-view-3d');
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'the 3D board');
+    await waitFor(REVIEW_BUILT, 'the 3D board');
     await sleep(1200);
     // zoom the 3D view onto the pocket's floor edge (the wheel, at the pocket's near corner), so the rounded edge is legible
     const at = await evalJs(`(() => { const r = document.querySelector('#review-stage').getBoundingClientRect(); return { x: Math.round(r.left + r.width * 0.45), y: Math.round(r.top + r.height * 0.3) }; })()`);

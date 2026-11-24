@@ -10,12 +10,14 @@
 //     that read those samples were re-written BY NAME for the 6 drawings with arcs whose facets changed (loopPolys of owner-trapezoid.document.json,
 //     angle-dimension/owner-trapezoid-angle.json, drag/owner-two-arcs-575.json, legacy-angles#1 owner-trapezoid-angle, dxf/fusion-sketch4.dxf,
 //     fusion/real-solid-plate-711.json; that last one's shaperOutside, download and relief too); every drawing without an arc is unchanged (WORK-LOG TURN 847).
+//     TASK 879: the Shaper download facets are hashed with their page as before 879 (tests/helpers/page-879.js pageBefore879: the digest's page held every joint;
+//     it holds the drawing's extent now): every element is still compared byte for byte (tests/board-extent-879-node checks the new page).
 //  2. findLoops: a bezier is an EDGE; the angular sort at a node uses each curve's TANGENT there, the bounded test the curve's real area: line + bezier,
 //     bezier + bezier, arc + its chord, a lens of two arcs, bezier + line two-edge loops, a bezier outline with a hole, nesting; areas and orientation.
 //  3. ONE geometry per curve kind (#core/curve-kinds.js): containment / interior point on curved loops, the export's cubic `C` (round trip within 1e-6),
 //     an OPEN chain with a bezier exports its curve, pocket clearing / hold part on a bezier outline give closed paths inside the region.
 //  4. EXISTING CUT PLANS (advisor ruling on the 761 STOP): a stored `chain:` record on an outline that is now a loop MOVES to `loop:<id>` (its operation
-//     order place kept), records with no exact match are removed, both counted in the one notice; a second open changes nothing.
+//     order place kept), records with no exact match are removed, both counted (TASK 878: the one notice says only the removed ones); a second open changes nothing.
 //  (Close path, 760: an arc closed by its own chord and a chain with a bezier closed by Close path are loops: tests/close-path-760-node.test.js section 3.)
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -36,6 +38,7 @@ import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { pageBefore879 } from './helpers/page-879.js'; // TASK 879
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -57,13 +60,14 @@ const stateOf = (g) => ({
 const rec = (cutType, extra = {}) => ({ cutType, cutDepth: 6, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90, ...extra });
 function digestOf(st, { heavy = false } = {}) {
   const loops = findLoops(st), chains = findOpenChains(st, loops);
+  const page = (svg) => pageBefore879(svg, st); // TASK 879
   const byId = new Map(st.shapes.map((s) => [s.id, s]));
   const out = {
     loops: hash(loops), chains: hash(chains.map((c) => c.id)),
     loopPaths: hash(loops.map((l) => [loopToPathD(l, st), loopToPathD(l, st, { reverse: true })])),
     loopPolys: hash(loops.map((l) => loopPolygon(l, st, byId))),
     chainPaths: hash(chains.map((c) => chainToPathD(c, st))),
-    shaperOutside: hash(shaperSvgOf(st, [...loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('exterior') })), ...chains.map((c) => ({ target: { kind: 'chain', id: c.id }, rec: rec('online') }))])),
+    shaperOutside: hash(page(shaperSvgOf(st, [...loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('exterior') })), ...chains.map((c) => ({ target: { kind: 'chain', id: c.id }, rec: rec('online') }))]))),
     studioSvg: hash(buildSVG(st) || ''), studioDxf: hash(buildDXF(st) || ''),
   };
   if (heavy) {
@@ -83,8 +87,8 @@ function digestOf(st, { heavy = false } = {}) {
       }
       return kept.join('\n');
     };
-    out.shaperSpiral = hash(stripStartMarks(shaperSvgOf(st, loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('pocket', { clearing: 'linked', toolDia: 25.4 }) })))));
-    out.shaperTabs = hash(shaperSvgOf(st, loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('exterior', { holdPart: 'tabs', holdThickness: 1, tabWidth: 6, tabCount: 'auto' }) }))));
+    out.shaperSpiral = hash(stripStartMarks(page(shaperSvgOf(st, loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('pocket', { clearing: 'linked', toolDia: 25.4 }) }))))));
+    out.shaperTabs = hash(page(shaperSvgOf(st, loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('exterior', { holdPart: 'tabs', holdThickness: 1, tabWidth: 6, tabCount: 'auto' }) })))));
   }
   return out;
 }
@@ -114,7 +118,7 @@ for (const d of docs) digest[d.name] = { bezier: hasBezier(d.st), ...digestOf(d.
       importFusionSelection(fs.readFileSync(fx(f), 'utf8'), { controller: app.controller, prepare: app.prepare });
       const st = app.state;
       const relief = planReliefItems(st).map((i) => [i.key, i.sig, i.cutType, i.cutDepth, i.footprints]);
-      digest['fusion/' + f] = { bezier: hasBezier(st), ...digestOf(st), plan: hash([...V2_PLAN]), download: hash(shaperSvgOf(st, planEntries())), relief: hash(relief) };
+      digest['fusion/' + f] = { bezier: hasBezier(st), ...digestOf(st), plan: hash([...V2_PLAN]), download: hash(pageBefore879(shaperSvgOf(st, planEntries()), st)), relief: hash(relief) };
     }
   } finally { V2_PLAN.clear(); V2_PLAN.setOrder([]); await app.close(); }
 }
@@ -288,7 +292,7 @@ const profile = await createProfile();
     const svg = shaperSvgOf(app.state, planEntries());
     ok(/shaper:cutType="online"[^>]*\/>|<g[^>]*shaper:cutType="online"/.test(svg) && svg.includes('C 70 90 30 90 0 50'), '4a: the export writes the On line cut WITH the curve (missing from the file before)');
     app.modes.showMode('prepare');
-    eq(noticeOf(app), 'Cut plan updated: 1 cut was on an outline that is now a closed shape and was kept', '4a: the one-time notice, exact');
+    eq(noticeOf(app), null, '4a: TASK 878: a cut kept on the now-closed outline is the plan working: no notice');
     // once: the reconciled plan reconciles to itself; a document saved after it opens without a notice
     eq(reconcileStore(app.state), { edgeMoved: 0, edgeDropped: 0, kept: 0, removed: 0 }, '4a: a second reconciliation (TASK S1: of the store) changes nothing');
     const before = JSON.stringify([...V2_PLAN]);
@@ -323,7 +327,8 @@ const profile = await createProfile();
     eq(noticeOf(app), null, '4c: no notice');
   } finally { V2_PLAN.clear(); V2_PLAN.setOrder([]); await app.close(); }
 }
-eq(cutPlanNotice({ edgeMoved: 1, edgeDropped: 2, kept: 0, removed: 0 }), 'Cut plan updated: 1 edge cut moved to chain, 2 dropped from closed loops', '4: the legacy edge notice keeps its words');
-eq(cutPlanNotice({ edgeMoved: 0, edgeDropped: 0, kept: 2, removed: 1 }), 'Cut plan updated: 2 cuts were on outlines that are now closed shapes and were kept; 1 cut no longer matches a shape and was removed: assign it again', '4: the ruling\'s wording');
+eq(cutPlanNotice({ edgeMoved: 1, edgeDropped: 2, kept: 0, removed: 0 }), 'Cut plan updated: 2 edge cuts dropped from closed loops', '4: TASK 878: only the dropped edge cuts are said (a move to its chain says nothing)');
+eq(cutPlanNotice({ edgeMoved: 0, edgeDropped: 0, kept: 2, removed: 1 }), 'Cut plan updated: 1 cut no longer matches a shape and was removed: assign it again', '4: TASK 878: only the removed cut is said (the kept ones say nothing)');
+eq(cutPlanNotice({ edgeMoved: 3, edgeDropped: 0, kept: 2, removed: 0, keptHoles: 1, lostHoles: 0 }), null, '4: TASK 878: nothing lost: no notice');
 
 console.log(`bezier-loops-761-node: ${checks} checks passed`);

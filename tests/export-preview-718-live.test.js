@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVIDENCE_DIR = path.resolve('.evidence/718');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -92,7 +93,7 @@ const openStage = async (id) => {
 };
 const download = async () => {
   for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
-  await clickEl('#btn-generate-svg');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg');
   let file = null;
   for (let i = 0; i < 100 && !file; i++) { const f = fs.readdirSync(dlDir).find((n) => n.endsWith('.svg')); if (f) file = path.join(dlDir, f); else await sleep(100); }
   assert.ok(file, 'the export downloaded');
@@ -233,14 +234,20 @@ try {
   await waitForApp('design-canvas');
   await waitFor(`!!window.fusionJavaScriptHandler`, 'the Fusion handler (phone)');
   await waitFor(`!document.getElementById('view-review').hidden && document.querySelectorAll('#review-2d-canvas [data-step]').length === 4`, 'the reloaded page on the Export step, 2D, the stepped plan');
+  // TASK 880: no side panel: the Cuts card floats under the view's toolbar, folded on a phone (its title unfolds it)
+  assert.strictEqual(await evalJs(`document.getElementById('review-cuts').dataset.open`), 'false', 'phone: the Cuts card starts folded');
+  { const h = await evalJs(`(() => { const r = document.getElementById('review-cuts-head').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`); await tap(h.x, h.y); }
+  await waitFor(`document.getElementById('review-cuts').dataset.open === 'true'`, 'phone: a tap on its title unfolds the Cuts card');
   const ph = await evalJs(`(() => { const box = (q) => { const e = document.querySelector(q); const r = e.getBoundingClientRect(); const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const h = document.elementFromPoint(x, y);
       return { left: Math.round(r.left), right: Math.round(r.right), top: Math.round(r.top), bottom: Math.round(r.bottom), reachable: !!h && (h === e || e.contains(h)) }; };
     return { pressed: document.getElementById('review-view-2d').getAttribute('aria-pressed'), view3d: box('#review-view-3d'), view2d: box('#review-view-2d'), fit: box('#review-fit'), canvas: box('#review-2d-canvas'),
-      list: box('#review-cuts'), firstRow: box('#review-cuts-list .rv2d-row'), side: box('#review-side') }; })()`);
+      list: box('#review-cuts'), firstRow: box('#review-cuts-list .rv2d-row'), toolbar: box('#review-toolbar') }; })()`);
   console.log('phone: ' + JSON.stringify(ph));
   assert.strictEqual(ph.pressed, 'true', 'phone: the reloaded page shows 2D (remembered per app)');
   for (const k of ['view3d', 'view2d', 'fit', 'firstRow']) assert.ok(ph[k].reachable && ph[k].left >= 0 && ph[k].right <= 390 && ph[k].top >= 0 && ph[k].bottom <= 844, `phone: ${k} on screen and not covered: ${JSON.stringify(ph[k])}`);
-  assert.ok(ph.list.left >= 0 && ph.list.right <= 390 && ph.list.top >= ph.canvas.bottom - 1, 'phone: the list is under the view, inside the screen width: ' + JSON.stringify(ph.list));
+  assert.ok(ph.list.left >= 0 && ph.list.right <= 390 && ph.list.top >= ph.toolbar.bottom, 'phone: the list is under the view toolbar, inside the screen width: ' + JSON.stringify(ph.list));
+  { const h = await evalJs(`(() => { const r = document.getElementById('review-cuts-head').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`); await tap(h.x, h.y); }
+  await waitFor(`document.getElementById('review-cuts').dataset.open === 'false'`, 'phone: folded again (the drawing under it free for the pinch)');
   const sc = await noSideScroll();
   assert.ok(sc.doc <= 390 && sc.body <= 390, 'phone: no sideways scroll: ' + JSON.stringify(sc));
   // pinch (two real touches moving apart) zooms in on the fillet, then a tap on the step 2 band
@@ -260,7 +267,9 @@ try {
   await tap(q.x, q.y);
   assert.strictEqual(await label(), 'pocket · 7.333 mm · step 2 of 4', 'phone: a tap on the step 2 band says its type, depth and step');
   await shot('phone-2d-r3-fillet-step2.png');
-  // a tap on a list row (the step 3 row) picks it
+  // a tap on a list row (the step 3 row) picks it (TASK 880: the Cuts card unfolded again by a tap on its title)
+  { const h = await evalJs(`(() => { const r = document.getElementById('review-cuts-head').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`); await tap(h.x, h.y); }
+  await waitFor(`document.getElementById('review-cuts').dataset.open === 'true'`, 'phone: the Cuts card unfolded');
   await evalJs(`[...document.querySelectorAll('#review-cuts-list .rv2d-row')].find((b) => /step 3 of 4/.test(b.textContent)).scrollIntoView({ block: 'nearest' })`);
   await sleep(200);
   const row3 = await evalJs(`[...document.querySelectorAll('#review-cuts-list > button')].findIndex((b) => b.classList.contains('rv2d-row') && /step 3 of 4/.test(b.textContent))`);

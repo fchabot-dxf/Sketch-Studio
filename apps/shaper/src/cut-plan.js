@@ -472,9 +472,11 @@ export function holdNoteItems(storedRec, hold) {
   }
   const n = hold.count, gaps = `${n} gap${n === 1 ? '' : 's'}`;
   const items = [{ text: `${name}: ${n} tab${n === 1 ? '' : 's'}, ${f(hold.width)} ${u} wide, ${f(hold.thickness)} ${u} thick: 1 pass at ${f(hold.depth)} ${u} + ${gaps} at ${f(Number(hold.fullDepth))} ${u}` }];
-  if (hold.narrow) { // TASK 822: tabs kept off the stretches too narrow for a gap strip (a stem, a neck); TASK 825: its words are a warning line of their own (the card lists warnings first)
-    const t = n < hold.requested ? `Only ${n} of ${hold.requested} tabs fit: part of the outline is too narrow for a gap strip` : 'Placed where a gap strip fits: part of the outline is too narrow for one';
+  if (hold.narrow && n < hold.requested) { // TASK 822: tabs kept off the stretches too narrow for a gap strip (a stem, a neck); TASK 825: a warning line of its own (the card lists warnings first)
+    const t = `Only ${n} of ${hold.requested} tabs fit: part of the outline is too narrow for a gap strip`;
     items.push({ text: t, warn: t, title: 'a gap strip needs the strip width clear beside the outline' });
+  } else if (hold.narrow) { // TASK 878: every tab asked for is placed, only kept off the narrow part: a plain card line, never in the warning style (nothing is wrong)
+    items.push({ text: 'Placed where a gap strip fits: part of the outline is too narrow for one' });
   } else if (n < hold.requested) { const t = `Only ${n} of ${hold.requested} tabs fit`; items.push({ text: t, warn: t, title: 'the outline has too few stretches long enough for a tab' }); } // TASK 825 (V1): its own warning line (the card lists warnings first), not the tail of the long first line
   items.push({ text: `Gaps: cut the side against the part; the return leg is optional`, once: true }); // TASK 839: the same for every operation (planNotes: once)
   return items;
@@ -953,17 +955,15 @@ export function keepHolesFromOtherSketches(state, plan) {
   return { keptHoles: rename.size, lostHoles };
 }
 
-/** The one-time notice of a reconciliation (reconcileCutPlan's counts), or null when nothing changed. The legacy edge part is worded as before. */
+/** The one-time notice of a reconciliation (reconcileCutPlan's counts), or null when nothing needs the user. TASK 878 (owner: a notice only when something
+ *  is wrong): only what was LOST is said (a dropped edge cut, a removed cut, a cut that lost its holes); what was moved or kept as it was (an edge cut moved to its
+ *  chain, a cut kept on a now-closed outline, holes kept as a combined profile) is the plan working and says nothing. The counts stay in the result. */
 export function cutPlanNotice(r) {
   if (!r) return null;
-  const groups = [], edge = [];
-  if (r.edgeMoved > 0) edge.push(`${r.edgeMoved} edge cut${r.edgeMoved === 1 ? '' : 's'} moved to chain`);
-  if (r.edgeDropped > 0) edge.push(`${r.edgeDropped} dropped from closed loop${r.edgeDropped === 1 ? '' : 's'}`);
-  if (edge.length) groups.push(edge.join(', '));
-  if (r.kept > 0) groups.push(r.kept === 1 ? '1 cut was on an outline that is now a closed shape and was kept' : `${r.kept} cuts were on outlines that are now closed shapes and were kept`);
+  const groups = [];
+  if (r.edgeDropped > 0) groups.push(`${r.edgeDropped} edge cut${r.edgeDropped === 1 ? '' : 's'} dropped from closed loop${r.edgeDropped === 1 ? '' : 's'}`);
   if (r.removed > 0) groups.push(r.removed === 1 ? '1 cut no longer matches a shape and was removed: assign it again' : `${r.removed} cuts no longer match a shape and were removed: assign them again`);
   // TASK 774: keepHolesFromOtherSketches's counts
-  if (r.keptHoles > 0) groups.push(r.keptHoles === 1 ? '1 cut kept its holes from other sketches (now a combined profile)' : `${r.keptHoles} cuts kept their holes from other sketches (now combined profiles)`);
   if (r.lostHoles > 0) groups.push(r.lostHoles === 1 ? '1 cut no longer has its holes from other sketches (a hole has its own cut): check it in Prepare' : `${r.lostHoles} cuts no longer have their holes from other sketches (a hole has its own cut): check them in Prepare`);
   return groups.length ? `Cut plan updated: ${groups.join('; ')}` : null;
 }

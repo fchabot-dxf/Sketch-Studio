@@ -20,6 +20,7 @@ import { exportForm } from './origin-rules.js'; // TASK 803: THE Origin / Studio
 import { resolveProfileViews, resolveProfileForLoop, ownedLoopIds } from './profile-model.js';
 import { deriveCuts } from './stepped-cut.js'; // TASK 714: deriveProfileCuts + a stepped cut's terraces
 import { pathBounds } from './path-d.js'; // TASK 786: the true extent of a written path (arcs / cubics by their extremes)
+import { drawingExtent } from './geometry-bounds.js'; // TASK 879: THE drawing's extent (the page holds the drawing)
 export { loopToPathD, polyToPathD };
 
 // TASK 803: what the file is written as is READ from the Origin / Studio rules (#core/origin-rules.js: the target registry's forms, each with its evidence),
@@ -52,22 +53,16 @@ function arcSeg(shape, fromPos, toPos, state) {
 
 
 
-// Bounding box of the page: the drawing (joint positions + circle extents (center ± r)), the datum triangle at the origin when there is one,
+// Bounding box of the page: the drawing (TASK 879: THE DRAWING'S EXTENT, #core/geometry-bounds drawingExtent: each shape by the geometry it draws, never an
+// arc's / circle's centre joint, construction geometry or the sketch origin no shape uses), the datum triangle at the origin when there is one,
 // and TASK 786 EVERY WRITTEN ELEMENT by the geometry it draws (elementBox): a cut's derived geometry outside the drawing (tabs' gap strips,
 // a pocket's start mark, a stepped cut's larger rings) and arc / cubic bulges by their true extremes (#core/path-d).
 // The drawing's own extent is kept so a file whose elements already lay inside it keeps its viewBox. Empty → 0,0,0,0.
 function boundsOf(state, datumExtent, written = []) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const ext = (x, y) => { if (x < minX) minX = x; if (y < minY) minY = y; if (x > maxX) maxX = x; if (y > maxY) maxY = y; };
-  if (state && state.joints && typeof state.joints.values === 'function') {
-    for (const j of state.joints.values()) if (j && Number.isFinite(j.x) && Number.isFinite(j.y)) ext(j.x, j.y);
-  }
-  for (const s of ((state && state.shapes) || [])) {
-    if (s && s.type === 'circle' && Array.isArray(s.joints)) {
-      const c = state.joints.get(s.joints[0]); const r = Number(s.radius) || 0;
-      if (c && r > 0) { ext(c.x - r, c.y - r); ext(c.x + r, c.y + r); }
-    }
-  }
+  const drawn = drawingExtent(state);
+  if (drawn) { ext(drawn.minX, drawn.minY); ext(drawn.maxX, drawn.maxY); }
   if (datumExtent) { ext(0, 0); ext(datumExtent.legX, datumExtent.legY); } // the registration anchor must fit the viewBox
   for (const it of written) { const b = elementBox(it); if (b) { ext(b.minX, b.minY); ext(b.maxX, b.maxY); } }
   if (!Number.isFinite(minX)) return { minX: 0, minY: 0, w: 0, h: 0 };

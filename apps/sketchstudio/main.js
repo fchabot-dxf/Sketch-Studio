@@ -140,7 +140,6 @@ function initApp(){
   // swap is S7c-2d; the faithful Export popup→tab cleanup is S7c-2e).
   const stylePanel = createStylePanel({
     hostId: 'sketchstudio',
-    onNotify: showNotification,
   });
   stylePanel.render(document.body);
   bindTemplateTokens(document.getElementById('svgCanvas'));

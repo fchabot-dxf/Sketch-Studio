@@ -48,7 +48,7 @@ const coincidents = (state) => state.constraints.filter((c) => c.type === CONSTR
 {
   const st = newSketchState();
   const segs = polyline(st, [[0, 0], [30, 0], [30, 20], [0, 20]], false); // a U: three lines, free ends (0,0) and (0,20)
-  const nShapes = st.shapes.length, nCons = st.constraints.length, hist = st.history.length;
+  const nShapes = st.shapes.length, nCons = st.constraints.length, hist = st.history.length, nNotes = notes.length;
   const res = run(st, [segs[1].id]);
   eq(res.closed.length, 1, '1: one chain closed');
   eq(st.shapes.length, nShapes + 1, '1: ONE line added');
@@ -60,7 +60,7 @@ const coincidents = (state) => state.constraints.filter((c) => c.type === CONSTR
   eq(new Set(ends.map((p) => `${p.x},${p.y}`)), new Set(['0,0', '0,20']), '1: the line runs between the two free ends');
   ok(loopOf(st, [...segs.map((s) => s.id), line.id]), '1: findLoops returns the closed outline as a loop');
   eq(st.history.length, hist + 1, '1: ONE undo step');
-  ok(/Closed 1 path \(a line added across 20 mm\)/.test(lastNote().m) && lastNote().l === 'success', '1: the notice says so: ' + lastNote().m);
+  eq(notes.slice(nNotes), [], '1: TASK 878: everything given was closed (and is selected): no notice');
 }
 
 // ── 2. near-coincident ends -> coincident, no line, the last curve's end moves by <= the tolerance
@@ -322,8 +322,10 @@ eq(detect.dxf, { offered: 1, leftOpen: 1, largestGap: 0.05, offeredSizes: [4] },
     const s0 = snap(), e0 = exportsOf();
     offerToCloseImported(st, st.shapes.filter((x) => x.id.startsWith('svg')), () => {});
     st.selectedShapes.clear();
+    const toastsAtTool = toasts().length;
     app.key('C', { shift: true }); await app.pause(30); // the Close path tool, nothing selected: nothing closed, its open ends marked
     eq(st.currentTool, TOOL_MODES.CLOSE_PATH, '10: Shift+C switched to Close path');
+    eq(toasts().length, toastsAtTool, '10: TASK 878: the tool says nothing on its start (what to click is its ribbon hint)');
     ok(doc.querySelectorAll('.open-end-marker').length === 4, "10: the 4 open ends are marked (the plate's 2, the engraving's 2)");
     app.key('s'); await app.pause(30);
     eq(doc.querySelectorAll('.open-end-marker').length, 0, '10: no marker once the tool is off');
@@ -337,6 +339,7 @@ eq(detect.dxf, { offered: 1, leftOpen: 1, largestGap: 0.05, offeredSizes: [4] },
     eq(openChainEnds(st).length, 2, '8b: the engraving line is still open (its two ends)');
     eq(st.selectedShapes.size, 5, '8b: the closed outline (its 4 lines + the new one) is selected');
     ok(!offer.isConnected || offer.style.opacity === '0', '8b: the offer is dismissed');
+    ok(!toasts().some((t) => /Closed \d/.test(t.textContent)), '8b: TASK 878: every offered outline closed (and selected): no "Closed" notice');
     app.undo(); await app.pause(50);
     eq([st.shapes.length, st.constraints.length, findLoops(st).length], [imported.s, imported.c, 0], '8b: ONE undo removes only the close (the import stays)');
     app.undo(); await app.pause(50);

@@ -63,6 +63,7 @@
       /* TASK 737: the surfaces directly below the document tab strip, declared once: the stage's view paints it, the strip's active tab takes it */
       --shaper-cream: #F4EFE1;            /* the Design canvas paper */
       --sk-prep-bg: #3F4145;              /* the Prepare canvas background: TASK 455's token (#view-prepare below), on :root so the strip reads it in Prepare */
+      --sk-header-accent: #059669; /* TASK 880: the Sync to ShaperHub action's green (app-header.js variant "accent") */
       --shaper-review-bg: var(--shaper-cream); /* the Export stage's 3D view (#review-stage): TASK 754, the Design canvas's paper (the 3D scene reads it from the Design canvas too: review-grid.js) */
       /* the strip is the header colour: the 13 % tint toward the text (document-tabs.js default) IS the Prepare canvas grey, so the active tab could not be told from the strip there */
       --sk-doctabs-bg: var(--sk-header-bg);
@@ -107,7 +108,8 @@
       --sk-error: #ef4444;
     }
     #design-canvas.snapping { background-color: #F1E9D6; }
-    /* Review (TASK 459): a 3D canvas + a side card (stock, export). */
+    /* Review (TASK 459): the 3D / 2D / Paths view. TASK 880 (owner turn 3484): no side panel, the view takes the width; the export actions are the Export stage's
+       header actions, its settings (thickness, material) the footer's (main.js); the Cuts list and the export's lines float over the view (#review-cards). */
     #view-review { flex-direction: row; color: #9aa0a6; font: 15px system-ui, sans-serif; }
     #review-stage { position: relative; flex: 1; min-width: 0; background: var(--shaper-review-bg); }
     #review-canvas-host, #review-canvas-host canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -121,7 +123,30 @@
     /* TASK 757: on a phone the info's lines fold (review-view.js showInfo, the Operations sheet's fold): the first line is a 44 px header button (one line, the caret) */
     .review-info-head { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; cursor: pointer; }
     .review-info-head > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #review-side { width: 300px; flex: none; overflow: auto; padding: 16px; background: #0f1320; border-left: 1px solid #1f2535; display: flex; flex-direction: column; gap: 14px; }
+    /* TASK 880: top-left under the view's toolbar: the 2D / Paths view's Cuts card, then the export's lines (the unticked line, the status line, the feedback card);
+       it ends above the info line at the bottom; only its cards take the pointer (the view orbits / pans around them) */
+    #review-cards { position: absolute; top: 52px; left: 10px; width: 300px; max-height: calc(100% - 52px - 56px - var(--sk-footer-clear, 0px)); z-index: 2; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    #review-cards > * { pointer-events: auto; box-sizing: border-box; flex: 0 0 auto; }
+    #review-cards > [hidden], #review-cards > :empty { display: none; }
+    #review-cuts { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 4px 12px 10px; border-radius: 8px; background: rgba(15,19,32,0.92); box-shadow: 0 6px 20px rgba(0,0,0,0.35); }
+    #review-cuts[data-open="false"] { padding-bottom: 4px; }
+    #review-cuts .review-cuts-list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+    #review-cuts .review-cuts-list[hidden] { display: none; }
+    .review-card-head { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; min-height: 36px; cursor: pointer; color: #e6e6e6; font: 600 15px system-ui, sans-serif; }
+    .review-card-head > span { flex: 1; }
+    /* TASK 880: the Export stage's settings in the shared footer (app-footer.js controls): each a label and its field on one line; in the footer's fold card, one per row */
+    .review-settings { display: inline-flex; align-items: center; gap: 16px; color: var(--sk-header-fg, #cbd5e1); font: 13px system-ui, sans-serif; }
+    .review-setting { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+    .review-settings .review-setting[hidden] { display: none; }
+    .review-settings input { width: 64px; background: #1b2030; color: #e6e6e6; border: 1px solid #2f3646; border-radius: 4px; padding: 4px 6px; font: 13px system-ui, sans-serif; }
+    .review-settings select { background: #1b2030; color: #e6e6e6; border: 1px solid #2f3646; border-radius: 4px; padding: 4px 6px; font: 13px system-ui, sans-serif; }
+    .review-settings .review-look-colors { flex-wrap: nowrap; gap: 4px; }
+    .review-settings .review-look-colors button, .review-settings .review-look-colors input[type="color"] { width: 22px; height: 22px; border-radius: 4px; }
+    /* in the footer's fold card (app-footer.js: its slot data-folded="true"): one setting per row */
+    [data-folded="true"] .review-settings { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+    [data-folded="true"] .review-setting { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+    [data-folded="true"] .review-settings .review-look-colors { flex-wrap: wrap; flex: 1 1 100%; }
+    [data-folded="true"] .review-settings .review-look-colors button, [data-folded="true"] .review-settings .review-look-colors input[type="color"] { width: 36px; height: 36px; }
     .review-stock { display: flex; flex-direction: column; gap: 6px; color: #cbd5e1; font-size: 13px; }
     .review-stock label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .review-stock-note { color: #9aa0a6; font-size: 12px; line-height: 1.4; }
@@ -216,8 +241,7 @@
     }
     /* TASK 705: Shaper on a PHONE. Every stage's canvas keeps the screen's width; the side panels move out of its way instead of squeezing it.
        Design and Prepare already fit (a full-width canvas, their panels float over it). PORTRAIT (<= 640 px wide: the shared chrome's phone mode,
-       app-sidebar.js): the Review card forms ONE band under the canvas. Short landscape: Review keeps its desktop side
-       panel (its canvas is already 64-71 % of 844 px). (TASK 706: Explore's tree / inspector rules went with it; TASK 741: so did the V-carve panel's.) */
+       app-sidebar.js): TASK 880: Review has no side panel any more (the view takes the screen; its cards float under its toolbar). (TASK 706: Explore's tree / inspector rules went with it; TASK 741: so did the V-carve panel's.) */
     @media (max-width: 640px) {
       #view-review { flex-direction: column; }
       /* TASK 801c: a COMPACT strip docked at the bottom of the view (its two rows + the label, at most 30 % of the view): the drawing it animates stays in sight; the
@@ -229,18 +253,10 @@
       .sim-panel .sim-actions { flex-wrap: nowrap; gap: 4px; } .sim-panel .sim-actions .sim-btn { flex: 1 1 auto; padding: 4px 6px; min-width: 0; }
       .sim-panel .sim-transport { gap: 4px; }
       .sim-toggle-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } /* the icon only; the name stays for a screen reader */
-      #review-side { width: auto; flex: 0 0 40%; border-left: 0; border-top: 1px solid #1f2535; }
+      #review-cards { top: 58px; left: 6px; right: 6px; width: auto; max-height: calc(100% - 58px - 56px); } /* TASK 880: under the toolbar's 44 px row, the width of the view */
       .rv2d-row, .rv2d-op { min-height: 40px; align-items: center; } /* TASK 718: a list row is a touch target (TASK 743: an operation header too) */
     }
-    /* SP1j-4: the Export panel (dark chrome) — a Generate button + a status line. */
-    #simexport-panel { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
     .simexport-title { color: #e6e6e6; font-size: 20px; margin: 0; font-weight: 600; }
-    .simexport-sub { color: #9aa0a6; margin: 0; max-width: 360px; text-align: center; line-height: 1.4; }
-    .simexport-actions { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
-    .simexport-btn { background: var(--sk-selection, #4c9aff); color: #fff; border: 0; border-radius: 6px; padding: 10px 18px; font: 14px system-ui, sans-serif; cursor: pointer; }
-    .simexport-btn:hover { filter: brightness(1.1); }
-    .simexport-btn-sync { background: #059669; }
-    .simexport-btn-sync:hover { background: #10b981; }
     /* ShaperHub Sync Modal */
     .sync-modal { border: 1px solid #1f2937; border-radius: 12px; background: #111827; color: #cbd5e1; padding: 0; max-width: 420px; width: 90%; box-shadow: 0 12px 32px rgba(0,0,0,0.6); }
     .sync-modal::backdrop { background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); }
@@ -300,10 +316,8 @@
       .sync-field input, .sync-mkdir-row input, .sync-btn-primary, .sync-btn-secondary, .sync-link-btn, .sync-entry { min-height: 44px; box-sizing: border-box; }
       .sync-modal-close { min-width: 44px; min-height: 44px; }
     }
-    .simexport-hub-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; background: #1b2030; color: #cbd5e1; border: 1px solid #2a2d31; border-radius: 6px; padding: 10px 18px; font: 14px system-ui, sans-serif; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
-    .simexport-hub-btn:hover { border-color: var(--sk-selection, #4c9aff); color: #fff; }
-    .simexport-ticked { max-width: 360px; box-sizing: border-box; margin: 0; padding: 6px 9px; border-radius: 6px; background: #1b2030; color: #e6c46a; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; } /* TASK 798: the one line while an operation is unticked */
-    .simexport-status { color: #9aa0a6; font-size: 13px; line-height: 1.4; height: 4.2em; overflow-y: auto; margin: 0; text-align: center; } /* TASK 813: a slot of its own, three lines, scrolling when longer: a status line never pushes the Export card */
+    .simexport-ticked { box-sizing: border-box; margin: 0; padding: 6px 9px; border-radius: 6px; background: rgba(15,19,32,0.92); color: #e6c46a; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; } /* TASK 798: the one line while an operation is unticked */
+    .simexport-status { color: #cbd5e1; background: rgba(15,19,32,0.92); border-radius: 6px; padding: 6px 9px; font-size: 13px; line-height: 1.4; max-height: 5.2em; overflow-y: auto; margin: 0; overflow-wrap: anywhere; } /* TASK 813: at most three lines, scrolling when longer; TASK 880: a card over the view, shown while it says something */
     /* SP1a: Prepare renders the shared sketch geometry (edges only, joints hidden) into its own canvas. */
     /* TASK 455: the Prepare look (Shaper Studio): ONE token block for the Prepare canvas AND the cut card (the card sits inside
        #view-prepare, so it inherits them). Colours are advisor-SAMPLED from the owner's Studio screenshots unless marked (~). */
@@ -805,6 +819,14 @@
       <div id="review-2d" hidden><svg id="review-2d-canvas" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="The exported Shaper SVG"></svg><div id="review-2d-info"></div></div>
       <div id="review-toolbar"><div id="review-view-switch" role="group" aria-label="View"><button id="review-view-3d" type="button" data-view="3d" data-hint="reviewThreeD" aria-pressed="true">3D</button><button id="review-view-2d" type="button" data-view="2d" data-hint="reviewTwoD" aria-pressed="false">2D</button><button id="review-view-paths" type="button" data-view="paths" data-hint="reviewPaths" aria-pressed="false">Paths</button></div><button id="review-reset" type="button" data-hint="reviewReset">Reset</button><button id="review-top" type="button" data-hint="reviewTop">Top</button><button id="review-fit" type="button" data-hint="reviewFit">Fit</button></div>
       <div id="review-info"></div>
+      <!-- TASK 880: over the view, under its toolbar: the 2D / Paths view's Cuts list (a fold, main.js), then the export's lines -->
+      <div id="review-cards">
+        <div id="review-cuts" hidden><button type="button" class="review-card-head" id="review-cuts-head"><span data-hint="reviewCuts"></span></button>
+          <div id="review-cuts-list" class="review-cuts-list"></div></div>
+        <p id="simexport-ticked" class="simexport-ticked" hidden></p>
+        <p id="simexport-status" class="simexport-status" aria-live="polite"></p>
+        <div data-feedback-slot></div><!-- TASK 830: the one "Enjoying Shaper?" card, #ui/feedback.js -->
+      </div>
       <!-- TASK 801: the SIMULATE panel (export-sim.js): VCarve's Preview toolpaths panel, over the view shown (its toggle at the view's top right; closed at first). Nothing of the side panel moves.
            TASK 801c: the previews row, the transport row and the label always show; the Operation pick, Animate / Show passes and the explanation are behind its "more" fold
            (disclosure.js: open on a wide screen, folded on a phone, where the panel is a compact strip docked at the bottom of the view: the drawing stays in sight) -->
@@ -817,28 +839,12 @@
           <div class="sim-opts"><label class="sim-check"><input type="checkbox" id="sim-animate"> <span data-hint="simAnimate"></span></label><label class="sim-check" id="sim-passes-row"><input type="checkbox" id="sim-passes"> <span data-hint="simPasses"></span></label></div>
           <div id="sim-note" class="review-stock-note"></div></div></div>
     </div>
-    <aside id="review-side">
-    <div class="review-stock" id="review-cuts" hidden><h2 class="simexport-title"><span data-hint="reviewCuts"></span></h2>
-      <div id="review-cuts-list" class="review-cuts-list"></div></div>
-    <div class="review-stock" id="review-stock"><h2 class="simexport-title">Stock</h2>
-      <label><span class="review-label-line"><span data-hint="stockThickness"></span></span> <span class="review-stepbox"><input id="review-stock-thickness" type="text" inputmode="decimal"></span></label>
-      <div id="review-stock-note" class="review-stock-note"></div></div>
-    <div class="review-stock" id="review-look"><h2 class="simexport-title">Look</h2>
-      <label><span class="review-label-line"><span data-hint="material" id="review-look-label"></span></span> <select id="review-look-select" aria-labelledby="review-look-label"></select></label>
-      <div id="review-look-colors" class="review-look-colors" role="group" aria-label="Colour" hidden></div></div>
-    <div id="simexport-panel">
-      <h2 class="simexport-title"><span data-hint="export"></span></h2>
-      <p class="simexport-sub">Generate a machine-ready Shaper Origin SVG from the Prepare cut plan.</p>
-      <p id="simexport-ticked" class="simexport-ticked" hidden></p>
-      <div class="simexport-actions">
-        <button id="btn-generate-svg" class="simexport-btn" data-label="generateSvg" data-hint="generateSvg"></button>
-        <button id="btn-sync-shaper" class="simexport-btn simexport-btn-sync" data-hint="syncShaperHub"><span aria-hidden="true">⚡</span> <span data-label="syncShaperHub"></span></button>
-        <a id="link-shaper-hub" href="https://hub.shapertools.com/my-files" target="_blank" rel="noopener noreferrer" class="simexport-hub-btn" data-hint="openShaperHub"><span data-label="openShaperHub"></span> ↗</a>
-      </div>
-      <p id="simexport-status" class="simexport-status"></p>
-      <div data-feedback-slot></div><!-- TASK 830: the one "Enjoying Shaper?" card, #ui/feedback.js -->
+    <!-- TASK 880: the Export stage's settings: shown in the shared footer while Export shows (main.js mountAppFooter controls; the footer moves this element in) -->
+    <div id="review-settings" class="review-settings">
+      <label class="review-setting" id="review-stock"><span data-hint="stockThickness" id="review-stock-label"></span> <span class="review-stepbox"><input id="review-stock-thickness" type="text" inputmode="decimal" aria-labelledby="review-stock-label"></span></label>
+      <span class="review-setting" id="review-look"><label class="review-setting"><span data-hint="material" id="review-look-label"></span> <select id="review-look-select" aria-labelledby="review-look-label"></select></label>
+        <span id="review-look-colors" class="review-look-colors" role="group" aria-label="Colour" hidden></span></span>
     </div>
-    </aside>
   </section>
 
   <!-- ShaperHub Direct Sync Dialog -->

@@ -7,6 +7,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { reviewBuilt } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 const EVIDENCE_DIR = path.resolve('.evidence/717');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/sa7-slope/${name}.json`, import.meta.url), 'utf8');
@@ -53,7 +55,7 @@ const openStage = async (id) => {
 // the Review, built: its info lines (the relief's levels = the distinct depths: the outline's 19 mm + one per step)
 const review = async (expectLevels) => {
   await openStage('review');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent) && /${expectLevels} level/.test(document.getElementById('review-info').textContent)`, `the Review built with ${expectLevels} levels`);
+  await waitFor(reviewBuilt({ levels: expectLevels }), `the Review built with ${expectLevels} levels`);
   await sleep(600); // the wood textures arrive asynchronously (the board re-renders when they do)
   return evalJs(`[...document.getElementById('review-info').children].map((d) => d.textContent)`);
 };
@@ -72,7 +74,7 @@ const cardState = () => evalJs(`({ checked: document.querySelector('.cut-adaptiv
 const exportDepths = async () => {
   for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
   await openStage('review');
-  await clickEl('#btn-generate-svg');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg');
   let file = null;
   for (let i = 0; i < 100 && !file; i++) { const f = fs.readdirSync(dlDir).find((n) => n.endsWith('.svg')); if (f) file = path.join(dlDir, f); else await sleep(100); }
   assert.ok(file, 'the export downloaded');

@@ -9,12 +9,13 @@
 //   - THE OWNER'S GRIPE: the bounding box of every card row, menu option, Operations row and Export card is IDENTICAL (0 px) before and while a tooltip shows;
 //   - the menus are compact: every choice is ONE line (its name), the menu's height is the same with and without a tooltip;
 //   - a hint that depends on the card (Finish allowance follows Loop) is evaluated when the tooltip opens;
-//   - the Export step: Stock thickness, Material, Export and its three buttons show their hints the same way.
+//   - the Export step: Thickness, Material (TASK 880: the footer's) and its three actions (the header's; on a phone the drawer's carry the same hints) show their hints the same way.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { sleep } from './cdp-browser.js';
 import { setupPockets } from './pocket-live.js';
 import { probe, tipProblems } from './tooltip-live.js';
+import { showExportSettings } from './export-actions.js'; // TASK 880: the Export settings are the footer's
 
 const fixture = (name) => fs.readFileSync(new URL(`../fixtures/sa7-slope/${name}.json`, import.meta.url), 'utf8');
 const HINT = {
@@ -175,14 +176,21 @@ export async function hintsPhase(t, { fusion = false, part = 'all' } = {}) {
     await checkTip('#prepare-panel .cut-row[data-row="holdPart"] [data-hint="holdPart:tabs"]', await hintOf('holdPart:tabs'), 'Hold part choice button');
   }
 
-  // the Export step's cards
+  // the Export step (TASK 880: no side panel): its settings in the footer (a fold card where the footer row is short), its actions in the header (the drawer on a phone)
   await openMode('review');
   await noLaidOut('the Export step');
-  for (const [sel, id] of [['#review-stock [data-hint="stockThickness"]', 'stockThickness'], ['#review-look [data-hint="material"]', 'material'], ['#simexport-panel [data-hint="export"]', 'export'],
-    ['#btn-generate-svg', 'generateSvg'], ['#btn-sync-shaper', 'syncShaperHub'], ['#link-shaper-hub', 'openShaperHub']]) {
-    await checkTip(sel, await hintOf(id), 'Export card', { shotName: `${D}-tooltip-export-${id}.png`, shotSels: ['#review-side'] });
+  for (const [sel, id] of [['#review-stock [data-hint="stockThickness"]', 'stockThickness'], ['#review-look [data-hint="material"]', 'material']]) {
+    await showExportSettings({ evalJs, waitFor }, clickEl);
+    await checkTip(sel, await hintOf(id), 'Export setting', { shotName: `${D}-tooltip-export-${id}.png`, shotSels: [phone ? '.sk-footer-controls-box' : '.sk-footer'] });
   }
-  assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('#review-side [data-label]')].map((e) => e.textContent)`), ['Generate Shaper SVG', 'Sync to ShaperHub', 'Open ShaperHub (My Files)'], D + ': the Export buttons\' labels (from the table)');
+  const actions = [['btn-generate-svg', 'generateSvg'], ['btn-sync-shaper', 'syncShaperHub'], ['link-shaper-hub', 'openShaperHub']];
+  if (!phone) {
+    for (const [elId, id] of actions) await checkTip('#' + elId, await hintOf(id), 'Export action', { shotName: `${D}-tooltip-export-${id}.png`, shotSels: ['.sk-header'] });
+    assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('.sk-header-stage-actions[data-stage="review"] .sk-action-label')].map((e) => e.textContent)`), ['Generate Shaper SVG', 'Sync to ShaperHub', 'Open ShaperHub (My Files)'], D + ': the Export action labels (from the table)');
+  } else { // the drawer's copies: the same hint keys and labels (a long press there is not tried: the drawer's rows act on release, as its other entries)
+    assert.deepStrictEqual(await evalJs(`[...document.querySelectorAll('.sk-sidebar-stage-actions[data-stage="review"] > *')].map((e) => [e.dataset.action, e.dataset.hint, e.textContent.trim()])`),
+      actions.map(([elId, id], i) => [elId, id, ['Generate Shaper SVG', 'Sync to ShaperHub', 'Open ShaperHub (My Files)'][i]]), D + ': the drawer Export actions carry the table hints and labels');
+  }
   assert.strictEqual(await evalJs(`document.getElementById('link-shaper-hub').hasAttribute('title')`), false, D + ': no native title duplicates the tooltip');
   await noLaidOut('end');
   }

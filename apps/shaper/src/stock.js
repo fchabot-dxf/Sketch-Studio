@@ -13,10 +13,14 @@ export function setStockField(field, value) {
   return getStock();
 }
 
-/** TASK 460: replace the whole stock from a persisted object: defaults first, then only the known fields that are present. */
+// TASK 879: the fields NO control sets: always the declaration's. A stored one (the margin: every save wrote the default of its day, 1/2 in) is
+// never the user's, so a restore does not read it (the owner's 6 in margin, DEFAULT_STOCK, applies to every design, old saves included).
+const DECLARED_ONLY = Object.freeze(['margin']);
+
+/** TASK 460: replace the whole stock from a persisted object: defaults first, then only the known fields that are present (TASK 879: not the DECLARED_ONLY ones). */
 export function setStock(next) {
   for (const k of Object.keys(DEFAULT_STOCK)) STOCK[k] = DEFAULT_STOCK[k];
-  for (const k of Object.keys(DEFAULT_STOCK)) if (next && next[k] !== undefined) STOCK[k] = next[k];
+  for (const k of Object.keys(DEFAULT_STOCK)) if (next && next[k] !== undefined && !DECLARED_ONLY.includes(k)) STOCK[k] = next[k];
   return getStock();
 }
 

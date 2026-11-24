@@ -8,6 +8,7 @@ import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { createFakeShaperApi, FAKE_LOGIN, FAKE_TOKEN } from './shaperhub-fake-api.js';
 import { handleShaperUpload } from '../packages/core/shaper-cloud.js';
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVID = process.env.EVIDENCE_DIR ? path.resolve(process.env.EVIDENCE_DIR) : path.resolve('.evidence/788');
 fs.mkdirSync(EVID, { recursive: true });
@@ -77,7 +78,7 @@ try {
     cp.V2_PLAN.set('loop:' + lf.findLoops(st)[0].id, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 }); })()`);
   await clickEl('.sk-header-tab[data-tab="review"]');
   await waitFor(`!document.getElementById('view-review').hidden`, 'Export step');
-  await clickEl('#btn-sync-shaper');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-sync-shaper');
   await waitFor(`document.getElementById('shaper-sync-modal').open`, 'Sync dialog open');
 
   await typeVal('#sync-email', FAKE_LOGIN.email);
@@ -106,7 +107,7 @@ try {
   await waitFor(`document.getElementById('sync-modal-status').classList.contains('is-success')`, 'upload succeeded');
   await clickEl('#sync-modal-close');
   await waitFor(`!document.getElementById('shaper-sync-modal').open`, 'closed');
-  await clickEl('#btn-sync-shaper');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-sync-shaper');
   await waitFor(`document.getElementById('shaper-sync-modal').open`, 're-opened');
   await sleep(1600);
   assert.ok(await evalJs(`document.getElementById('shaper-sync-modal').open`), '12: the re-opened dialog is still open after the first send\'s 1.2 s');

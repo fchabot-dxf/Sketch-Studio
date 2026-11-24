@@ -5,6 +5,7 @@ import { download } from './download.js';
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { sketchesSignature } from '#core/sketch-model.js';
+import { drawingExtent } from '#core/geometry-bounds.js'; // TASK 879: the board with no Stock loop = the drawing's extent + the margin
 import { checkOriginRules, formatOriginRuleWarning } from '#core/origin-rules.js'; // TASK 803: every exported file is checked against the Origin rules
 import { exportEncoding } from './shaper.js'; // TASK 803: the cut types' encoding, injected into the check like the exporter's
 import { createToolRibbon } from '#ui/tool-ribbon.js';
@@ -28,6 +29,7 @@ import { dbg } from '#core/debug.js';
 import { mountReviewView, LOOKS, normaliseLook } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
 import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
 import { createStockCard } from './stock-card.js'; // TASK 583: the Review card's stock thickness field, declared once (the node test kit calls it too)
+import { mountDisclosure, CARET_SVG } from './disclosure.js'; // TASK 880: the Export view's Cuts card folds as the Operations sheet does
 import { createStylePanel } from '#ui/style-panel.js'; // U3b: shared settings modal (with the doc-unit toggle)
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { followDesign, planEntries, planReliefItems, planNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 839: planNotes = the Review's info lines (stepped, hold, clearing, levels)
@@ -64,7 +66,17 @@ const _diagLog = createDiagnosticLog({ appId: 'shaper', state: () => designContr
 const fusionMode = isFusionMode();
 const perDesignProject = isPerDesignProject(); // TASK 855c: the SA-19 add-in keeps the workspace in the Fusion design; an older add-in: today's browser storage
 if (!fusionMode) getGoogleAccount().init();
-const activeStages = shaperStagesFor({ fusion: fusionMode });
+// TASK 880 (owner turn 3484): the Export stage's three ways out are its HEADER actions (app-header.js buildStageAction; where the header hides, a phone, the drawer
+// lists them under the stage buttons), the same in Fusion mode. Labels and tooltips from the table (param-hints.js); the presses are the functions below.
+const SHAPERHUB_FILES_URL = 'https://hub.shapertools.com/my-files';
+const BOLT_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.2 1.5L3.5 9h4l-1 5.5L12.5 7h-4z" fill="#fbbf24"/></svg>';
+const EXTERNAL_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5L7.5 8.5M12 9.5v3.5a.5.5 0 0 1-.5.5h-8.5a.5.5 0 0 1-.5-.5V4.5a.5.5 0 0 1 .5-.5H6.5"/></svg>';
+const EXPORT_ACTIONS = [
+  { id: 'btn-generate-svg', label: hintLabel('generateSvg'), icon: SIDEBAR_ICONS.download, variant: 'primary', data: { hint: 'generateSvg' }, onClick: () => generateShaperSvg() },
+  { id: 'btn-sync-shaper', label: hintLabel('syncShaperHub'), icon: BOLT_ICON, variant: 'accent', data: { hint: 'syncShaperHub' }, onClick: () => openSyncDialog() },
+  { id: 'link-shaper-hub', label: hintLabel('openShaperHub'), icon: EXTERNAL_ICON, href: SHAPERHUB_FILES_URL, data: { hint: 'openShaperHub' } },
+];
+const activeStages = shaperStagesFor({ fusion: fusionMode }).map((s) => (s.id === 'review' ? { ...s, actions: EXPORT_ACTIONS } : s));
 let initMode = null;
 try { initMode = localStorage.getItem(MODE_KEY); } catch (err) { dbg.warn('shaper', 'MODE_KEY read failed', err && err.message); }
 // TASK 758: delete the ShaperHub login an earlier version stored (shaperhub-login.js); a storage error goes to the Log (it carries no stored content)
@@ -157,36 +169,35 @@ const sayIn = (el) => (text, action = null) => {
 // through the ONE rule (export-payload.js exportFileName). The design's name is the document tab's (in Fusion mode: the imported selection's, nameAfterSelection).
 const designFileName = () => exportFileName(docBuffer ? docBuffer.designName() : null);
 
-const btnGenerateSvg = document.getElementById('btn-generate-svg');
-// TASK 805: the Export step's side cards take their labels from the table (param-hints.js); each label, and each Export button, shows its hint in the ONE tooltip at the cursor
-// (hint.js installHintTooltip: every element with data-hint). The Export title's hint lists the three ways out; each button carries its own entry.
-for (const e of document.querySelectorAll('#review-side [data-label], #shaper-sync-modal [data-label]')) e.textContent = hintLabel(e.dataset.label);
-for (const e of document.querySelectorAll('#review-side [data-hint]:not(.simexport-btn):not(.simexport-hub-btn), #review-sim [data-hint]:not(.sim-icon), #review-sim-toggle [data-hint], #prepare-dir-legend [data-hint], #sync-browser [data-hint], #shaper-sync-modal [data-hint]')) { if (!e.hasAttribute('data-label')) bindHint({ el: e }); } // a button's text is its data-label's (the loop above); only the labels are bound here (TASK 801: the Simulate panel's texts and its toggle's name take their label here too, from the table; its icon buttons keep their icons: their hint is the tooltip only)
+// TASK 805: the Export step's labels come from the table (param-hints.js); each label, and each Export action, shows its hint in the ONE tooltip at the cursor
+// (hint.js installHintTooltip: every element with data-hint). TASK 880: the side panel is gone: its labels are the Cuts card's and the footer settings' (the actions
+// carry their own label: EXPORT_ACTIONS); the thickness label is bound by the stock card below (its hint says what the board is).
+for (const e of document.querySelectorAll('#shaper-sync-modal [data-label]')) e.textContent = hintLabel(e.dataset.label);
+for (const e of document.querySelectorAll('#review-cards [data-hint], #review-settings [data-hint]:not(#review-stock-label), #review-sim [data-hint]:not(.sim-icon), #review-sim-toggle [data-hint], #prepare-dir-legend [data-hint], #sync-browser [data-hint], #shaper-sync-modal [data-hint]')) { if (!e.hasAttribute('data-label')) bindHint({ el: e }); } // a button's text is its data-label's (the loop above); only the labels are bound here (TASK 801: the Simulate panel's texts and its toggle's name take their label here too, from the table; its icon buttons keep their icons: their hint is the tooltip only)
 installHintTooltip(document);
 for (const b of document.querySelectorAll('#review-toolbar [data-hint]')) {
   const id = b.dataset.hint;
   mountTooltip({ target: b, getContent: () => ({ title: hintLabel(id), text: hintText(id) }) });
 }
 let generateCall = 0; // TASK S3: a press waiting for out-of-date operations is replaced by a later press (one file after the Recalculate)
-if (btnGenerateSvg) {
-  btnGenerateSvg.addEventListener('click', async () => {
-    const status = document.getElementById('simexport-status');
-    const call = ++generateCall;
-    const payload = await generateShaperSvgPayload({ say: sayIn(status) }); // TASK 817: waits for the paths being generated
-    if (call !== generateCall) return;
-    if (!payload) { if (status) status.textContent = emptyExportText(); return; }
-    const name = designFileName();
-    download(name, payload.svg);
-    const n = payload.entries.length;
-    // built from nodes (TASK 767): the file name is the design's, text only
-    const file = document.createElement('strong');
-    file.textContent = name;
-    const hub = document.createElement('a');
-    Object.assign(hub, { href: 'https://hub.shapertools.com/my-files', target: '_blank', rel: 'noopener noreferrer', textContent: 'ShaperHub (My Files)' });
-    hub.style.cssText = 'color:var(--sk-selection,#4c9aff); text-decoration:underline;';
-    if (status) status.replaceChildren(`Exported ${n} cut${n === 1 ? '' : 's'} → `, file, '. Drop it into ', hub, ' to sync with Origin.');
-    if (status && payload.warning) status.append(` ${payload.warning}`); // TASK 803
-  });
+// Generate Shaper SVG (TASK 880: the Export stage's header action): the file downloads, the Export view's status line says what was written
+async function generateShaperSvg() {
+  const status = document.getElementById('simexport-status');
+  const call = ++generateCall;
+  const payload = await generateShaperSvgPayload({ say: sayIn(status) }); // TASK 817: waits for the paths being generated
+  if (call !== generateCall) return;
+  if (!payload) { status.textContent = emptyExportText(); return; }
+  const name = designFileName();
+  download(name, payload.svg);
+  const n = payload.entries.length;
+  // built from nodes (TASK 767): the file name is the design's, text only
+  const file = document.createElement('strong');
+  file.textContent = name;
+  const hub = document.createElement('a');
+  Object.assign(hub, { href: SHAPERHUB_FILES_URL, target: '_blank', rel: 'noopener noreferrer', textContent: 'ShaperHub (My Files)' });
+  hub.style.cssText = 'color:var(--sk-selection,#4c9aff); text-decoration:underline;';
+  status.replaceChildren(`Exported ${n} cut${n === 1 ? '' : 's'} → `, file, '. Drop it into ', hub, ' to sync with Origin.');
+  if (payload.warning) status.append(` ${payload.warning}`); // TASK 803
 }
 
 // Direct ShaperHub cloud sync (Wi-Fi sync to Origin) + in-memory session token & folder browser (TASK 772)
@@ -497,27 +508,25 @@ if (syncModal) syncModal.addEventListener('close', () => clearTimeout(syncCloseT
 if (syncCloseBtn) syncCloseBtn.addEventListener('click', closeSyncModal);
 if (syncCancelBtn) syncCancelBtn.addEventListener('click', closeSyncModal);
 
-const btnSyncShaper = document.getElementById('btn-sync-shaper');
-if (btnSyncShaper) {
-  btnSyncShaper.addEventListener('click', () => {
-    const status = document.getElementById('simexport-status');
-    const entries = planEntries(TICKED); // TASK 798: what the file will hold
-    if (!entries.length) {
-      if (status) status.textContent = emptyExportText();
-      return;
-    }
-    const key = designKey();
-    syncFilename.value = syncNameEdits.has(key) ? syncNameEdits.get(key) : designFileName(); // TASK 767: the design's name, or what was typed for it
-    applySessionUi();
-    renderFolderBrowser();
-    showExistsQuestion(false);
-    showSyncStatus('');
-    if (syncSubmitBtn) syncSubmitBtn.disabled = false;
-    if (syncModal && typeof syncModal.showModal === 'function') {
-      syncModal.showModal();
-    }
-    if (sessionToken) openRemoteFolder(currentRemotePath);
-  });
+// Sync to ShaperHub (TASK 880: the Export stage's header action): the Sync dialog, or the reason it has nothing to send in the Export view's status line
+function openSyncDialog() {
+  const status = document.getElementById('simexport-status');
+  const entries = planEntries(TICKED); // TASK 798: what the file will hold
+  if (!entries.length) {
+    status.textContent = emptyExportText();
+    return;
+  }
+  const key = designKey();
+  syncFilename.value = syncNameEdits.has(key) ? syncNameEdits.get(key) : designFileName(); // TASK 767: the design's name, or what was typed for it
+  applySessionUi();
+  renderFolderBrowser();
+  showExistsQuestion(false);
+  showSyncStatus('');
+  if (syncSubmitBtn) syncSubmitBtn.disabled = false;
+  if (syncModal && typeof syncModal.showModal === 'function') {
+    syncModal.showModal();
+  }
+  if (sessionToken) openRemoteFolder(currentRemotePath);
 }
 
 // TASK 767 / 772: what the success line says (root preserves exact My Files wording; subfolders name their path). TASK 774: the folder of the server's answer
@@ -761,14 +770,14 @@ mountAppFooter({
   router: history,
   view: () => (designController && modes.current() === 'design' ? { svg: designController.svg, state: designController.state } : null),
   settings: stylePanel, // TASK 726: the gear at the footer's right end (also in Fusion mode)
+  controls: [{ el: document.getElementById('review-settings'), stage: 'review', label: 'Board settings' }], // TASK 880: the Export stage's Thickness and Material (also in Fusion mode)
 }); // TASK 618/619: Recenter on Design
 
 // TASK 459: Review = the finished workpiece in 3D, built only from the Prepare cut plan + the declared stock.
 const reviewInputs = (st) => {
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
-  // TASK 757: an EMPTY design (no shapes: its only joint is the origin) has no bounds, so the 3D view builds no board (it was a margin-sized cube round the origin)
-  return { stock: resolveStock(st).stock, items: planReliefItems(st, TICKED), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: planNotes(st, TICKED) }; // TASK 798: the ticked operations // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing; TASK 839: assembled in ONE place (cut-plan.js planNotes: a line the same for every operation once)
+  // TASK 879: the design's bounds are THE DRAWING'S EXTENT (#core/geometry-bounds drawingExtent: each shape by what it draws, never an arc's centre joint or the
+  // origin: a part far from its arcs' centres made a board from the origin to the part). TASK 757: an EMPTY design (nothing drawn) has none, so no board.
+  return { stock: resolveStock(st).stock, items: planReliefItems(st, TICKED), bounds: drawingExtent(st), notes: planNotes(st, TICKED) }; // TASK 798: the ticked operations // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing; TASK 839: assembled in ONE place (cut-plan.js planNotes: a line the same for every operation once)
 };
 const reviewSig = (st) => JSON.stringify([storeSignature(), getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(),
   SettingsManager.get('LENGTH_PRECISION'), SettingsManager.get('ANGLE_PRECISION'), SettingsManager.get('TRAILING_ZEROS'), SettingsManager.get('INCH_DISPLAY'), SettingsManager.get('LENGTH_FRACTION')]); // TASK 714 / 743 / 770: rebuilds on doc unit, precision or trailing-zeros change
@@ -802,6 +811,11 @@ function previewCopy(sig, say) {
     return value;
   });
   return job.promise;
+}
+{ // TASK 880: the Cuts card floats over the 2D / Paths view: its title folds it (disclosure.js)
+  const head = document.getElementById('review-cuts-head');
+  head.insertAdjacentHTML('beforeend', CARET_SVG);
+  mountDisclosure({ host: document.getElementById('review-cuts'), head, body: document.getElementById('review-cuts-list') });
 }
 const exportPreview = mountExportPreview({
   canvas: document.getElementById('review-2d-canvas'), list: document.getElementById('review-cuts-list'), info: document.getElementById('review-2d-info'), emptyText: NO_CUTS,
@@ -873,7 +887,8 @@ async function enterReview(st) {
   } catch (e) { info.textContent = 'Export failed: ' + e.message; throw e; }
 }
 {
-  const stockCard = createStockCard({ input: document.getElementById('review-stock-thickness'), noteEl: document.getElementById('review-stock-note'), getController: () => designController,
+  const stockHint = bindHint({ el: document.getElementById('review-stock-label') }); // TASK 880: what the board is (stock-card.js boardOf) is the label's tooltip, not a note under it
+  const stockCard = createStockCard({ input: document.getElementById('review-stock-thickness'), onBoard: (board) => stockHint.refresh({ board }), getController: () => designController,
     onChange: () => { if (fusionUi) fusionUi.notifyProjectChanged(); if (reviewViewMode !== '3d') enterReview(designController.state); else if (reviewView) { exportSim.refresh(reviewSig(designController.state)); reviewView.refresh(reviewSig(designController.state)); } } }); // TASK 583 (stock-card.js): the thickness field of the Review card; TASK 817: the 2D file is made again (in the background); TASK 801: the simulation's board is the new one
   showStockThickness = stockCard.show;
   SettingsManager.subscribe((key) => { if (fusionUi) fusionUi.notifyProjectChanged(); if ((key === null || key === 'DOC_UNIT' || isPrecisionKey(key)) && modes.current() === 'review' && designController) enterReview(designController.state); });

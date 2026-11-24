@@ -24,7 +24,7 @@ const SIZES = [
 const STAGES = [
   { id: 'design', canvas: '#design-canvas', panels: [] },
   { id: 'prepare', canvas: '#prepare-canvas', panels: [] },
-  { id: 'review', canvas: '#review-stage', panels: ['#review-side'] },
+  { id: 'review', canvas: '#review-stage', panels: [] }, // TASK 880: no side panel (the Export settings are the footer's, its actions the drawer's on a phone)
 ];
 
 await (async () => {

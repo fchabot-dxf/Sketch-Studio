@@ -17884,3 +17884,14 @@ Midpoint of an ARC, as Fusion does it (owner 3426; advisor's Fusion check: addMi
 - Tests: NEW tests/midpoint-arc-875-node.test.js (81 checks; fail-first: `.evidence/875/node-test-before.txt`, "a point and an arc make a midpoint: []"), NEW tests/midpoint-arc-875-live.test.js (desktop 1280 + phone 390: tool, point then arc -> the point at 60 deg of a 0-120 deg arc, the arc stays; Select drags the arc end past 180 -> the point at the middle). 871 node + live updated to the new behaviour (an arc is a valid Midpoint pick; still told: own centre, arc + line).
 - Coverage matrix: new row `midpoint-arc` (point, then arc), `midpoint-line` ui = anyLine || arc Y (its no-line pairs pick Y's curve: an arc is now the arc form), PlaneGCS translation point_on_circle + equal_length, selfSelection refuses an arc's own joint. `3744 cells: N/A=1516 NA-BUILD=162 NEW-10=3 NEW-11=6 NEW-6=1 PASS=2056` (was 3564 / PASS=1980). NEW-11 pinned (docs/COVERAGE-AUDIT.md): the midpoint of a FILLET arc (no stored direction) fails the bite jitter in 6 cells (locked LF/CF/OF, FF shared): the jitter flips the shortest-way side of a fillet bent near 180 deg.
 - Audit 869 `AUDIT_869_ONLY='constraint midpoint'`: P+A PASS, A+P PASS (were FAIL-SILENT in the 869 doc, refused-told after 871).
+
+## TURN 881 (step 1: inventory; Claude Opus subagent)
+- docs/FUSION-PANEL-881.md: what Shaper does in Fusion mode (?host=fusion, &project=design) vs the website, with file:line: stages, menu /
+  header / footer, what Fusion mode adds, the same-in-both parts, the Fusion tests, the import graph, SA-32's constraints, run-time network.
+  Each website part marked USED / UNUSED / owner to decide (owner turn 3494: Log used; Download and Settings unused; Rate & feedback to decide).
+- Findings: (1) the shared modules Fusion USES import the unused layers (fusion-bridge.js:17, fusion-import.js:7 and document-buffer.js:45
+  import #ui/project-store.js, which pulls the Drive / Google stack; app-chrome.js pulls the project sidebar; prepare-stage's tool ribbon pulls
+  text-fonts / template-picker), so excluding them at build time means injecting those layers, which changes website module bytes: the STEP 2
+  question. (2) Send to ShaperHub posts to the relative /api/shaper-upload (main.js:381): offline it reaches the add-in's local server; the
+  Pages function has no CORS. (3) Rate & feedback refuses to send from a local page (analytics.js:114, 123).
+- Stopped before STEP 2 on the advisor's order: task 880 (new Export layout) is not on origin/main yet (`git log origin/main | grep "task 880"`: nothing).

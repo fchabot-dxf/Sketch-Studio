@@ -151,7 +151,7 @@ for (const t of CUT_TYPES) ok(seen.has(choiceId('cutType', t.id)), `the cut type
 
 // ── 3. every entry is rendered somewhere ──
 const html = fs.readFileSync(new URL('../apps/shaper/index.html', import.meta.url), 'utf8');
-const mainJs = fs.readFileSync(new URL('../apps/shaper/src/main.js', import.meta.url), 'utf8');
+const mainJs = fs.readFileSync(new URL('../apps/shaper/src/main.js', import.meta.url), 'utf8') + fs.readFileSync(new URL('../apps/shaper/src/shaper-app.js', import.meta.url), 'utf8'); // TASK 881: the page's wiring is shaper-app.js (shared by the website and the Fusion panel) + main.js (the website's own parts)
 const opListJs = fs.readFileSync(new URL('../apps/shaper/src/op-list.js', import.meta.url), 'utf8');
 for (const m of html.matchAll(/data-(?:hint|label)="([A-Za-z]+)"/g)) seen.add(m[1]);
 for (const m of mainJs.matchAll(/hint(?:Label|Text)\('([A-Za-z]+)'\)/g)) seen.add(m[1]);

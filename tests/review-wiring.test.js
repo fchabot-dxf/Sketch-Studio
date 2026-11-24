@@ -7,7 +7,7 @@ import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '..');
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 const html = read('apps/shaper/index.html');
-const main = read('apps/shaper/src/main.js');
+const main = read('apps/shaper/src/main.js') + read('apps/shaper/src/shaper-app.js'); // TASK 881: the page's wiring is shaper-app.js (shared by the website and the Fusion panel) + main.js (the website's own parts)
 const modes = read('apps/shaper/src/modes.js'); // TASK 583: the mode router and its views are declared in modes.js (main.js and the node test kit both use it)
 const view = read('apps/shaper/src/review-view.js');
 

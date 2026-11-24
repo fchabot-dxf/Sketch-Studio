@@ -35,7 +35,7 @@
 //      and the test reads it (app.window.location); the next page is an open() on the same profile.
 // KIT API ADDED in task 610 (not overrides; page wiring moved into modules the page and the kit both call, no app behaviour change):
 //   17. design browser (task 610): open({ designBrowser: true }) mounts the floating SKETCHES browser (packages/ui/design-browser.js: the Design info panel, its rows and
-//      sketch tree) over the canvas through the host's own declared mount (SketchStudio design-canvas.js mountStudioBrowser, Shaper design-canvas.js mountShaperBrowser; Pen Plotter's
+//      sketch tree) over the canvas through the host's own declared mount (SketchStudio design-canvas.js mountStudioBrowser, Shaper shaper-browser.js mountShaperBrowser (TASK 881; was design-canvas.js); Pen Plotter's
 //      Design stage always mounts it, so its panel is in the DOM without the option) and ticks it once per frame, as the host's render loop does. app.browser is the mount.
 //      The phone drawer's header button is not placed (SketchStudio's header is page-only).
 //   18. import (task 610): with sidebar: true the sidebar's "Import SVG / DXF…" entry is mounted as the page mounts it (the host's own importFile: SketchStudio createStudioImporter,
@@ -202,10 +202,10 @@ const HOSTS = {
   // apps/shaper/src/main.js ensureSketch + buildDesignUI: mountSketch(#design-canvas, DESIGN_CANVAS_OPTIONS), the ribbon, the buffer; the mode router
   // (modes.js) and Prepare (prepare-stage.js) are the page's own declared modules (TASK 583). The page's Review view is not mounted.
   async shaper({ win, store, designBrowser }) {
-    const [{ mountSketch }, { createToolRibbon }, { createDocumentBuffer }, D, M, { createPrepareStage }, { createStockCard }, { createShaperSession }, { createShaperImporter }, { createGroupStatus }, { createStlImporter }] = await Promise.all([
+    const [{ mountSketch }, { createToolRibbon }, { createDocumentBuffer }, D, M, { createPrepareStage }, { createStockCard }, { createShaperSession }, { createShaperImporter }, { createGroupStatus }, { createStlImporter }, { mountShaperBrowser }] = await Promise.all([
       import('#ui/sketch-canvas.js'), import('#ui/tool-ribbon.js'), import('#ui/document-buffer.js'), import('../../apps/shaper/src/design-canvas.js'),
       import('../../apps/shaper/src/modes.js'), import('../../apps/shaper/src/prepare-stage.js'), import('../../apps/shaper/src/stock-card.js'), import('../../apps/shaper/src/shaper-session.js'),
-      import('../../apps/shaper/src/cut-import.js'), import('../../apps/shaper/src/group-status.js'), import('../../apps/shaper/src/stl-import.js')]);
+      import('../../apps/shaper/src/cut-import.js'), import('../../apps/shaper/src/group-status.js'), import('../../apps/shaper/src/stl-import.js'), import('../../apps/shaper/src/shaper-browser.js')]); // TASK 881: the SKETCHES browser's mount is its own module
     const doc = win.document;
     layoutById(win, { [D.DESIGN_CANVAS_ID]: MEASURED_CANVAS_RECT.shaper, 'prepare-canvas': PREPARE_CANVAS_RECT });
     const svg = doc.getElementById(D.DESIGN_CANVAS_ID);
@@ -223,7 +223,7 @@ const HOSTS = {
       if (controller) return;
       controller = mountSketch(svg, { ...D.DESIGN_CANVAS_OPTIONS, isActive: () => modes.current() === 'design' });
       controller.state.hostSnapshot = prepare.hostSnapshot;
-      if (designBrowser) browser = D.mountShaperBrowser({ state: controller.state, engine: controller.engine }); // buildDesignUI: the SKETCHES browser
+      if (designBrowser) browser = mountShaperBrowser({ state: controller.state, engine: controller.engine }); // buildDesignUI: the SKETCHES browser
       ribbon = createToolRibbon({ state: controller.state, ...D.RIBBON_OPTIONS });
       ribbon.render(doc.getElementById('design-ribbon'));
       // afterSidecar: what the page does with Prepare and the Review card once the cut plan is back (it also re-enters Review, which needs three.js: not here)

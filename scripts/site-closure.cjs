@@ -13,6 +13,7 @@
 // siteClosure({ root, app, functionsRoot, entry }) -> { files: Set<rel path>, refs: [{ from, spec, to, base }], missing: [{ from, spec, to }],
 //                                                       crossApp: [{ from, spec, to }], functions: [{ from, spec, file }] }
 // `entry` = the page, relative to root: apps/<app>/index.html (the repo), or index.html (a built site: TASK 763, the app at the top of its site).
+// `entrySource` (TASK 881): the page's text when it is not the file at `entry` (the Fusion panel's page: the website's page with its own entry module, at the page's place).
 // One resolver for build-site.cjs (which copies the root files it lists, e.g. assets/constraint-glyphs.svg) and tests/site-closure.test.js.
 'use strict';
 const fs = require('fs');
@@ -159,7 +160,7 @@ function functionFile(functionsRoot, pathname) {
 // TASK 828: the standalone pages at the repo root that build-site.cjs ships with every site (privacy.html, about.html): a page of the app that links one reaches the file only.
 const STANDALONE_PAGES = ['privacy.html', 'about.html'];
 
-function siteClosure({ root, app, functionsRoot = root, entry = `apps/${app}/index.html` }) {
+function siteClosure({ root, app, functionsRoot = root, entry = `apps/${app}/index.html`, entrySource = null }) {
   if (!APPS.includes(app)) throw new Error(`site-closure: unknown app "${app}" (one of ${APPS.join(', ')})`);
   const pageUrl = urlOf(entry);
   const files = new Set();
@@ -176,7 +177,7 @@ function siteClosure({ root, app, functionsRoot = root, entry = `apps/${app}/ind
     const ext = path.extname(rel).toLowerCase();
     if (!['.html', '.js', '.mjs', '.css'].includes(ext)) continue; // an image, an SVG sheet, JSON: a leaf
     if (STANDALONE_PAGES.includes(rel)) continue; // TASK 828: a standalone site page (the About page a menu opens): reached, but its own links are not the app's
-    const src = fs.readFileSync(path.join(root, rel), 'utf8');
+    const src = rel === entry && entrySource != null ? entrySource : fs.readFileSync(path.join(root, rel), 'utf8'); // TASK 881: a page written by the build (the Fusion panel's) is read as given
     let found;
     if (ext === '.html') { const p = htmlParts(src); found = p.refs; if (rel === entry) importMap = p.importMap; }
     else found = ext === '.css' ? cssRefs(src) : jsRefs(src);

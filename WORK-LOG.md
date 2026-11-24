@@ -17885,6 +17885,23 @@ Midpoint of an ARC, as Fusion does it (owner 3426; advisor's Fusion check: addMi
 - Coverage matrix: new row `midpoint-arc` (point, then arc), `midpoint-line` ui = anyLine || arc Y (its no-line pairs pick Y's curve: an arc is now the arc form), PlaneGCS translation point_on_circle + equal_length, selfSelection refuses an arc's own joint. `3744 cells: N/A=1516 NA-BUILD=162 NEW-10=3 NEW-11=6 NEW-6=1 PASS=2056` (was 3564 / PASS=1980). NEW-11 pinned (docs/COVERAGE-AUDIT.md): the midpoint of a FILLET arc (no stored direction) fails the bite jitter in 6 cells (locked LF/CF/OF, FF shared): the jitter flips the shortest-way side of a fillet bent near 180 deg.
 - Audit 869 `AUDIT_869_ONLY='constraint midpoint'`: P+A PASS, A+P PASS (were FAIL-SILENT in the 869 doc, refused-told after 871).
 
+## TURN 881 (step 1: inventory; Claude Opus subagent)
+- docs/FUSION-PANEL-881.md: what Shaper does in Fusion mode (?host=fusion, &project=design) vs the website, with file:line: stages, menu /
+  header / footer, what Fusion mode adds, the same-in-both parts, the Fusion tests, the import graph, SA-32's constraints, run-time network.
+  Each website part marked USED / UNUSED / owner to decide (owner turn 3494: Log used; Download and Settings unused; Rate & feedback to decide).
+- Findings: (1) the shared modules Fusion USES import the unused layers (fusion-bridge.js:17, fusion-import.js:7 and document-buffer.js:45
+  import #ui/project-store.js, which pulls the Drive / Google stack; app-chrome.js pulls the project sidebar; prepare-stage's tool ribbon pulls
+  text-fonts / template-picker), so excluding them at build time means injecting those layers, which changes website module bytes: the STEP 2
+  question. (2) Send to ShaperHub posts to the relative /api/shaper-upload (main.js:381): offline it reaches the add-in's local server; the
+  Pages function has no CORS. (3) Rate & feedback refuses to send from a local page (analytics.js:114, 123).
+- Stopped before STEP 2 on the advisor's order: task 880 (new Export layout) is not on origin/main yet (`git log origin/main | grep "task 880"`: nothing).
+## TURN 877
+Shaper Fusion selection notice made plain: ONE builder `selectionCountText(regions, chains)` (apps/shaper/src/selection-edit.js) used by fusion-bridge.js (Added fallback) and fusion-import.js (3 places: Updated same-id, Updated empty, and the shared `counts` for Added / Replaced with / nothing-importable). Singular/plural, zero left out, none = "nothing to cut". Chains are worded "path" (Paths view, cut panel "open paths"). Tests updated: fusion-import-664 (node+live), fusion-mode-663 (node+live), fusion-replace-712 (node+live), selection-list-795-node, export-preview-719-live, stepped-cut-714-live; new selection-notice-877-node. gate:quick 588/588.
+- 881 rulings recorded in docs/FUSION-PANEL-881.md section 10 (refactor not fork; behaviour-identical website; feedback out of the Fusion build;
+  Insert STL kept; R1 a follow-up; 127.0.0.1 only). Still waiting: task 880 not on origin/main at this check.
+- 881: owner redesign direction (turns 3534-3535: operation-first with Fusion references, the canvas shows toolpaths, website flow unchanged)
+  recorded in docs/FUSION-PANEL-881.md section 11; not built.
+- 881: section 11 clarified (owner turn 3538): Prepare's canvas shows the toolpaths in the Fusion panel; Export keeps its 3D / 2D / Paths views.
 ## TURN 878
 No-nag audit of the Shaper app + the shared Design tab (owner turns 3472-3474, rule 2607): a toast / notice / warning line shows ONLY when something is wrong and the user must act (an error, a refusal, data that could not be read or was lost). Confirmations of an action that visibly worked, step announcements and explanations of a default are REMOVED at their one source; the useful ones MOVED to the declared hints. No cut, path, refusal or data changed: only what is shown.
 - REMOVED (packages/ui): Grouped / Ungrouped / "<group>: <lock> on|off" (group-actions.js); Combined into / Uncombined (profile-actions.js); "Converted to N curves" (text-tool.js); "Equal constraint applied", "Horizontal/Vertical constraint applied", "The selected group is not used" on a constraint / dimension tool's start (input-manager.js; its `selectedGroups` import went with it); "Fillet radius set to", "Fillet applied" / "N fillets applied" (fillet-tool.js; the `results` array that only fed it went too); "Offset applied" (offset-tool.js); Mirror's step messages on start, after the objects step and on the line pick (mirror-tool.js; MIRROR_HINTS and the `referenceShape` import gone: no other caller; Enter with no line still says what is missing); Close path: its start message with nothing selected, and the "Closed N ..." notice when everything given was closed (close-path-actions.js; left-open and refused still said, "Close them" says only what changed since the import); Settings panel: Saved / Deleted style preset, Reset to factory defaults (style-panel.js; the `onNotify` hook is gone with its last message, apps/sketchstudio/main.js no longer passes it).
@@ -17912,3 +17929,34 @@ Shaper's Export view has no side panel (owner turn 3484: "remove this sidebar an
 - Badge: review-view.js no longer shows "N triangles · N levels · built in N ms"; it goes to dbg.log('shaper', '3D build: ...'); the numbers stay in currentReviewView().lastBuild (what the perf runs already read: tests/helpers/export-sim-perf-live.js). Only the Export 3D view had it. Tests wait for the build through tests/helpers/review-built.js (lastBuild + no waiting line) instead of the on-screen text.
 - Tests: NEW tests/export-header-880-live.test.js (1280 / 1024 / 700 window / Fusion 1280 / phone 390 touch: no #review-side, view full width, header actions right-aligned no overflow, drawer actions on the phone, Generate == exportWhenGenerated byte for byte, Sync dialog opens / cancels, hub link attrs, footer Thickness + thickens the 3D board, Material walnut, Prepare hides both); fail-first: on origin/main it fails at "desktop-1280: no #review-side". NEW helpers tests/helpers/review-built.js, tests/helpers/export-actions.js (press an Export action: header or drawer; open the footer fold; unfold the Cuts card). Updated: every live test that waited on /triangles/ in #review-info (24 files), the side-panel readers (718, 801, 830 live + node, hints-live, tooltip-live, pocket-live, noshift-813, number-stepper-730, op-list-743, op-ticks-798, opbar-s3, review-look-729, shaper-phone-705, stock-loop), the Export action presses (16 files through pressExportAction), shared-header-live (Shaper's header has the stage actions group), shortcuts.test (Esc of the fold card exempt), param-hints-770-node, review-wiring.
 - Evidence: Generate download md5 5ac91d7bb8ad2318d34b7285cddd006d on origin/main (side panel button) and on this branch (header action), 495 bytes each (.evidence/880/generate-main.svg, generate-branch.svg). Screenshots .evidence/880/before-*.png (today) and .evidence/880/live/*.png (after).
+
+## TURN 881 (steps 2 + 3: the Fusion panel build; Claude Opus subagent)
+- Refactor, no fork (Q1 ruling): Shaper's page wiring moved from main.js into apps/shaper/src/shaper-app.js (startShaperApp: the page DECLARES fusion,
+  mountChrome, createDocumentBuffer, bufferStore, menu, beforeChrome / afterChrome, createImporter, mountDesignBrowser, createSettingsPanel,
+  onDesignContext). main.js = the website (both modes) with its own parts; NEW fusion-main.js = the panel (Fusion mode always, plain drawer with Log
+  only, in-memory store). Shared layers take what they imported: NEW packages/ui/app-shell.js (header + declared drawer) under app-chrome.js; NEW
+  document-buffer-core.js (store passed) under document-buffer.js; NEW project-store-core.js (store engine, no Google / Drive / router) under
+  project-store.js; NEW cloud/drive-errors.js; CURRENT_DESIGN_KEY in the engine; mountFusionPrepareBar({ fusionMode }); NEW shaper-browser.js (the
+  SKETCHES browser mount, out of design-canvas.js).
+- scripts/build-site.cjs shaper-fusion (default out dist-fusion/, git-ignored): the website's index.html with src/fusion-main.js as its module, only
+  the files the page reaches + licences + fusion-panel.json (files, bytes, sha256, mime, network); the 13 references that relied on '..' stopping at
+  the root or started at the root are rewritten in the panel's copy; the build proves the folder. scripts/site-closure.cjs: entrySource.
+- Result: 248 files, 7,685,886 bytes; website reaches 275 files, panel 243; 25 website-only files excluded (list in docs/FUSION-PANEL-881.md 12).
+  Website build vs before 881: index.html identical; differs by exactly the new / changed modules listed in the doc.
+- Tests: NEW fusion-panel-881-node (378 checks: every UNUSED module reached by the website, not by the panel, not in its folder; USED ones there;
+  nothing leaves the folder; case-exact refs; manifest = folder). NEW fusion-panel-881-live: the same import -> Prepare (Outside) -> Export (3D built)
+  -> Generate flow on the website (?host=fusion&project=design) and on the built panel served like SA-32's server: the panel's SVG = the website's,
+  byte for byte; drawer Log only; no footer gear / doc tabs / account; every request to its own server, all 200. Source-reading tests now read
+  main.js + shaper-app.js (param-hints-770-node, shaperhub-login-758, review-wiring, review-look-729, shaperhub-name-767, review-grid-754,
+  shortcuts (count moved to shaper-app.js), analytics-client (track / startAnalytics in app-shell.js)); node-app.js + sketch-layers-node read
+  shaper-browser.js.
+- gate:quick 591/591. Live, one at a time, all ok: fusion-mode-663, fusion-import-664, fusion-polish-665, fusion-replace-712, fusion-toolpaths-799,
+  fusion-adsk-wait-685, param-hints-770-fusion, pocket-loop-750-fusion, pocket-startmark-775-fusion, export-header-880, opselect-806,
+  addin-download-733, about-828, analytics, footer-settings-726, shared-tabs-684, drive-only-saves, sidebar-open-refused, account-avatar-776,
+  stl-open-790, open-recent-modal, site-root-763, settings-drive-773, document-tabs-unsaved-callers, review-look-729, review-grid-754,
+  orbit-pivot-823, op-ticks-798, sidecar-on-show-687, drawing-stage-725, trace-projects, drive-rename, first-click-771; shell-smoke 13/13.
+  Merge gate: tests/helpers/node-app.js changed, so it runs ALL live tests.
+- Evidence (.evidence/881/, local): panel-prepare-1280x800.png md5 73250e1b8d148a400018f455e40389b3, panel-prepare-palette-480x731.png
+  ecdd79f5290987e0122237e69aaeaccc, panel-drawer-zoom.png d0885df7d9ea4b7aa25a94034f9471ae, panel-export-1280x800.png
+  d32faf185257b7a80cf81e140c9d9e20, panel-export.svg, panel-requests.txt, panel-build.txt, fusion-panel.json.
+- Open: R1 Send to ShaperHub offline (/api/shaper-upload is the website's route: 404 on the add-in's server), follow-up task.

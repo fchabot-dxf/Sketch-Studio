@@ -135,7 +135,7 @@ for (const { file, src } of callers) {
 }
 eq([...sent.keys()].sort(), [...FEATURES].sort(), 'every declared feature is sent from the code, and the code sends no other');
 console.log('feature → call sites: ' + JSON.stringify(Object.fromEntries([...sent].map(([k, v]) => [k, [...new Set(v)]]))));
-eq(sent.get('stage:'), ['packages/ui/app-chrome.js'], 'stage switches: ONE call, in the shared chrome');
+eq(sent.get('stage:'), ['packages/ui/app-shell.js'], 'stage switches: ONE call, in the shared chrome (TASK 881: its shell, app-shell.js, which app-chrome.js mounts)');
 eq(sent.get('template:'), ['packages/ui/project-actions.js'], 'templates: ONE call, in the shared project actions');
 eq([...new Set(sent.get('shortcut-changed'))], ['packages/ui/shortcuts-list.js'], 'TASK 747: a changed shortcut: only from the Shortcuts tab (no key data: the name is all)');
 eq([...new Set([...sent.get('import:svg'), ...sent.get('import:dxf')])], ['packages/ui/sketch-import.js'], 'SVG / DXF imports: in the ONE shared importer');
@@ -151,7 +151,7 @@ for (const { file, src } of sources) {
   ok(!/workers\.dev|sendBeacon|sketch-analytics-(id|dev|off)/.test(src), `${file}: no analytics endpoint, beacon or analytics storage key outside analytics.js`);
 }
 const startCallers = sources.filter((s) => /\bstartAnalytics\(/.test(s.src) && s.file !== 'packages/ui/analytics.js').map((s) => s.file);
-eq(startCallers, ['packages/ui/app-chrome.js'], 'the visit: ONE call, in the shared chrome every app mounts');
+eq(startCallers, ['packages/ui/app-shell.js'], 'the visit: ONE call, in the shared chrome every app mounts (TASK 881: its shell, app-shell.js)');
 
 // ── the privacy page says what the code does ─────────────────────────────────────────────────────────
 const privacy = fs.readFileSync(path.join(ROOT, 'privacy.html'), 'utf8');

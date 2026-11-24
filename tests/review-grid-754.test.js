@@ -84,7 +84,7 @@ ok(/--sk-grid-minor:\s*#[0-9a-f]{6};/i.test(dc) && /--sk-grid-major:\s*#[0-9a-f]
 for (const f of ['apps/shaper/src/review-grid.js']) ok(!/#[0-9a-f]{3,6}\b|0x[0-9a-f]{6}/i.test(read(f).replace(/^\s*\/\/.*$/gm, '').replace(/#include/g, '')), f + ': no colour literal');
 const rv = read('apps/shaper/src/review-view.js');
 ok(!/0x14161a/i.test(rv) && /scene\.background = new THREE\.Color\(\);/.test(rv) && /scene\.background\.setStyle\(gridColors\.background\)/.test(rv), 'review-view.js: the clear colour is set only from the Design canvas colours');
-ok(/designCanvas: document\.getElementById\('design-canvas'\)/.test(read('apps/shaper/src/main.js')), 'main.js hands the Design canvas element to the 3D view');
+ok(/designCanvas: document\.getElementById\('design-canvas'\)/.test(read('apps/shaper/src/shaper-app.js')), 'the page wiring (TASK 881: shaper-app.js) hands the Design canvas element to the 3D view');
 // the feature is Shaper's Export 3D only: no other host imports it
 const filesIn = (dir) => fs.readdirSync(path.join(root, dir), { recursive: true }).map((f) => path.join(dir, String(f))).filter((f) => /\.(js|html)$/.test(f) && !/vendor/.test(f));
 const users = [...filesIn('apps'), ...filesIn('packages')].filter((f) => /import[^;]*review-grid\.js/.test(read(f))).map((f) => f.replace(/\\/g, '/')).sort();

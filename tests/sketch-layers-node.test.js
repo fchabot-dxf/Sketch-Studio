@@ -246,7 +246,8 @@ for (const host of ['sketchstudio', 'shaper', 'penplotter']) await canvasChecks(
   // How each host mounts the tree (read from the host's own source): all four through the ONE shared mount (#ui/design-browser.js, task 586,
   // which sets showSketchTree: true).
   const src = (f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
-  const declared = { sketchstudio: src('apps/sketchstudio/design-canvas.js'), trace: src('apps/trace/src/edit-view.js'), shaper: src('apps/shaper/src/design-canvas.js'), // TASK 610: SketchStudio's and Shaper's mounts moved from main.js into design-canvas.js (mountStudioBrowser / mountShaperBrowser)
+  const declared = { sketchstudio: src('apps/sketchstudio/design-canvas.js'), trace: src('apps/trace/src/edit-view.js'), shaper: src('apps/shaper/src/shaper-browser.js'), // TASK 881: the mount moved out of design-canvas.js
+    // TASK 610: SketchStudio's and Shaper's mounts moved from main.js into design-canvas.js (mountStudioBrowser / mountShaperBrowser)
     penplotter: src('apps/penplotter/src/sketch-stage.js') };
   assert(/showSketchTree:\s*true/.test(src('packages/ui/design-browser.js')), 'the shared browser mount opts into the tree');
   for (const host of ['sketchstudio', 'trace', 'shaper', 'penplotter']) assert(/mountDesignBrowser\(/.test(declared[host]), host + ' mounts the sketch tree through mountDesignBrowser');

@@ -2,7 +2,8 @@
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
-import { keyOf, getCutRecord } from '../apps/shaper/src/cut-plan.js';
+import { keyOf, getCutRecord, getPlanRecord, newOperation } from '../apps/shaper/src/cut-plan.js';
+import { storeOps, regionKeys, regionOf } from '../apps/shaper/src/operations-store.js';
 import { getStock, setStock } from '../apps/shaper/src/stock.js';
 import { DEFAULT_STOCK } from '#core/relief-model.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
@@ -247,15 +248,19 @@ const realSketchMessage = {
     eq(res.sketch.name, 'Bracket Body', 'sketch named after body source');
     eq(app.state.profiles.length, 1, 'pocket with non-standalone island creates 1 combined profile via makeProfile');
 
+    // TASK 882 (owner turn 3530: "adding a selection from fusion shouldnt create toolpath ever"): the import makes NO operation. Fusion's cutType / depthMm stay as the
+    // region's SOURCE (regions[key].source), so a cut type the user gives it afterwards prefills the depth. (Before: the import filed pocket / interior / exterior ops.)
+    eq(V2_PLAN.size, 0, 'the body import made no operation');
+    eq(storeOps().length, 0, 'the operations store is empty');
     const profKey = keyOf('profile', app.state.profiles[0].id);
-    const profRec = V2_PLAN.get(profKey);
-    ok(profRec, 'V2_PLAN has profile:<id> record');
-    eq(profRec.cutType, 'pocket', 'pocket cutType mapped');
-    eq(profRec.cutDepth, 6.5, 'pocket cutDepth set to 6.5mm');
-
-    const entries = [...V2_PLAN.values()];
-    ok(entries.some((r) => r.cutType === 'interior' && r.cutDepth === 19.05), 'inside mapped to interior with 19.05mm depth');
-    ok(entries.some((r) => r.cutType === 'exterior' && r.cutDepth === 19.05), 'outside mapped to exterior with 19.05mm depth');
+    eq(JSON.stringify(regionOf(profKey).source), JSON.stringify({ cutType: 'pocket', cutDepth: 6.5 }), 'the pocket face keeps Fusion cutType / depth as its source');
+    eq(getCutRecord(profKey).cutType, null, 'and has no cut type of its own');
+    eq(getCutRecord(profKey).cutDepth, 6.5, 'its record prefills the depth from the source');
+    const sources = regionKeys().map((k) => regionOf(k).source).sort((a, b) => a.cutDepth - b.cutDepth);
+    eq(sources.map((x) => x.cutType + ':' + x.cutDepth).sort().join(), 'exterior:19.05,interior:19.05,pocket:6.5', 'every region keeps its payload hints');
+    const outKey = regionKeys().find((k) => regionOf(k).source.cutType === 'exterior');
+    const op = newOperation('exterior', [outKey]);
+    eq([storeOps().length, op.settings.cutDepth, getPlanRecord(outKey).cutDepth].join(), '1,model,19.05', 'giving the outline Outside afterwards prefills its depth from Fusion (Depth: From model)');
     near(getStock().thickness, 19.05, 1e-6, 'stock.thicknessMm updated via setStock');
   } finally {
     await app.close();
@@ -287,12 +292,12 @@ const realSketchMessage = {
       chains: [],
     };
 
-    const r1 = importFusionSelection(msg1, { controller: app.controller, prepare: app.prepare });
+    const r1 = importFusionSelection(msg1, { controller: app.controller, prepare: app.prepare, file: true }); // TASK 882: filed, so Replace's undo has operations to bring back
     const shapesAfterFirst = app.state.shapes.length;
     const sketchesAfterFirst = app.state.sketches.length;
     const planAfterFirst = V2_PLAN.size;
 
-    const r2 = importFusionSelection(msg2, { controller: app.controller, prepare: app.prepare });
+    const r2 = importFusionSelection(msg2, { controller: app.controller, prepare: app.prepare, file: true });
     eq(r1.sketch.name, 'FirstPart', 'first import made FirstPart');
     eq(r2.sketch.name, 'SecondPart', 'second import made SecondPart');
     eq(r2.message, 'Replaced with SecondPart: 1 region', 'the second notice says Replaced');

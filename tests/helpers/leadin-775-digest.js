@@ -114,7 +114,7 @@ export async function leadinDigest() {
     app.modes.showMode('prepare');
     for (const f of ['real-solid-plate-711.json', ...fs.readdirSync(fx('sa7-slope')).sort().map((x) => 'sa7-slope/' + x)]) {
       V2_PLAN.clear(); V2_PLAN.setOrder([]);
-      importFusionSelection(fs.readFileSync(fx(f), 'utf8'), { controller: app.controller, prepare: app.prepare });
+      importFusionSelection(fs.readFileSync(fx(f), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
       const st = app.state, entries = planEntries();
       const relief = reliefOf(st);
       const pv = { svg: pageBefore879(shaperPreviewOf(st, entries).svg, st) }; // TASK 879

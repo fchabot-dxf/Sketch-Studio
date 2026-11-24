@@ -150,7 +150,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     app.modes.showMode('prepare');
     const h = harness(app);
     // a vertical pocket (08: spline walls, no slope): no stepped type, so no checkbox either
-    importFusionSelection(payload('08-spline'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(payload('08-spline'), { controller: app.controller, prepare: app.prepare, file: true });
     h.clickAt(60, -40);
     eq(h.menu().filter((id) => id.startsWith('stepped')), [], 'a vertical pocket offers no stepped type');
     eq(CUT_TYPES.filter((t) => t.slopeKind).length, 0, 'no stepped type is declared (TASK 792: Roughing replaced them)');
@@ -159,7 +159,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
 
     // the R3 floor fillet (03), Stepped pocket: OFF by default = 716
     V2_PLAN.clear();
-    importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare, file: true });
     const [pk] = recAt('pocket');
     h.clickAt(60, -40);
     h.pick('roughing');
@@ -234,7 +234,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
 
     // the last value is the next stepped cut's default: the countersunk hole (06), Stepped inside
     h.pressEl('.cut-row[data-row="stepDeviation"] .cut-preset[data-value="0.1"]');
-    importFusionSelection(payload('06-countersink'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(payload('06-countersink'), { controller: app.controller, prepare: app.prepare, file: true });
     h.clickAt(60, -40);
     h.pick('roughing');
     const [hk, hr] = recAt('roughing');
@@ -263,7 +263,7 @@ const mmStr = (ds) => ds.map((d) => d.toFixed(3) + ' mm');
     try {
       app.modes.showMode('prepare');
       const h = harness(app);
-      importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
+      importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare, file: true });
       h.clickAt(60, -40);
       h.pick('roughing');
       h.check(true);

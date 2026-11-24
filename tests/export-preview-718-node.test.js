@@ -55,7 +55,7 @@ try {
 
   // ── the real Fusion solid (711): 1 outside, 3 inside, 4 pockets ──
   V2_PLAN.clear();
-  importFusionSelection(fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+  importFusionSelection(fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
   {
     const download = shaperSvgOf(app.state, planEntries());
     const copy = shaperSvgOf(app.state, planEntries(), { preview: true });
@@ -79,7 +79,7 @@ try {
 
   // ── the SA-7 R3 floor fillet pocket as a Stepped pocket, adaptive Coarse (717: 4 steps at 6.651 7.333 7.843 8) ──
   V2_PLAN.clear();
-  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
   {
     const [pk, rec] = [...V2_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
     ok(rec.slope, 'the imported pocket has its slope');

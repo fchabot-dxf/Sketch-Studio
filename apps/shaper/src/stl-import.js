@@ -110,8 +110,8 @@ export function createStlImporter({ ensureSketch, getController, prepare, panelE
     const keep = Boolean(id) && !(entry && opened); // an inserted part never changes the stock; an opened one is the design's own (its height, as Open)
     showPrepare();
     const res = importFusionSelection(sliced.payload, id
-      ? { controller: getController(), prepare, onImport: afterImport, addAs: id, place: placed, join: false, stock: keep ? 'keep' : 'part', fit: Boolean(entry && opened) }
-      : { controller: getController(), prepare, onImport: afterImport });
+      ? { controller: getController(), prepare, onImport: afterImport, addAs: id, place: placed, join: false, file: true, stock: keep ? 'keep' : 'part', fit: Boolean(entry && opened) }
+      : { controller: getController(), prepare, onImport: afterImport, file: true });
     if (!res.ok) return res;
     const n = sliced.info.sections;
     if (!res.imported) { notice(res.message, false); return { ...res, info: sliced.info }; }

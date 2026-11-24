@@ -239,7 +239,7 @@ try {
   const line = (x1, y1, x2, y2) => ({ type: 'line', x1, y1, x2, y2 });
   const sq = (x0, y0, x1, y1) => ({ closed: true, segments: [line(x0, y0, x1, y0), line(x1, y0, x1, y1), line(x1, y1, x0, y1), line(x0, y1, x0, y0)] });
   const res = importFusionSelection({ action: 'selection_data', version: 1, units: 'mm', coordSystem: { yAxis: 'up', frame: 'plane-2d' }, source: { name: 'Body1' }, selectionId: 'sel-s2',
-    regions: [{ id: 'r0', label: 'Plate', cutType: 'pocket', depthMm: 3, through: false, outer: sq(200, 0, 240, 40), holes: [] }], chains: [], warnings: [] }, { controller: app.controller, prepare: app.prepare });
+    regions: [{ id: 'r0', label: 'Plate', cutType: 'pocket', depthMm: 3, through: false, outer: sq(200, 0, 240, 40), holes: [] }], chains: [], warnings: [] }, { controller: app.controller, prepare: app.prepare, file: true });
   ok(res.ok, '12: the import went in');
   eq([openId(), hist() - h12, storeOps().find((o) => o.id === contourId).settings.cutDepth, storeOps().length > n12], [null, 2, 7, true], '12: the open edit confirmed first (one step), then the import (its own step)');
   app.undo();

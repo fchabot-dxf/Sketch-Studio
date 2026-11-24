@@ -34,7 +34,7 @@ const app = await open({ host: 'shaper' });
 try {
   app.modes.showMode('prepare');
   V2_PLAN.clear();
-  importFusionSelection(fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+  importFusionSelection(fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
   {
     const download = shaperSvgOf(app.state, planEntries());
     eq(download, plainExport(app.state), 'real solid: the downloaded file is byte-identical to the exporter output before 719');
@@ -50,7 +50,7 @@ try {
     ok(!shades.has('19.000 mm'), 'outside / inside depths get no shade');
   }
   V2_PLAN.clear();
-  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
   {
     const [pk, rec] = [...V2_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
     V2_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
@@ -70,7 +70,7 @@ try {
   }
   // a stepped OUTSIDE (x2 outline, Step depth 1 mm): download byte-identical; the terraces' shades run 25% (shallowest) .. 0% (deepest); a plain outside gets none
   V2_PLAN.clear();
-  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/x2-outline-chamfer-top-bottom.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/x2-outline-chamfer-top-bottom.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
   {
     const [pk, rec] = [...V2_PLAN.entries()][0];
     V2_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1 });

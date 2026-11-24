@@ -11,7 +11,7 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { makeProfile, directlyContainedLoops } from '#core/profile-model.js';
 import { newShapeId } from '#core/shape-id.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js';
-import { keyOf, fileShape, setRegionSource, setRegionFrame } from './cut-plan.js'; // TASK S1: the one writer; the imported cut type / depth of a region
+import { keyOf, fileShape } from './cut-plan.js'; // TASK S1: the one writer (TASK 882: only an STL import files cuts)
 import { storeOps, regionKeys, applyStore, memberOf, opById, renameGeometry, regionOf, setRegion, setOpGeometry, takeSeq, deleteOp } from './operations-store.js'; // TASK S1: the operations + regions store
 import { CUT_TYPES, STOCK_TYPE_ID, defaultCutRecord } from './shaper.js';
 import { getStock, setStock } from './stock.js';
@@ -189,10 +189,11 @@ export function selectionDesignName(source) {
  * TASK 841 (Insert STL, stl-import.js): `addAs` = the selection id to ADD the payload as (a new id: a new part; an id already in the list: that part replaced in
  * place), as a payload's own selectionId does, but never sent to the add-in (fusion: false); `place` = the placement (relief-frame.js, a rotation + move) the
  * payload's geometry and levels land at (default: where the payload says); `join: false` = its shapes go into NEW operations, never into one that is already
- * there (cut-plan.js fileShape); `stock` = 'keep' (the stock thickness is not touched) | 'part' (it becomes the payload's) | null (as above: TASK 794);
+ * there (cut-plan.js fileShape); TASK 882: `file: true` = the payload's cut types are FILED into operations (Open / Insert STL: its Roughing); a Fusion selection (the
+ * default) imports geometry only, its cutType / depthMm kept as the region's source so a cut type the user gives it prefills the depth; `stock` = 'keep' (the stock thickness is not touched) | 'part' (it becomes the payload's) | null (as above: TASK 794);
  * `fit: false` = the view is left as it is. Every region with levels keeps its part's own FRAME (relief-frame.js: its levels follow its outline when it moves).
  */
-export function importFusionSelection(payload, { controller, prepare = null, onImport = null, addAs = null, place = null, join = true, stock = null, fit = true, clearGroup = null } = {}) {
+export function importFusionSelection(payload, { controller, prepare = null, onImport = null, addAs = null, place = null, join = true, file = false, stock = null, fit = true, clearGroup = null } = {}) {
   let data = payload;
   if (typeof data === 'string') {
     try { data = JSON.parse(data); } catch (e) { return { ok: false, message: `Invalid selection_data JSON: ${e.message}` }; }
@@ -444,10 +445,8 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
       ...(rec.levels ? { frame: frameOf(st, m.outerLoop.edges, localOf, at) } : {}),
     };
     if (!isSameIdUpdate) {
-      setRegionSource(key, rec); // TASK S1: what the import said (a Depth of 'model' follows it)
-      fileShape(key, rec, st, { join });
-      if (rec.levels) setRegionFrame(key, regData.frame); // TASK 841: the part's own frame: its levels follow its outline
-      if (sources.length) setRegion(key, { ...(regionOf(key) || {}), sources });
+      setRegion(key, { ...(regionOf(key) || {}), ...regData }); // TASK 882: what the import said is the region's SOURCE (type / depth: a Depth of 'model' follows it), with its slope / levels, part frame (TASK 841) and sources
+      if (file) fileShape(key, rec, st, { join }); // only an STL import files its cuts; a Fusion selection makes no operation (TASK 882)
     } else {
       builtRegions.set(key, regData);
     }
@@ -475,9 +474,8 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
       const rec = buildCutRecord(cr.chain, warnings);
       const sources = sourcesOf(cr.chain);
       if (!isSameIdUpdate) {
-        setRegionSource(key, rec);
-        fileShape(key, rec, st, { join });
-        if (sources.length) setRegion(key, { ...(regionOf(key) || {}), sources });
+        setRegion(key, { ...(regionOf(key) || {}), source: { cutType: rec.cutType ?? null, cutDepth: rec.cutDepth ?? 'unset' }, ...(sources.length ? { sources } : {}) });
+        if (file) fileShape(key, rec, st, { join });
       } else {
         builtRegions.set(key, {
           source: { cutType: null, cutDepth: rec.cutDepth ?? 'unset' },

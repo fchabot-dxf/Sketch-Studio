@@ -176,7 +176,7 @@ V2_PLAN.clear(); V2_PLAN.setOrder([]);
   const app = await open({ host: 'shaper' });
   try {
     app.modes.showMode('prepare');
-    importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
     const [pk, r] = [...V2_PLAN.entries()].find(([, x]) => x.cutType === 'pocket');
     V2_PLAN.set(pk, { ...r, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 });
     const ops = describeOperations(app.state, planEntries());
@@ -187,7 +187,7 @@ V2_PLAN.clear(); V2_PLAN.setOrder([]);
     eq(ops.map((o) => o.cutType), ['roughing', 'exterior'], 'the stepped pocket before the outside');
     checkFiles('R3 floor fillet, Stepped pocket adaptive Coarse', app.state, app.document);
     V2_PLAN.clear();
-    importFusionSelection(fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(fs.readFileSync(new URL('./fixtures/real-solid-plate-711.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
     checkFiles('real Fusion solid (711)', app.state, app.document);
   } finally { V2_PLAN.clear(); await app.close(); }
 }

@@ -115,7 +115,7 @@ for (const d of docs) digest[d.name] = { bezier: hasBezier(d.st), ...digestOf(d.
     app.modes.showMode('prepare');
     for (const f of ['real-solid-plate-711.json', ...fs.readdirSync(fx('sa7-slope')).map((x) => 'sa7-slope/' + x)]) {
       V2_PLAN.clear(); V2_PLAN.setOrder([]);
-      importFusionSelection(fs.readFileSync(fx(f), 'utf8'), { controller: app.controller, prepare: app.prepare });
+      importFusionSelection(fs.readFileSync(fx(f), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
       const st = app.state;
       const relief = planReliefItems(st).map((i) => [i.key, i.sig, i.cutType, i.cutDepth, i.footprints]);
       digest['fusion/' + f] = { bezier: hasBezier(st), ...digestOf(st), plan: hash([...V2_PLAN]), download: hash(pageBefore879(shaperSvgOf(st, planEntries()), st)), relief: hash(relief) };

@@ -66,7 +66,7 @@ try {
   const doc = app.document, q = (s) => doc.querySelector(s);
   const pc = doc.getElementById('prepare-canvas');
   const pressEl = (s) => { const e = q(s); assert(e, s + ' not found'); app.press(e); };
-  importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
+  importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare, file: true });
   const p = worldToScreen(pc, { x: 60, y: -40 }); app.click(Math.round(p.x), Math.round(p.y), { target: pc });
   pressEl('#op-type-roughing'); // TASK S3: the operations toolbar's button (the quick flow: a NEW operation, open)
   const rec = () => [...V2_PLAN.values()].find((r) => r.cutType === 'roughing');

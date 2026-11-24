@@ -153,7 +153,7 @@ const payload = () => ({
     const exportOf = () => shaperSvgOf(st, planEntries());
     const pockets = () => [...exportOf().matchAll(/<path [^>]*shaper:cutType="pocket"[^>]*\/>/g)].map((x) => x[0]);
 
-    const res = importFusionSelection(payload(), { controller: app.controller, prepare: app.prepare });
+    const res = importFusionSelection(payload(), { controller: app.controller, prepare: app.prepare, file: true });
     ok(res.ok !== false, 'the payload imported');
     const [pk, prec] = [...V2_PLAN.entries()].find(([, x]) => x.levels);
     prec.cutType = 'roughing'; prec.stepDepth = 1; prec.toolDia = 6.35; prec.roughLayout = 'nested'; prec.smoothing = 0; // Smoothing off: the pockets are the exact polygons (their coordinates read below)
@@ -340,7 +340,7 @@ eq([wallsDefault({ slope: {}, baseType: 'exterior' }), wallsDefault({ slope: {},
     const rows = () => [...doc.querySelectorAll('.cut-rows .cut-row')].filter((x) => x.style.display !== 'none' && !('off' in x.dataset) && !('offTab' in x.dataset)).map((x) => x.dataset.row || x.dataset.param);
     const contourEls = () => [...shaperSvgOf(st, planEntries()).matchAll(/<path [^>]*\/>|<circle [^>]*\/>/g)].map((x) => x[0]).filter((x) => /shaper:toolDia="3\.175 mm"/.test(x) && /shaper:cutType="(outside|inside)"/.test(x));
     const fx = JSON.parse(fs.readFileSync(new URL('./fixtures/sa7-slope/01-chamfer-outline.json', import.meta.url), 'utf8'));
-    importFusionSelection(fx, { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(fx, { controller: app.controller, prepare: app.prepare, file: true });
     const [key, rec] = [...V2_PLAN.entries()].find(([, x]) => x.slope);
     eq(rec.cutType, 'exterior', 'the chamfered outline: a plain Outside cut with its slope rings');
     rec.toolDia = 6.35;

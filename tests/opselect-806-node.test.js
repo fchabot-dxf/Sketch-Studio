@@ -121,6 +121,7 @@ fusionUi = mountFusionPrepareBar({
   onSelectionData: (payload, meta) => importFusionSelection(payload, {
     controller: app.controller,
     prepare,
+    file: true, // TASK 882: set-up only: the payload's own types filed as operations (what the import did before; a Fusion selection now makes none)
     clearGroup: meta && meta.clearGroup ? meta.clearGroup : null,
   }),
 });

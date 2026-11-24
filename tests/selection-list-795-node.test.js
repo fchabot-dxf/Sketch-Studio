@@ -43,7 +43,7 @@ const C = () => msg('Big', [{ id: 'r', cutType: 'outside', depthMm: 25, outer: {
 
 const app = await open({ host: 'shaper' });
 const st = app.state;
-const imp = (p) => importFusionSelection(p, { controller: app.controller, prepare: app.prepare });
+const imp = (p) => importFusionSelection(p, { controller: app.controller, prepare: app.prepare, file: true }) // TASK 882: set-up only: the payload's own types filed as operations;
 const ids = () => getSelections().map((e) => e.id);
 const texts = () => getSelections().map((e) => e.text);
 const plan = () => [...V2_PLAN.keys()].sort();

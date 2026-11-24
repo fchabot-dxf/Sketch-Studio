@@ -142,14 +142,14 @@ const recAt = (cutType) => [...V2_PLAN.entries()].find(([, r]) => r.cutType === 
     app.modes.showMode('prepare');
     const h = harness(app);
     // a vertical pocket (08: spline walls, no slope): no stepped type
-    importFusionSelection(payload('08-spline'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(payload('08-spline'), { controller: app.controller, prepare: app.prepare, file: true });
     ok(!recAt('pocket')[1].slope, '08-spline: the pocket carries no slope');
     h.clickAt(60, -40);
     eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'roughing', 'contour', 'exterior', 'stock'] /* TASK S2: the Contour in the menus */, 'a vertical pocket: the plain types + Roughing (TASK 792: Roughing, which replaced the stepped types, is offered on every closed region)');
     eq(CUT_TYPES.filter((t) => !typeRefusal(t.id, ['loop:any'])).map((t) => t.id), CUT_TYPES.map((t) => t.id), 'a closed shape takes every type (TASK S2: the Contour too: an operation type of its own)');
 
     // the drafted pocket (02): Stepped pocket offered on the pocket only
-    importFusionSelection(payload('02-drafted-pocket'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(payload('02-drafted-pocket'), { controller: app.controller, prepare: app.prepare, file: true });
     const [pk, pocketRec] = recAt('pocket');
     eq([pocketRec.cutType, pocketRec.cutDepth, pocketRec.slope.kind], ['pocket', 8, 'pocket'], 'Fusion import: the sloped pocket stays a Pocket (straight) and carries its slope');
     const plainSvg = exportOf(app);
@@ -201,7 +201,7 @@ const recAt = (cutType) => [...V2_PLAN.entries()].find(([, r]) => r.cutType === 
     eq(V2_PLAN.get(pk).stepDepth, 2, 'Ctrl+Y: step 2');
 
     // the countersunk hole (06): Stepped inside only, with the last step used as its step
-    importFusionSelection(payload('06-countersink'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(payload('06-countersink'), { controller: app.controller, prepare: app.prepare, file: true });
     h.clickAt(60, -40);
     eq(h.menu().filter((id) => id === 'roughing'), ['roughing'], 'a countersunk hole: Roughing (TASK 792: in place of Stepped inside)');
     h.pick('roughing');
@@ -211,7 +211,7 @@ const recAt = (cutType) => [...V2_PLAN.entries()].find(([, r]) => r.cutType === 
     eq(elems(exportOf(app)).filter((e) => e.type === 'inside').map((e) => `${e.tag} ${e.geom} @${e.depth}`), ['circle cx="60" cy="-40" r="4" @1.000 mm', 'circle cx="60" cy="-40" r="3" @19.000 mm'], 'export: an inside circle r 4 at 1 mm, then ONE inside circle r 3 at 19 mm');
 
     // the outline chamfered top and bottom (x2): Stepped outside, the undercut is cut straight and said
-    importFusionSelection(payload('x2-outline-chamfer-top-bottom'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(payload('x2-outline-chamfer-top-bottom'), { controller: app.controller, prepare: app.prepare, file: true });
     h.clickAt(60, -40);
     eq(h.menu().filter((id) => id === 'roughing'), ['roughing'], 'the chamfered outline: Roughing (TASK 792: in place of Stepped outside)');
     h.pick('roughing');
@@ -236,7 +236,7 @@ const recAt = (cutType) => [...V2_PLAN.entries()].find(([, r]) => r.cutType === 
     try {
       app.modes.showMode('prepare');
       const h = harness(app);
-      importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
+      importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare, file: true });
       h.clickAt(60, -40);
       h.pick('roughing');
       h.setStep('0.5');

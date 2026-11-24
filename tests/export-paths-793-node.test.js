@@ -179,7 +179,7 @@ try {
 
   // ── a stepped pocket (the SA-7 R3 floor fillet): one bit-centre set per terrace ──
   V2_PLAN.clear();
-  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
   {
     const [pk, rec] = [...V2_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
     V2_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.5 }); // TASK 792: Roughing replaced the Stepped pocket (allowance 0: the same terraces)

@@ -32,7 +32,7 @@ const app = await open({ host: 'shaper' });
 try {
   app.modes.showMode('prepare');
   V2_PLAN.clear();
-  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/06-countersink.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/06-countersink.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
   const hole = [...V2_PLAN.entries()].find(([, r]) => r.slope);
   for (const [name, patch] of [['Step 1 mm', { stepDepth: 1 }], ['adaptive Fine', { stepDepth: 1, adaptiveSteps: true, stepDeviation: 0.1 }]]) {
     V2_PLAN.set(hole[0], { ...hole[1], cutType: 'roughing', ...patch });

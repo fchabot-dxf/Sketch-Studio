@@ -177,7 +177,7 @@ ok(!IMPORT_FILE_PICK.exts.includes('.stl'), 'the SHARED import pick (SketchStudi
     eq([bad.ok, bad.message, st.shapes.length, st.history.length], [false, 'This is not an STL file.', shapes, before], 'a broken file: refused, the design and its history unchanged');
 
     // a Fusion selection replaces the design: no STL card; undo puts the STL design (and its card) back
-    importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/06-countersink.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/06-countersink.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
     eq(h.card(), null, 'a design from Fusion has no STL card');
     st.undo();
     eq(h.card() && h.card().name, 'block.stl', 'undo: the STL design and its card');
@@ -199,7 +199,7 @@ ok(!IMPORT_FILE_PICK.exts.includes('.stl'), 'the SHARED import pick (SketchStudi
   {
     const app = await open({ host: 'shaper', profile });
     try {
-      importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/06-countersink.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+      importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/06-countersink.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
       const d0 = await app.storedDoc();
       eq(Object.keys(d0.hosts.shaper), ['version', 'operations', 'regions', 'nextSeq', 'listOrder', 'stock', 'selections'], 'a design not from an STL (here from Fusion) stores no `stl`: its Shaper part is as before (TASK 795: + its selection list, one row; TASK S1: the operations store, version 3)');
       app.stl.openFile(M.binaryStl(M.draftedPocket(10)), 'drafted.stl');

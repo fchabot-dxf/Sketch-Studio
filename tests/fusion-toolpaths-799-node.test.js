@@ -123,7 +123,7 @@ try {
   };
 
   app.modes.showMode('prepare');
-  const res = importFusionSelection(payload, { controller: app.controller, prepare: app.prepare });
+  const res = importFusionSelection(payload, { controller: app.controller, prepare: app.prepare, file: true });
   ok(res.ok && res.imported > 0, 'selection imported');
   sync.notify();
   ok(spinStates[0] === true && sync.isPending(), 'spinner shown immediately before debounce');

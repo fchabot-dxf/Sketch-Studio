@@ -68,7 +68,7 @@ const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType
   try {
     app.modes.showMode('prepare');
     const h = harness(app);
-    importFusionSelection(payload('02-drafted-pocket'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(payload('02-drafted-pocket'), { controller: app.controller, prepare: app.prepare, file: true });
     const [pk] = recAt('pocket');
     h.clickAt(60, -40);
     h.pick('roughing');
@@ -93,7 +93,7 @@ const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType
     eq(pocketDepths(exportOf(app)).length, 8, 'its export: 8 pockets');
     delete V2_PLAN.get(pk).stepSpacing;
     // the R3 floor fillet: a range
-    importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare, file: true });
     h.clickAt(60, -40);
     h.pick('roughing');
     const n = steppedNoteItems(recAt('roughing')[1]);
@@ -119,7 +119,7 @@ const reviewDepths = (app) => planReliefItems(app.state).filter((i) => i.cutType
     try {
       app.modes.showMode('prepare');
       const h = harness(app);
-      importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare });
+      importFusionSelection(payload('03-pocket-floor-fillet'), { controller: app.controller, prepare: app.prepare, file: true });
       h.clickAt(60, -40);
       h.pick('roughing');
       planBefore = JSON.stringify([...V2_PLAN.entries()]);

@@ -253,7 +253,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     const st = app.state, h = harness(app);
 
     // 4. MIGRATION: the drafted pocket saved as a Stepped pocket (step 2, offset 0.3) opens as Roughing, allowance 0, the same step
-    importFusionSelection(payload('02-drafted-pocket'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(payload('02-drafted-pocket'), { controller: app.controller, prepare: app.prepare, file: true });
     const [pk] = recAt((r) => r.slope);
     const doc0 = captureShaperDoc();
     const stepped = { stepDepth: 2, adaptiveSteps: false, stepDeviation: 0.25, cutOffset: 0.3 };
@@ -274,7 +274,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     eq(exportOf(app), migSvg, 'allowance 0 again: the stepped export');
 
     // 3. POCKET + CONTOUR on the drafted pocket (Pocket 1/4 in on the floor, Contour 1/8 in ball 0.25 mm): every contour pass on the wall at its depth
-    importFusionSelection(payload('02-drafted-pocket'), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(payload('02-drafted-pocket'), { controller: app.controller, prepare: app.prepare, file: true });
     const [pk2, prec] = recAt((r) => r.slope);
     h.clickAt(60, -40);
     eq(h.menu(), ['online', 'guide', 'interior', 'pocket', 'roughing', 'contour', 'exterior', 'stock'] /* TASK S2: the Contour in the menus */, 'the menu: Roughing right after Pocket (TASK S2: then the Contour, a type of its own)');
@@ -359,7 +359,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     const cont = elems(exportOf(app)).filter((e) => e.type === 'outside' && e.dia === '3.175 mm');
     eq(cont.map((e) => e.depth), ['4.000 mm', '10.000 mm'], 'its Contour: the boss wall (4 mm) and the plate wall (10 mm): Outside cuts');
 
-    importFusionSelection(twoSquaresPayload(), { controller: app.controller, prepare: app.prepare });
+    importFusionSelection(twoSquaresPayload(), { controller: app.controller, prepare: app.prepare, file: true });
     const [tk, trec] = recAt((r) => r.levels);
     eq(trec.levels.length, 4, 'a Fusion payload with `levels`: kept on the outline record');
     trec.cutType = 'roughing'; trec.stepDepth = 1; trec.toolDia = 6.35; trec.finishAllowance = 0.5;

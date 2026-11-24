@@ -123,7 +123,7 @@ try {
   mode('in', 'decimal');
   app.modes.showMode('prepare');
   V2_PLAN.clear();
-  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare });
+  importFusionSelection(fs.readFileSync(new URL('./fixtures/sa7-slope/03-pocket-floor-fillet.json', import.meta.url), 'utf8'), { controller: app.controller, prepare: app.prepare, file: true });
   const [pk, rec] = [...V2_PLAN.entries()].find(([, r]) => r.cutType === 'pocket');
   V2_PLAN.set(pk, { ...rec, cutType: 'roughing', stepDepth: 1, adaptiveSteps: false });
   const base = shaperSvgOf(app.state, planEntries()), basePv = shaperSvgOf(app.state, planEntries(), { preview: true });

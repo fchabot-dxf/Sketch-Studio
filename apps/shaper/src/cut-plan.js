@@ -171,10 +171,6 @@ function writeRegionData(key, rec) {
   const reg = regionOf(key) || {};
   if ((rec.slope || undefined) !== reg.slope || (rec.levels || undefined) !== reg.levels) setRegion(key, { ...reg, slope: rec.slope || undefined, levels: rec.levels || undefined });
 }
-/** TASK S1: the imported cut type / depth of a geometry (regions[key].source: what Fusion / the STL said; a Depth of 'model' follows it). */
-export function setRegionSource(key, source) { setRegion(key, { ...(regionOf(key) || {}), source: source ? { cutType: source.cutType ?? null, cutDepth: source.cutDepth ?? 'unset' } : undefined }); }
-/** TASK 841: the part's own frame of a geometry with levels (relief-frame.js: its outline's points in the part's frame + where its levels are placed). */
-export function setRegionFrame(key, frame) { setRegion(key, { ...(regionOf(key) || {}), frame: frame || undefined }); }
 /** TASK S1 (advisor ruling turn 2702): while the user has never reordered the list (listOrder 'default'), it is re-sorted by the default rule after every change
  *  (operations.js defaultOrderIds), as before S1: the part-freeing Outside after the holes. A stored order ('stored') is left as it is. */
 export function settleOrder(state = null) {

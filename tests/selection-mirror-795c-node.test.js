@@ -93,6 +93,7 @@ const globalTarget = {
 const imp = (p, meta) => importFusionSelection(p, {
   controller: app.controller,
   prepare: app.prepare,
+  file: true, // TASK 882: set-up only: the payload's own types filed as operations (a Fusion selection now makes none)
   clearGroup: meta && meta.clearGroup ? meta.clearGroup : null,
 });
 

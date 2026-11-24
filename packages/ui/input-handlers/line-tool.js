@@ -13,14 +13,14 @@ import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { hideInput, setupNumericInput } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, MIN_SHAPE_SIZE } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, MIN_SHAPE_SIZE, liveExpression } from '#ui/input-handlers/base-tool.js';
 import { newShapeId as mintShapeId } from '#core/shape-id.js';
 import { clearHover } from '#ui/hover-manager.js';
 import SettingsManager from '#core/settings-manager.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 // TASK 597: lockedLength / lockedAngle (degrees) are what the user TYPED in the length + angle boxes (null = the cursor sets it)
-let lineState = { lockedLength: null, lockedAngle: null };
+let lineState = { lockedLength: null, lockedAngle: null, lengthExpression: null };   // TASK 876: lengthExpression = the formula the typed length reads as (d1 / 2), or null
 // the boxes shown since the segment's first click (base-tool's shared creation-box path); `cursor` = the last world point, `screen` = the last pointer
 const live = { boxOpen: false, cursor: null, screen: null };
 const BOX = { dual: { kind: 'line', labels: ['L', '°'], separator: '∠', quantities: ['length', 'angle'] } };
@@ -41,12 +41,12 @@ function lockedEnd(spt, pt) {
     return { x: spt.x + Math.cos(ang) * len, y: spt.y + Math.sin(ang) * len };
 }
 function openLineBoxes(e) {   // e: the click (or { clientX, clientY } where the last pointer was)
-    lineState.lockedLength = null; lineState.lockedAngle = null;
+    lineState.lockedLength = null; lineState.lockedAngle = null; lineState.lengthExpression = null;
     live.boxOpen = true; live.cursor = null; live.screen = { x: e.clientX, y: e.clientY };
     openCreationBoxes(e, BOX, [0, 0]);
 }
 function closeLineBoxes() {
-    lineState.lockedLength = null; lineState.lockedAngle = null;
+    lineState.lockedLength = null; lineState.lockedAngle = null; lineState.lengthExpression = null;
     if (live.boxOpen) hideInput();
     live.boxOpen = false; live.cursor = null; live.screen = null;
 }
@@ -173,15 +173,15 @@ export function setupLineTool(svg, state) {
     setupDimensionListeners(state, TOOL_MODES.LINE, {
         guard: (detail) => detail.mode === 'dual' && detail.kind === 'line',
         onPreview: (detail) => {
-            if (detail.reset && detail.reset[0]) lineState.lockedLength = null;
-            else if (detail.typed[0]) lineState.lockedLength = detail.width > 0 ? detail.width : null;   // only a TYPED field locks; the other shows the live cursor value
+            if (detail.reset && detail.reset[0]) { lineState.lockedLength = null; lineState.lengthExpression = null; }
+            else if (detail.typed[0]) { lineState.lockedLength = detail.width > 0 ? detail.width : null; lineState.lengthExpression = lineState.lockedLength !== null ? liveExpression(detail, 0) : null; }   // only a TYPED field locks; the other shows the live cursor value
             if (detail.reset && detail.reset[1]) lineState.lockedAngle = null;
             else if (detail.typed[1]) lineState.lockedAngle = Number.isFinite(detail.height) ? detail.height : null;
             redrawLinePreview(state);
         },
         onApply: (detail) => {
             if (detail.confirmedBy !== 'enter') return;
-            if (detail.typed[0]) lineState.lockedLength = detail.width > 0 ? detail.width : null;
+            if (detail.typed[0]) { lineState.lockedLength = detail.width > 0 ? detail.width : null; lineState.lengthExpression = lineState.lockedLength !== null ? liveExpression(detail, 0) : null; }
             if (detail.typed[1]) lineState.lockedAngle = Number.isFinite(detail.height) ? detail.height : null;
             const spt = startOf(state);
             if (!spt) return;
@@ -439,11 +439,12 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     lastLineCommitTime = Date.now();
 
     if (lineState.lockedLength !== null) {
-        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [startId, endId], value: lineState.lockedLength }, { source: 'line' });   // THE constraint path: a redundant size is placed driven
+        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [startId, endId], value: lineState.lockedLength, expression: lineState.lengthExpression }, { source: 'line' });   // THE constraint path: a redundant size is placed driven
     }
     
     lineState.lockedLength = null;
     lineState.lockedAngle = null;
+    lineState.lengthExpression = null;
 
     try{
         if (state.active && state.active.startSnapTarget) {
@@ -564,11 +565,12 @@ export function finalizeLineFromActive(svg, state) {
 
     if (lineState.lockedLength !== null) {
         dbg.log('line-tool', '[DEBUG LINE] Adding distance constraint:', lineState.lockedLength);
-        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [startId, endId], value: lineState.lockedLength }, { source: 'line' });
+        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [startId, endId], value: lineState.lockedLength, expression: lineState.lengthExpression }, { source: 'line' });
     }
     
     lineState.lockedLength = null;
     lineState.lockedAngle = null;
+    lineState.lengthExpression = null;
     
     try{
         const activeInf = state.activeInference || state.inference || null;

@@ -36,13 +36,20 @@
         const found = state.constraints.some(c => c.type === CONSTRAINT_TYPES.COINCIDENT && c.joints && c.joints.includes(j1) && c.joints.includes(j2));
         assert(found, 'Coincident constraint should be created between joints');
 
-        // Clicking a shape should be ignored by COINCIDENT (joints-only policy)
-        resetConstraintState();
-        const shape = { id: 's1', type: 'line', joints: ['a','b'] };
+        // Clicking a line selects it as first element and pairs with a point into POINT_ON_LINE (TASK 868)
+        resetConstraintState(state);
+        const l1 = state.genJ(); const l2 = state.genJ();
+        state.joints.set(l1, { x: 0, y: 10 }); state.joints.set(l2, { x: 20, y: 10 });
+        const shape = { id: 's1', type: 'line', joints: [l1, l2] };
         state.shapes.push(shape);
-        const hitShape = { shape };
-        ok = handleConstraintPointerDown(null, null, state, null, hitShape, null);
-        assert(ok === false, 'Clicking a shape should not start COINCIDENT selection');
+        const jp = state.genJ();
+        state.joints.set(jp, { x: 10, y: 0 });
+        ok = handleConstraintPointerDown(null, null, state, null, { shape }, null);
+        assert(ok === true, 'Clicking a line starts COINCIDENT selection');
+        assert(state.selectedShapes.has(shape.id), 'First line should be selected');
+        ok = handleConstraintPointerDown(null, null, state, { id: jp, j: state.joints.get(jp) }, null, null);
+        assert(ok === true, 'Second point click finalizes pointOnLine');
+        assert(state.constraints.some(c => c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.joint === jp && c.shape === shape.id), 'pointOnLine constraint created');
     })();
 
     // Tangent: Line + Arc and Arc + Arc

@@ -153,3 +153,14 @@ files today.
 - Send to ShaperHub offline (R1): out of scope; the open item for a follow-up task. functions/ and the add-in are not touched.
 - STEP 3 targets http://127.0.0.1 only (file:// ruled out live).
 - STEP 2 starts only once task 880 is on origin/main, merged in first.
+
+## 11. Redesign direction (owner turns 3534-3535)
+
+Recorded only; not built in this task (STEP 2 still waits for task 880).
+
+1. OPERATION-FIRST in Fusion (like Fusion CAM): no "Add selection", no selection list, no imported copy of the geometry. The user clicks a
+   cut type (Outside / Inside / Pocket / ...), Fusion's own selection dialog opens, they pick faces / edges for THAT operation, and the
+   operation keeps those Fusion references; its path is computed from them (the add-in still extracts 2D for the engine, invisibly). When
+   the part is edited in Fusion, the operation re-reads its references. SA-16's "Select in Fusion" per operation is the existing seed.
+2. The panel's CANVAS shows the TOOLPATHS (like Export's Paths view), not the art: the geometry is already in Fusion's own view.
+3. The website keeps its draw / open-file -> assign-cuts flow; only the Fusion panel changes.

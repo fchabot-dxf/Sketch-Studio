@@ -34,7 +34,7 @@ try {
   await waitFor(`document.getElementById('design-canvas').getBoundingClientRect().width > 0 && !!window.__designController`, 'Design shown');
   await evalJs(`(() => { const st = ${ST}; for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k); st.shapes.length = 0; st.constraints.length = 0; st.saveState('clear'); })()`);
   const c = await evalJs(`(() => { const r = document.getElementById('design-canvas').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
-  const A = { x: c.x - 160, y: c.y + 90 }, B = { x: c.x + 160, y: c.y + 90 }, C = { x: c.x, y: c.y - 110 };
+  const A = { x: c.x - 160, y: c.y + 90 }, B = { x: c.x + 160, y: c.y + 90 }, C = { x: c.x + 40, y: c.y - 110 }; // TASK 872: off the Y axis (an anchor on it now gets its point-on-line)
   // TASK 805 regression check: the cursor tooltip is installed in this page; the pointer resting on the canvas past its delay shows none and the drawing below is untouched
   await mouse('mouseMoved', c); await sleep(700);
   assert.strictEqual(await evalJs(`!!document.querySelector('#sk-cursor-tip:not([hidden])')`), false, '1: no tooltip over the drawing canvas');

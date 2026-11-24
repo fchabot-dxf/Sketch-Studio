@@ -159,10 +159,14 @@ export async function bezierToolFacts(t, { endWith = 'enter', off = [6, -5], sho
   await ribbon('tool-bezier');
   const A = await toScreen(100, 10), B = await toScreen(160, 10), C = await toScreen(130, -30), C2 = await toScreen(110, -30);
   await press(A); await press(B); await drag(C, C2, 8);
-  const P = { x: A.x + off[0], y: A.y + off[1] };
+  // TASK 872: an anchor snaps like the Line tool's points (the grid magnet too): the first anchor may have landed on a grid point a few px from where it was pressed,
+  // so the pointer is `off` px off the anchor WHERE IT IS
+  const first = await evalJs(`(() => { const st = ${ST}; const j = st.joints.get(st.shapes[0].joints[0]); return { x: j.x, y: j.y }; })()`);
+  const F = await toScreen(first.x, first.y);
+  const P = { x: F.x + off[0], y: F.y + off[1] };
   if (!phone) { await mouse('mouseMoved', P); await sleep(300); }
   const snapShown = await evalJs(`(() => { const s = ${ST}.snapTarget; return s ? s.type + '@' + (s.targetId || '') : null; })()`);
-  if (shot) await t.shot(shot, { x: A.x - 130, y: A.y - 100, width: 260, height: 180 }); // the closing snap marker on the first anchor, with the pending segment
+  if (shot) await t.shot(shot, { x: F.x - 130, y: F.y - 100, width: 260, height: 180 }); // the closing snap marker on the first anchor, with the pending segment
   await press(P); // `off` px off the anchor (default 6 / 5 px: within the joint snap reach)
   const afterClose = await evalJs(`import('/packages/core/loop-finder.js').then((L) => { const st = ${ST}; const f0 = st.joints.get(st.shapes[0].joints[0]); const at = [...st.joints.entries()].filter(([k, j]) => k !== 'j_origin' && Math.hypot(j.x - f0.x, j.y - f0.y) < 1e-6).map(([k]) => k); // the joints ON the first anchor
     return { shapes: st.shapes.map((s) => s.type), jointsAtFirst: at.length, constraints: st.constraints.map((c) => c.type), loops: L.findLoops(st).map((l) => l.edges.length), drawing: !!(st.active && st.active.mode === 'bezier'), tool: st.currentTool }; })`);

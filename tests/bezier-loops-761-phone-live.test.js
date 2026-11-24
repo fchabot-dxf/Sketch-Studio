@@ -23,7 +23,7 @@ try {
   await waitFor(`document.getElementById('design-canvas').getBoundingClientRect().width > 0 && !!window.__designController`, 'Design shown');
   await evalJs(`(() => { const st = ${ST}; for (const k of [...st.joints.keys()]) if (k !== 'j_origin') st.joints.delete(k); st.shapes.length = 0; st.constraints.length = 0; st.saveState('clear'); })()`);
   const c = await evalJs(`(() => { const r = document.getElementById('design-canvas').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
-  const A = { x: c.x - 110, y: c.y + 80 }, B = { x: c.x + 110, y: c.y + 80 }, C = { x: c.x, y: c.y - 90 };
+  const A = { x: c.x - 110, y: c.y + 80 }, B = { x: c.x + 110, y: c.y + 80 }, C = { x: c.x + 40, y: c.y - 90 }; // TASK 872: off the Y axis (an anchor on it now gets its point-on-line)
   await pressRibbonTool(evalJs, tap, 'tool-bezier');
   await tap(A);
   await tap(B);

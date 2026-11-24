@@ -66,7 +66,7 @@ try {
   // 2. a rectangle edge by its body (bottom edge middle), along x. Task 538: the bottom edge is the lowest HORIZONTAL line (the old pick, the
   // line with the largest y, tied with the two vertical sides and took the right side: that drag was an edge pulled ACROSS itself)
   reset();
-  const R = { x1: cv.x - 120, y1: cv.y - 80, x2: cv.x + 80, y2: cv.y + 60 };
+  const R = { x1: cv.x - 150, y1: cv.y - 80, x2: cv.x + 80, y2: cv.y + 60 };
   run('rect-free-edge-along', () => { clickBtn('tool-rect'); app.click(R.x1, R.y1); app.click(R.x2, R.y2); app.esc(); }, (g) => { const l = g.lines.filter((l) => Math.abs(l[0][1] - l[1][1]) < 1.5).sort((p, q) => q[0][1] - p[0][1])[0]; return mid(l); }, (g) => { const l = g.lines.find((l) => Math.abs(l[0][1] - l[1][1]) < 1.5); return { x: 0.3 * Math.abs(l[1][0] - l[0][0]), y: 0 }; });
 
   // 3. a circle by its rim, along x

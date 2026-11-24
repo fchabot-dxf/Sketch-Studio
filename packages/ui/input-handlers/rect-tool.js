@@ -6,10 +6,10 @@ import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '
 import { findNearbyJoint } from '#core/joints.js';
 import { setupNumericInput, showDualInput, hideInput, resetLockedDimensions, isInputActive } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { applySnapConstraint, previewSnapConstraint } from '#core/snap-constraints.js';
+import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, tooSmall } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, snapPoint, tooSmall } from '#ui/input-handlers/base-tool.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 let rectState = { lockedWidth: null, lockedHeight: null, previewWidth: null, previewHeight: null };
@@ -88,6 +88,15 @@ export function setupRectTool(svg, state){
     });
 }
 
+/** Apply all locked snap constraints recorded at rectangle click/drag points via the shared `applyLockedSnap` helper. */
+function applyRectSnaps(state, pairs) {
+    const placed = pairs.map(([jid]) => jid).filter(Boolean);
+    for (const [jid, snap] of pairs) {
+        if (!jid || !snap) continue;
+        applyLockedSnap(state, jid, snap, placed.filter((id) => id !== jid));
+    }
+}
+
 /**
  * Finalize rectangle creation using current preview (used when user presses Enter)
  */
@@ -104,11 +113,14 @@ export function finalizeRectFromActive(svg, state){
         if(sized && tooSmall(...sideSizes(sized.c1, sized.corner, rectMode === RECT_MODES.CENTER))) return false;
         const endId = state.genJ();
         state.joints.set(endId, { x: previewPt.x, y: previewPt.y, fixed:false });
+        const hasLockedSide = rectState.lockedWidth !== null || rectState.lockedHeight !== null;
+        const endSnap = (sized && hasLockedSide) ? null : ((state.active.preview && state.active.preview.snapTarget) || null);
 
         if(rectMode === RECT_MODES.THREE_POINT){
 			const rectResult = makeRectFrom3Points(state.joints, state.active.start, state.active.secondPt, endId, state.genJ, state.isConstructionMode || false);
 			if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>state.shapes.push(s));
 			if(rectResult && rectResult.constraints) rectResult.constraints.forEach(c=>ConstraintManager.createConstraint(state, c.type, c, { source: 'rect' }));
+			applyRectSnaps(state, [[state.active.start, state.active.startSnapTarget], [state.active.secondPt, state.active.secondSnapTarget], [endId, endSnap]]);
             try{
                 const allCornerIds = [];
                 if(rectResult && rectResult.shapes){ rectResult.shapes.forEach(s=>{ if(s && s.joints) s.joints.forEach(j=> allCornerIds.push(j)); }); }
@@ -121,6 +133,7 @@ export function finalizeRectFromActive(svg, state){
 			const rectResult = makeRectFromCenter(state.joints, state.active.start, endId, state.genJ, state.isConstructionMode || false);
 			if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>state.shapes.push(s));
 			if(rectResult && rectResult.constraints) rectResult.constraints.forEach(c=>ConstraintManager.createConstraint(state, c.type, c, { source: 'rect' }));
+			applyRectSnaps(state, [[state.active.start, state.active.startSnapTarget], [endId, endSnap]]);
             try{
                 const allCornerIds = [];
                 if(rectResult && rectResult.shapes){ rectResult.shapes.forEach(s=>{ if(s && s.joints) s.joints.forEach(j=> allCornerIds.push(j)); }); }
@@ -134,6 +147,7 @@ export function finalizeRectFromActive(svg, state){
 			const rectResult = makeRectFromTwoJoints(state.joints, state.active.start, endId, state.genJ, state.isConstructionMode || false);
 			if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>state.shapes.push(s));
 			if(rectResult && rectResult.constraints) rectResult.constraints.forEach(c=>ConstraintManager.createConstraint(state, c.type, c, { source: 'rect' }));
+			applyRectSnaps(state, [[state.active.start, state.active.startSnapTarget], [endId, endSnap]]);
             try{
                 const allCornerIds = [];
                 if(rectResult && rectResult.shapes){ rectResult.shapes.forEach(s=>{ if(s && s.joints) s.joints.forEach(j=> allCornerIds.push(j)); }); }
@@ -169,10 +183,10 @@ export function handleRectPointerDown(e, svg, state, hitSnap, w){
 	dbg.log('rect-tool', '[rect-tool] pointerDown', { hitSnap, activeSnap: state.activeSnap, w });
 	try{ state.beginDrawStep(); }catch(_){ }
 	const snap = state.activeSnap || hitSnap;
-	const startPt = (snap && snap.pt && snap.isLocked) ? snap.pt : w;
+	const startPt = (snap && snap.isLocked && snapPoint(snap)) || w;
 	const startId = state.genJ();
 	state.joints.set(startId, { x: startPt.x, y: startPt.y, fixed:false });
-	state.active = { mode: TOOL_MODES.RECT, start: startId, startPt: startPt, preview: null, polylineOrigin: startId, _tempStart:true, waitingForSecondClick:false, secondPt:null, startSnapTarget: snap }; 
+	state.active = { mode: TOOL_MODES.RECT, start: startId, startPt: startPt, preview: null, polylineOrigin: startId, _tempStart:true, waitingForSecondClick:false, secondPt:null, startSnapTarget: snap, secondSnapTarget: null };
 	localState.dragStartScreen = { x: e.clientX, y: e.clientY };
 	localState.isDragging = false;
 	return true;
@@ -181,7 +195,7 @@ export function handleRectPointerDown(e, svg, state, hitSnap, w){
 export function handleRectPointerMove(e, svg, state, w){
 	if(!state.active || state.active.mode!==TOOL_MODES.RECT) return false;
 	if (checkDragThreshold(e, localState.dragStartScreen)) localState.isDragging = true;
-	const previewPt = state.snapTarget ? state.snapTarget.pt : w;
+	const previewPt = (state.snapTarget && snapPoint(state.snapTarget)) || w;
 	localState.cursor = previewPt;
 	if (isInputActive() && !localState.boxes) { followCreationBoxes(e, []); return true; }   // a box opened by a typed digit in the other rect modes: the preview waits for Enter
 	const rectMode = rectModeOf(state);
@@ -215,7 +229,8 @@ export function handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging){
 
 	dbg.log('rect-tool', '[rect-tool] pointerUp entry', { snap: state.activeSnap || hitSnap, wasDragging });
 	const snap = state.activeSnap || hitSnap;
-	let endPt = (snap && snap.isLocked && snap.pt) ? snap.pt : w;
+	let endPt = (snap && snap.isLocked && snapPoint(snap)) || w;
+	const hasLockedSide = sizedMode(rectMode) && (rectState.lockedWidth !== null || rectState.lockedHeight !== null);
 	if (sizedMode(rectMode) && state.active.startPt) {
 		endPt = lockedCorner(state.active.startPt, endPt, rectMode === RECT_MODES.CENTER); // a typed side holds at the click too
 		if (tooSmall(...sideSizes(state.active.startPt, endPt, rectMode === RECT_MODES.CENTER))) return true;   // TASK 782: a click on the first point (or on its row / column) places nothing
@@ -227,17 +242,16 @@ export function handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging){
 	const endId = state.genJ();
 	state.joints.set(endId, { x:endPt.x, y:endPt.y, fixed:false });
 	dbg.log('rect-tool', '[rect-tool] created corner', { endId, endPt });
+	const endSnap = hasLockedSide ? null : snap;
 
 	if(rectMode === RECT_MODES.THREE_POINT && !state.active.secondPt){
-		state.saveState(); state.active.secondPt = endId; state.active.preview = { type: 'rect-3pt', pt: endPt }; return true;
+		state.saveState(); state.active.secondPt = endId; state.active.secondSnapTarget = snap; state.active.preview = { type: 'rect-3pt', pt: endPt }; return true;
 	} else if(rectMode === RECT_MODES.THREE_POINT && state.active.secondPt){
 		state.saveState();
-		if(snap && snap.isLocked){
-			try{ applySnapConstraint(state, endId, snap, { excludeJoints: [state.active.start] }); }catch(_){ }
-		}
 		const rectResult = makeRectFrom3Points(state.joints, state.active.start, state.active.secondPt, endId, state.genJ, state.isConstructionMode || false);
 		if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>state.shapes.push(s));
 		if(rectResult && rectResult.constraints) rectResult.constraints.forEach(c=>ConstraintManager.createConstraint(state, c.type, c, { source: 'rect' }));
+		applyRectSnaps(state, [[state.active.start, state.active.startSnapTarget], [state.active.secondPt, state.active.secondSnapTarget], [endId, endSnap]]);
 		try{
 			const allCornerIds = [];
 			if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>{ if(s && s.joints) s.joints.forEach(j=> allCornerIds.push(j)); });
@@ -247,12 +261,10 @@ export function handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging){
 		state.endUndoGroup(); state.active=null; localState.isDragging = false; localState.dragStartScreen = null; return true;
 	} else if(rectMode === RECT_MODES.CENTER){
 		state.saveState();
-		if(hitSnap && hitSnap.isLocked){
-			try{ applySnapConstraint(state, endId, hitSnap, { excludeJoints: [state.active.start] }); }catch(_){ }
-		}
 		const rectResult = makeRectFromCenter(state.joints, state.active.start, endId, state.genJ, state.isConstructionMode || false);
 		if(rectResult && rectResult.shapes){ rectResult.shapes.forEach(s=>state.shapes.push(s)); }
 		if(rectResult && rectResult.constraints){ rectResult.constraints.forEach(c=>ConstraintManager.createConstraint(state, c.type, c, { source: 'rect' })); }
+		applyRectSnaps(state, [[state.active.start, state.active.startSnapTarget], [endId, endSnap]]);
 		try{
 			const allCornerIds = [];
 			if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>{ if(s && s.joints) s.joints.forEach(j=> allCornerIds.push(j)); });
@@ -262,12 +274,10 @@ export function handleRectPointerUp(e, svg, state, hitSnap, w, wasDragging){
 		state.endUndoGroup(); state.active=null; localState.isDragging = false; localState.dragStartScreen = null; return true;
 	} else {
 		state.saveState();
-		if(hitSnap && hitSnap.isLocked){
-			try{ applySnapConstraint(state, endId, hitSnap, { excludeJoints: [state.active.start] }); }catch(_){ }
-		}
 		const rectResult = makeRectFromTwoJoints(state.joints, state.active.start, endId, state.genJ, state.isConstructionMode || false);
 		if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>state.shapes.push(s));
 		if(rectResult && rectResult.constraints) rectResult.constraints.forEach(c=>ConstraintManager.createConstraint(state, c.type, c, { source: 'rect' }));
+		applyRectSnaps(state, [[state.active.start, state.active.startSnapTarget], [endId, endSnap]]);
 		try{
 			const allCornerIds = [];
 			if(rectResult && rectResult.shapes) rectResult.shapes.forEach(s=>{ if(s && s.joints) s.joints.forEach(j=> allCornerIds.push(j)); });

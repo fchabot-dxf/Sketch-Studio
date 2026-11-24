@@ -17,6 +17,8 @@
 import { GOOGLE } from '#ui/cloud/providers.js';
 import { DRIVE_PREFIX } from '#ui/cloud/router-adapter.js';
 import { serializeProjectFile, parseProjectFile, PROJECT_FILE_EXT } from '#ui/project-file.js';
+import { driveErrorText } from '#ui/cloud/drive-errors.js'; // TASK 881: defined there (the store's engine reads it without this adapter)
+export { driveErrorText };
 
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
@@ -31,17 +33,6 @@ export const SETTINGS_FOLDER_NAME = 'Settings';
 export const SETTINGS_FILE_NAME = 'settings.json';
 const SETTINGS_KIND = 'settings';
 const isSettingsKind = (f) => !!(f && f.appProperties && f.appProperties.skKind === SETTINGS_KIND);
-
-/** One readable line for a Drive / sign-in failure (the reason shown in the sidebar). Drive's HTTP status stays in the text. */
-export function driveErrorText(e) {
-  const m = (e && e.message) || String(e);
-  if (m === 'cloud-auth') return 'Google sign-in is needed again';
-  if (m === 'cloud-unavailable') return 'Google could not be reached';
-  if (e instanceof TypeError) return `Google Drive could not be reached (${m})`;
-  const http = /^Drive (\d+)$/.exec(m);
-  if (http) return `Google Drive answered HTTP ${http[1]}`;
-  return m;
-}
 
 // The steps of "Check Google Drive connection", in order, as DATA (the sidebar lists them; the adapter runs them).
 export const CHECK_STEPS = [

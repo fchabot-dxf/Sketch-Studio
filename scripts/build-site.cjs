@@ -2,7 +2,8 @@
 // scripts/build-site.cjs — TASK 696: ONE app's website (owner turns 1835-1838: "App separate website please").
 //   node scripts/build-site.cjs <app> [--out <dir>]        app = sketchstudio | shaper | penplotter | trace; out defaults to ./dist
 //   node scripts/build-site.cjs shaper --addin <dir>        TASK 733: also put the Fusion add-in download in the Shaper site (ADDIN_DOWNLOAD below)
-//   (npm run site:sketchstudio / site:shaper / site:penplotter / site:trace)
+//   node scripts/build-site.cjs shaper-fusion [--out <dir>] TASK 881: Shaper's FUSION PANEL, the folder the Fusion add-in carries offline (FUSION_PANEL below); out defaults to ./dist-fusion
+//   (npm run site:sketchstudio / site:shaper / site:penplotter / site:trace; the panel: node scripts/build-site.cjs shaper-fusion)
 // TASK 763 (owner turn 2295): the app is served at the SITE ROOT (https://shaper-svg.pages.dev/, never /apps/shaper/ in the address bar). The ROOT
 // LAYOUT, one rule (sitePath below): a file of the app's own folder apps/<app>/x is written at x; every other file keeps its repo path. So <out>/ is:
 //   index.html, src/, styles/, ...   the whole app folder, at the top (no other app's folder is in the site)
@@ -31,7 +32,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { APPS, STANDALONE_PAGES, siteClosure } = require('./site-closure.cjs');
+const { APPS, STANDALONE_PAGES, siteClosure, htmlParts } = require('./site-closure.cjs');
 const { writeIdentity, LINKED: IDENTITY_LINKED } = require('./site-identity.cjs');
 const { writeAbout } = require('./site-about.cjs');
 
@@ -174,15 +175,22 @@ function checkRootLayout(app, out, repoClosure) {
   return site;
 }
 
-function buildSite(app, outDir = path.join(REPO_ROOT, 'dist'), { addin = null } = {}) {
-  if (!APPS.includes(app)) throw new Error(`build-site: app must be one of ${APPS.join(' | ')}, got "${app}"`);
-  if (addin != null && app !== ADDIN_DOWNLOAD.app) throw new Error(`build-site: --addin is for the ${ADDIN_DOWNLOAD.app} site only, not "${app}"`);
+// The folder a build writes (it is emptied first): never the repo or a parent of it; inside the repo only its own default folder (`allowed`: dist/, or
+// TASK 881 dist-fusion/ for the Fusion panel; both git-ignored).
+function outFolder(outDir, allowed) {
   const out = path.resolve(outDir);
   const rel = path.relative(out, REPO_ROOT);
   const insideRepo = !path.relative(REPO_ROOT, out).startsWith('..') && !path.isAbsolute(path.relative(REPO_ROOT, out));
-  if (out === REPO_ROOT || (!rel.startsWith('..') && !path.isAbsolute(rel)) || (insideRepo && out !== path.join(REPO_ROOT, 'dist'))) {
-    throw new Error(`build-site: refusing to write into ${out} (it is emptied first: inside the repo only dist/ is allowed, never the repo or a parent of it)`);
+  if (out === REPO_ROOT || (!rel.startsWith('..') && !path.isAbsolute(rel)) || (insideRepo && out !== path.join(REPO_ROOT, allowed))) {
+    throw new Error(`build-site: refusing to write into ${out} (it is emptied first: inside the repo only ${allowed}/ is allowed, never the repo or a parent of it)`);
   }
+  return out;
+}
+
+function buildSite(app, outDir = path.join(REPO_ROOT, 'dist'), { addin = null } = {}) {
+  if (!APPS.includes(app)) throw new Error(`build-site: app must be one of ${APPS.join(' | ')}, got "${app}"`);
+  if (addin != null && app !== ADDIN_DOWNLOAD.app) throw new Error(`build-site: --addin is for the ${ADDIN_DOWNLOAD.app} site only, not "${app}"`);
+  const out = outFolder(outDir, 'dist');
   const closure = siteClosure({ root: REPO_ROOT, app });
   if (closure.missing.length || closure.crossApp.length) {
     const lines = [...closure.missing.map((m) => `  missing   ${m.from} -> ${m.spec} (${m.to})`), ...closure.crossApp.map((m) => `  other app ${m.from} -> ${m.spec} (${m.to})`)];
@@ -225,7 +233,178 @@ function buildSite(app, outDir = path.join(REPO_ROOT, 'dist'), { addin = null } 
   return { app, out, identity, files: at.size + 2 + identity.length + (addinRelease ? addinRelease.files.length : 0), reached: closure.files.size, functions: closure.functions, build, addin: addinRelease };
 }
 
-module.exports = { buildSite, siteRedirects, sitePath, checkRootLayout, SITE_HOST, ADDIN_DOWNLOAD, NOT_FOUND_PAGE, RESERVED_TOP };
+// ---------------------------------------------------------------- TASK 881: the FUSION PANEL build
+// Shaper's panel for the Fusion add-in (owner turns 3487-3490: the website, without the parts the panel does not use), carried OFFLINE by the add-in (SA-32)
+// and served by its local server at http://127.0.0.1:<port>/index.html. One source: the panel's page IS the website's page (apps/shaper/index.html) with its
+// entry module swapped (FUSION_PANEL.entry: src/fusion-main.js, which declares the panel's parts to the shared wiring shaper-app.js); the folder holds ONLY
+// what that page reaches (site-closure.cjs, the browser's own resolution rules: the website's own parts are never reached, so never copied), plus the
+// licences of the vendored code it carries and a manifest. Unlike a website build, the folder works wherever it is served (SA-32: one self-contained folder):
+// every reference the browser follows stays inside it. A reference that only reaches its file because a URL's '..' stops at the site root (the website's
+// root layout: the import map's ../../packages/, the worker's ../../../packages/) or that starts at the root ('/assets/...') is rewritten, in the panel's copy
+// only, to the same file by a path relative to where it is read (flattenRefs); the build then PROVES the folder (checkPanel): the same files reached as from the
+// repo page, nothing missing, no reference leaving the folder, nothing in the folder that the page does not load (but the licences and the manifest).
+// The manifest (FUSION_PANEL.manifest) lists every file with its size and sha256, so the add-in's release pins them; `network` lists the run-time calls that
+// leave the folder (docs/FUSION-PANEL-881.md R1: Send to ShaperHub's /api/shaper-upload is a route of the website, not a file).
+const FUSION_PANEL = Object.freeze({
+  target: 'shaper-fusion',
+  app: 'shaper',
+  page: 'apps/shaper/index.html', // the website's page (the panel's index.html, at the top of its folder)
+  entry: Object.freeze({ from: 'src/main.js', to: 'src/fusion-main.js' }), // the page's module script: the website's boot -> the panel's
+  out: 'dist-fusion',
+  manifest: 'fusion-panel.json',
+  notices: Object.freeze(['LICENSE.md', 'THIRD-PARTY-NOTICES.md']), // the repo's licence and the vendored code's notices
+  vendorLicence: /^(LICENSE|.*\.LICENSE|OFL\.txt)$/i, // the licence files of a vendor folder the page reaches a file of
+});
+// The media type of each file kind the panel holds (what the add-in's server must send: a module script must come as JavaScript or the browser refuses it).
+const PANEL_MIME = Object.freeze({
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf',
+  '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.license': 'text/plain; charset=utf-8', '': 'text/plain; charset=utf-8',
+});
+const PANEL_ORIGIN = 'https://panel.invalid';
+const PANEL_PREFIX = '/served/under/a/path/'; // where checkPanel pretends the folder is served: a reference that leaves it is found as it would be anywhere
+
+// the panel's page: the website's page with the panel's entry module (exactly one module script names the website's)
+function panelPage() {
+  const html = fs.readFileSync(path.join(REPO_ROOT, FUSION_PANEL.page), 'utf8');
+  const from = `<script type="module" src="${FUSION_PANEL.entry.from}"></script>`;
+  const n = html.split(from).length - 1;
+  if (n !== 1) throw new Error(`build-site ${FUSION_PANEL.target}: ${FUSION_PANEL.page} has ${n} "${from}", expected exactly one`);
+  return html.replace(from, `<script type="module" src="${FUSION_PANEL.entry.to}"></script>`);
+}
+
+// where a reference read in `from` is resolved when the folder is served under PANEL_PREFIX (a page-based one: against index.html)
+const panelBase = (from, base) => new URL(PANEL_PREFIX + (base === 'page' ? 'index.html' : from), PANEL_ORIGIN);
+const leavesPanel = (spec, from, base) => !new URL(spec, panelBase(from, base)).pathname.startsWith(PANEL_PREFIX);
+// the same file `to`, written relative to where the reference is read (always ./ or ../, so a page-based literal is still a site path to site-closure.cjs)
+function relativeSpec(to, from, base) {
+  const dir = base === 'page' ? '' : path.posix.dirname(from).replace(/^\.$/, '');
+  const r = path.posix.relative(dir, to.replace(/\/$/, '')) + (to.endsWith('/') ? '/' : '');
+  return r.startsWith('../') ? r : `./${r}`;
+}
+
+// Rewrite, in the panel's copy, every reference that leaves the folder (see the top of this block). Returns [{ file, from, to }] (the spec before / after).
+function flattenRefs(out) {
+  const page = 'index.html';
+  const site = siteClosure({ root: out, app: FUSION_PANEL.app, entry: page, functionsRoot: REPO_ROOT });
+  const rewrites = [];
+  const byFile = new Map(); // file -> Map(spec -> new spec)
+  for (const ref of site.refs) {
+    if (!leavesPanel(ref.spec, ref.from, ref.base)) continue;
+    const next = relativeSpec(ref.to, ref.from, ref.base);
+    const m = byFile.get(ref.from) || new Map();
+    if (m.has(ref.spec) && m.get(ref.spec) !== next) throw new Error(`build-site ${FUSION_PANEL.target}: "${ref.spec}" in ${ref.from} reaches two files (${m.get(ref.spec)} / ${next})`);
+    m.set(ref.spec, next);
+    byFile.set(ref.from, m);
+  }
+  // the page's import map: its values are where #core/, #ui/, three resolve (against the page)
+  const html = fs.readFileSync(path.join(out, page), 'utf8');
+  const map = htmlParts(html).importMap;
+  const mapEdits = new Map();
+  for (const v of Object.values((map && map.imports) || {})) {
+    if (!leavesPanel(v, page, 'page')) continue;
+    const to = new URL(v, new URL('/index.html', PANEL_ORIGIN)).pathname.replace(/^\//, '');
+    mapEdits.set(v, relativeSpec(to, page, 'page'));
+  }
+  if (mapEdits.size) {
+    const block = /<script type="importmap">[\s\S]*?<\/script>/.exec(html);
+    let text = block[0];
+    for (const [v, next] of mapEdits) {
+      const q = `"${v}"`;
+      if (!text.includes(q)) throw new Error(`build-site ${FUSION_PANEL.target}: the import map has no ${q}`);
+      text = text.split(q).join(`"${next}"`);
+      rewrites.push({ file: page, from: v, to: next });
+    }
+    fs.writeFileSync(path.join(out, page), html.replace(block[0], text));
+  }
+  for (const [file, m] of byFile) {
+    const abs = path.join(out, file);
+    let src = fs.readFileSync(abs, 'utf8');
+    for (const [spec, next] of m) {
+      let hits = 0;
+      for (const [a, b] of [[`'${spec}'`, `'${next}'`], [`"${spec}"`, `"${next}"`], [`url(${spec})`, `url(${next})`]]) {
+        const n = src.split(a).length - 1;
+        if (n) { src = src.split(a).join(b); hits += n; }
+      }
+      if (!hits) throw new Error(`build-site ${FUSION_PANEL.target}: ${file} has no quoted "${spec}" to rewrite`);
+      rewrites.push({ file, from: spec, to: next });
+    }
+    fs.writeFileSync(abs, src);
+  }
+  return rewrites;
+}
+
+// The proof of the panel folder (see the top of this block), on the written folder. -> the folder's closure
+function checkPanel(out, repoClosure, listed) {
+  const site = siteClosure({ root: out, app: FUSION_PANEL.app, entry: 'index.html', functionsRoot: REPO_ROOT });
+  const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
+  const map = htmlParts(html).importMap;
+  const lines = site.missing.map((m) => `  missing in the panel   ${m.from} -> ${m.spec} (${m.to})`);
+  for (const r of site.refs) if (leavesPanel(r.spec, r.from, r.base)) lines.push(`  leaves the folder      ${r.from} -> ${r.spec}`);
+  for (const v of Object.values((map && map.imports) || {})) if (leavesPanel(v, 'index.html', 'page')) lines.push(`  leaves the folder      index.html import map -> ${v}`);
+  const want = new Set([...repoClosure.files].map((f) => (f === FUSION_PANEL.page ? 'index.html' : sitePath(FUSION_PANEL.app, f))));
+  for (const f of want) if (!site.files.has(f)) lines.push(`  not reached any more   ${f}`);
+  for (const f of site.files) if (!want.has(f)) lines.push(`  not in the repo page   ${f}`);
+  for (const f of listed) if (!site.files.has(f) && !f.endsWith('/') && f !== FUSION_PANEL.manifest && !FUSION_PANEL.notices.includes(f) && !FUSION_PANEL.vendorLicence.test(path.posix.basename(f))) lines.push(`  not loaded by the page ${f}`);
+  if (lines.length) throw new Error(`build-site ${FUSION_PANEL.target}: the panel folder is not the page's own:\n${lines.join('\n')}`);
+  return site;
+}
+
+function listFiles(dir, base = dir, list = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) listFiles(p, base, list); else list.push(path.relative(base, p).split(path.sep).join('/'));
+  }
+  return list;
+}
+
+function buildFusionPanel(outDir = path.join(REPO_ROOT, FUSION_PANEL.out)) {
+  const out = outFolder(outDir, FUSION_PANEL.out);
+  const app = FUSION_PANEL.app;
+  const pageSrc = panelPage();
+  const closure = siteClosure({ root: REPO_ROOT, app, entry: FUSION_PANEL.page, entrySource: pageSrc });
+  if (closure.missing.length || closure.crossApp.length) {
+    const lines = [...closure.missing.map((m) => `  missing   ${m.from} -> ${m.spec} (${m.to})`), ...closure.crossApp.map((m) => `  other app ${m.from} -> ${m.spec} (${m.to})`)];
+    throw new Error(`build-site ${FUSION_PANEL.target}: the panel reaches files it cannot hold:\n${lines.join('\n')}`);
+  }
+  const vendorDirs = new Set([...closure.files].filter((f) => /(^|\/)vendor\//.test(f)).map((f) => path.posix.dirname(f)));
+  const licences = [...vendorDirs].flatMap((d) => fs.readdirSync(path.join(REPO_ROOT, d), { withFileTypes: true })
+    .filter((e) => e.isFile() && FUSION_PANEL.vendorLicence.test(e.name)).map((e) => `${d}/${e.name}`)).filter((f) => !closure.files.has(f));
+  fs.rmSync(out, { recursive: true, force: true });
+  fs.mkdirSync(out, { recursive: true });
+  const at = new Map(); // folder path -> repo path
+  for (const f of [...closure.files, ...licences, ...FUSION_PANEL.notices]) {
+    const to = f === FUSION_PANEL.page ? 'index.html' : sitePath(app, f);
+    if (at.has(to)) throw new Error(`build-site ${FUSION_PANEL.target}: ${f} and ${at.get(to)} would both be ${to}`);
+    at.set(to, f);
+  }
+  for (const [to, f] of at) {
+    fs.mkdirSync(path.dirname(path.join(out, to)), { recursive: true });
+    if (to === 'index.html') fs.writeFileSync(path.join(out, to), pageSrc);
+    else fs.copyFileSync(path.join(REPO_ROOT, f), path.join(out, to));
+  }
+  const build = new Date().toISOString().slice(0, 16) + 'Z';
+  stampBuild(out, build);
+  const rewrites = flattenRefs(out);
+  const site = checkPanel(out, closure, listFiles(out));
+  const files = listFiles(out).sort().map((f) => {
+    const buf = fs.readFileSync(path.join(out, f));
+    return { path: f, bytes: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex') };
+  });
+  const mime = {};
+  for (const f of files) {
+    const ext = path.posix.extname(f.path).toLowerCase();
+    if (!Object.hasOwn(PANEL_MIME, ext)) throw new Error(`build-site ${FUSION_PANEL.target}: no media type declared for ${f.path} (PANEL_MIME)`);
+    mime[ext || '(none)'] = PANEL_MIME[ext];
+  }
+  const network = site.functions.map((fn) => ({ from: fn.from, url: fn.spec }));
+  const manifest = { target: FUSION_PANEL.target, app, entry: 'index.html', module: FUSION_PANEL.entry.to, build, count: files.length,
+    bytes: files.reduce((n, f) => n + f.bytes, 0), mime, network, files };
+  fs.writeFileSync(path.join(out, FUSION_PANEL.manifest), JSON.stringify(manifest, null, 2) + '\n');
+  return { out, build, files, rewrites, network, mime, reached: closure.files.size, licences };
+}
+
+module.exports = { buildSite, buildFusionPanel, siteRedirects, sitePath, checkRootLayout, SITE_HOST, ADDIN_DOWNLOAD, NOT_FOUND_PAGE, RESERVED_TOP, FUSION_PANEL, PANEL_MIME };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
@@ -233,6 +412,15 @@ if (require.main === module) {
   const oi = args.indexOf('--out');
   const ai = args.indexOf('--addin');
   try {
+    if (app === FUSION_PANEL.target) { // TASK 881
+      if (ai >= 0) throw new Error(`build-site: --addin is for the ${ADDIN_DOWNLOAD.app} site, not the ${FUSION_PANEL.target} panel`);
+      const r = buildFusionPanel(oi >= 0 ? args[oi + 1] : undefined);
+      console.log(`build-site ${FUSION_PANEL.target}: ${r.files.length} files, ${r.files.reduce((n, f) => n + f.bytes, 0)} bytes in ${r.out} (the page reaches ${r.reached}); build ${r.build}; manifest ${FUSION_PANEL.manifest}`);
+      for (const w of r.rewrites) console.log(`  in the panel's copy, ${w.file}: ${w.from} -> ${w.to}`);
+      console.log(`  media types: ${Object.entries(r.mime).map(([e, t]) => `${e} ${t}`).join(', ')}`);
+      console.log(`  run-time calls outside the folder: ${r.network.map((n) => `${n.url} (${n.from})`).join(', ') || 'none'}`);
+      return;
+    }
     if (ai >= 0 && !args[ai + 1]) throw new Error('build-site: --addin needs the folder holding shaper-addin.zip + shaper-addin.json');
     const r = buildSite(app, oi >= 0 ? args[oi + 1] : undefined, { addin: ai >= 0 ? args[ai + 1] : null });
     const top = fs.readdirSync(r.out, { withFileTypes: true }).map((e) => e.name + (e.isDirectory() ? '/' : '')).sort();

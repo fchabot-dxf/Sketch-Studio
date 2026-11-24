@@ -32,7 +32,7 @@ for (const f of FILES) read(f).split('\n').forEach((line, i) => { const code = n
 eq(leaks, [], 'no storage / log / analytics / page-writing line names the email or the password');
 
 // the login leaves the page once: the upload POST's body
-const main = read('apps/shaper/src/main.js');
+const main = read('apps/shaper/src/main.js') + read('apps/shaper/src/shaper-app.js'); // TASK 881: the page's wiring is shaper-app.js (shared by the website and the Fusion panel) + main.js (the website's own parts)
 const sends = [...main.matchAll(/JSON\.stringify\(\{[^}]*\b(email|password)\b/g)];
 eq(sends.length, 1, 'main.js serialises the login exactly once');
 const fetchAt = main.indexOf("fetch('/api/shaper-upload'");
@@ -47,7 +47,7 @@ eq(named, ['apps/shaper/src/shaperhub-login.js'], 'the old key is named only in 
 eq(OLD_LOGIN_KEY, 'shaper_hub_creds', 'the key earlier versions stored the login under');
 ok(!/CRED_STORAGE_KEY|sync-remember|syncRemember/.test(main), 'main.js has no credential key or Remember checkbox');
 eq([...main.matchAll(/forgetOldLogin\(/g)].length, 1, 'main.js deletes the old login in ONE place');
-ok(/^try \{ forgetOldLogin\(localStorage\); \} catch \(err\) \{ dbg\.warn\('shaper', '[^']*', err && err\.message\); \}$/m.test(main), 'at top level (app start), a storage error goes to the Log');
+ok(/^\s*try \{ forgetOldLogin\(localStorage\); \} catch \(err\) \{ dbg\.warn\('shaper', '[^']*', err && err\.message\); \}\r?$/m.test(main), 'at app start (TASK 881: main.js beforeChrome, before the header), a storage error goes to the Log');
 
 // ── 3. forgetOldLogin: removes the key without reading it, keeps the rest; a storage error surfaces ──
 const fakeStorage = (entries) => {

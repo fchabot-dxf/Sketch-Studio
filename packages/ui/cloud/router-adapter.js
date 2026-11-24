@@ -6,7 +6,8 @@
 //   - meta (current-design pointer, flags, working open-tabs buffer) is always local.
 // Remote ids are prefixed `drive:` so every id says where it lives; the Drive adapter itself sees the plain Drive ids.
 // A project's `location` is 'drive' for remote ones (absent = local).
-export const CURRENT_DESIGN_KEY = 'currentDesign'; // the store's "current design" pointer (project-store.js uses this same key)
+import { CURRENT_DESIGN_KEY } from '#ui/project-store-core.js'; // the store's "current design" pointer (TASK 881: defined in the store's engine, the same key)
+export { CURRENT_DESIGN_KEY };
 export const DRIVE_PREFIX = 'drive:';
 const DRIVE_ENABLED = 'driveEnabled';
 

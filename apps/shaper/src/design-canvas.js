@@ -1,13 +1,12 @@
 // apps/shaper/src/design-canvas.js — Shaper's Design canvas setup, DECLARED in one importable place (TASK 569). The page script (main.js
 // ensureSketch / buildDesignUI) and the node test kit (tests/helpers/node-app.js) both read it: the shared sketcher's options, the shared
-// ribbon's options, and the autosave buffer's options (the Shaper sidecar = cut plan + stock). The page's own views (info panel,
+// ribbon's options, and the autosave buffer's options (the Shaper sidecar = cut plan + stock). TASK 881: the SKETCHES browser's mount is shaper-browser.js (a page without the Design view, the Fusion panel build, does not load it). The page's own views (info panel,
 // Prepare, Review) come in as hooks; a host without them (the kit) passes none.
 
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js'; // TASK 494: frame a restored drawing
-import { SAME_TAB_REASONS } from '#ui/document-buffer.js'; // TASK 766: the same tab shown again keeps its view
+import { SAME_TAB_REASONS } from '#ui/document-buffer-core.js'; // TASK 766: the same tab shown again keeps its view (TASK 881: the loop's own module, not the page-store wrapper)
 import { captureShaperDoc, applyShaperDoc, DOC_VERSION } from './shaper-doc.js';
 import SettingsManager from '#core/settings-manager.js';
-import { mountDesignBrowser } from '#ui/design-browser.js'; // task 586: the floating SKETCHES browser over the canvas
 
 /** The page's Design canvas (index.html <svg id="design-canvas">). */
 export const DESIGN_CANVAS_ID = 'design-canvas';
@@ -61,9 +60,4 @@ export function applyShaperUnitDefault() {
     const persisted = JSON.parse(localStorage.getItem('sketch-studio-settings') || '{}');
     if (persisted.DOC_UNIT === undefined) SettingsManager.set('DOC_UNIT', 'in', { persist: false });
   } catch (_) { /* localStorage blocked */ }
-}
-
-/** TASK 610 / 619: the floating SKETCHES browser + Construction toggle over Shaper's Design canvas (verified safe: loop-finder.js:116,198 excludes isConstruction from loops/chains/cut export). */
-export function mountShaperBrowser({ state, engine }) {
-  return mountDesignBrowser({ container: document.getElementById('design-body'), state, engine, construction: true });
 }

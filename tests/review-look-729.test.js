@@ -96,7 +96,7 @@ for (const l of LOOKS) for (const name of ['face', 'edge']) {
 
 // the wiring: the Wood checkbox is gone; the Look card holds the Material select + the colour swatches; the export never reads the look
 const html = fs.readFileSync(path.join(root, 'apps/shaper/index.html'), 'utf8');
-const main = fs.readFileSync(path.join(root, 'apps/shaper/src/main.js'), 'utf8');
+const main = fs.readFileSync(path.join(root, 'apps/shaper/src/main.js'), 'utf8') + fs.readFileSync(path.join(root, 'apps/shaper/src/shaper-app.js'), 'utf8'); // TASK 881: the page's wiring is shaper-app.js (shared by the website and the Fusion panel) + main.js (the website's own parts)
 assert.ok(!/review-wood|setWood/.test(html + main), 'no Wood checkbox left');
 assert.ok(html.includes('id="review-look-select"') && html.includes('id="review-look-colors"'), 'the Look card controls');
 assert.ok(/REVIEW_LOOK_KEY = 'shaper-review-look'/.test(main), 'the look is remembered per app');

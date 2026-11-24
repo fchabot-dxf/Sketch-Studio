@@ -56,10 +56,10 @@ try {
   eq(nextFreeName('bromont.svg', ['bromont.svg', 'bromont (2).svg', 'bromont (3).svg']), 'bromont (4).svg', 'keep both: (2) and (3) taken -> (4)');
   eq(nextFreeName('bromont (2).svg', ['bromont (2).svg']), 'bromont (3).svg', 'keep both of a "(2)" name: the next number, not "(2) (2)"');
   // no fixed export name is left in the Shaper app: Generate, Download and the Sync dialog all name the file through designFileName -> exportFileName
-  const main = read('apps/shaper/src/main.js');
+  const main = read('apps/shaper/src/main.js') + read('apps/shaper/src/shaper-app.js'); // TASK 881: the page's wiring is shaper-app.js (shared by the website and the Fusion panel) + main.js (the website's own parts)
   const fixed = fs.readdirSync(path.join(ROOT, 'apps/shaper/src')).filter((f) => f.endsWith('.js') && read('apps/shaper/src/' + f).includes('shaper-export.svg'));
   eq(fixed, [], 'no "shaper-export.svg" literal in apps/shaper/src (the default lives in the one rule)');
-  eq([...main.matchAll(/download\(([^,]+),/g)].map((m) => m[1]), ['designFileName()', 'name'], 'the two downloads use the design file name (Download; Generate via name = designFileName())');
+  eq([...main.matchAll(/download\(([^,]+),/g)].map((m) => m[1]), ['app.designFileName()', 'name'], 'the two downloads use the design file name (Download: main.js, through the page; Generate via name = designFileName())');
   ok(/const name = designFileName\(\);\s*download\(name, payload\.svg\)/.test(main), 'Generate saves under designFileName()');
   ok(/syncFilename\.value = syncNameEdits\.has\(key\) \? syncNameEdits\.get\(key\) : designFileName\(\)/.test(main), 'the Sync dialog starts from designFileName() (or the edit for this design)');
   ok(!/innerHTML/.test(main), 'main.js writes no innerHTML (the success / export lines are built as text)');

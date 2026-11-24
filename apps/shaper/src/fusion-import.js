@@ -4,7 +4,7 @@
 
 import { addSketch, activateSketch, stampSketch } from '#core/sketch-model.js';
 import { deserializeDocument } from '#core/document.js';
-import { emptyDocument } from '#ui/project-store.js';
+import { emptyDocument } from '#ui/project-store-core.js'; // TASK 881: the store's engine (not the page's Drive-routed store)
 import { buildShapesFromPrimitives } from '#core/dxf-import.js';
 import { findLoops, findOpenChains } from '#core/loop-finder.js';
 import { loopPolygon } from '#core/loop-geometry.js';

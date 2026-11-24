@@ -14,7 +14,7 @@ import { deserializeDocument } from '#core/document.js';
 import { DEFAULT_STOCK } from '#core/relief-model.js';
 import SettingsManager from '#core/settings-manager.js';
 import { UNITS } from '#core/units.js';
-import { emptyDocument } from '#ui/project-store.js';
+import { emptyDocument } from '#ui/project-store-core.js'; // TASK 881: the store's engine (not the page's Drive-routed store)
 import { getSelections, setSelections, onSelectionsChange, selectionRowsOf } from './selection-list.js'; // TASK 795 / 795c: the selection list the Prepare bar shows
 import { storeOps, regionOf, captureStore, applyStore, renameGeometry } from './operations-store.js';
 import { selectionCountText } from './selection-edit.js';
@@ -429,6 +429,7 @@ export function mountFusionPrepareBar({
   onRestoreLook = null,
   saveDebounceMs = PROJECT_SAVE_DEBOUNCE_MS,
   globalTarget = (typeof window !== 'undefined' ? window : null),
+  fusionMode = isFusionMode(globalTarget && globalTarget.location), // TASK 881: DECLARED by the page (the Fusion panel build passes true); default: the page's own ?host=fusion
   pollIntervalMs = DEFAULT_ADSK_POLL_MS,
   waitTimeoutMs = DEFAULT_ADSK_WAIT_TIMEOUT_MS,
 }) {
@@ -483,7 +484,6 @@ export function mountFusionPrepareBar({
     noticeEl.classList.remove('is-error');
   };
 
-  const fusionMode = isFusionMode(globalTarget && globalTarget.location);
   const useTargetTimers = globalTarget
     && typeof globalTarget.setInterval === 'function'
     && typeof globalTarget.clearInterval === 'function';

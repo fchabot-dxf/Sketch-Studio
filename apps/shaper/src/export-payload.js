@@ -10,7 +10,7 @@ import { describeOperations } from './operations.js'; // TASK 743: the operation
 import { hintLabel } from './param-hints.js'; // TASK S3: the Recalculate action's name (the toolbar button's)
 import { planEntries } from './cut-plan.js'; // TASK 798: the ticked operations (the file) and the whole plan (its frame)
 import { shaperFileName } from '#core/shaper-cloud.js';   // TASK 767: the one name rule (the upload applies it too)
-import { UNTITLED } from '#ui/document-buffer.js';
+import { UNTITLED } from '#ui/document-buffer-core.js'; // TASK 881: the autosave loop's own module (not the page-store wrapper)
 
 /** TASK 767: THE name of every file the Export step produces (Generate Shaper SVG, the sidebar Download, the Sync to ShaperHub dialog's file name),
  *  declared once: the design's name (the document tab's name; in Fusion mode the imported selection's name, main.js) cleaned by shaperFileName,

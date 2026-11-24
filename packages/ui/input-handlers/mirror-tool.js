@@ -6,22 +6,19 @@
 //               #core/reference-lines.js REFERENCE_PICK_STEP); it lights up like the selection. Enter (Done on touch) mirrors: ONE undo step
 //               (recordConstraintStep, task 571's), the selection is cleared and the tool ends.
 //   Esc cancels at any step (input-manager.js handleEscape: nothing is made, no undo step).
-// Each step is announced in a toast (the shared notification-manager), and a refusal (#core/mirror.js: data, nothing changes) says why.
+// The steps are said in the tool's ribbon hint (#ui/design-hints.js, TASK 878: no message for a normal step); a refusal (#core/mirror.js: data, nothing
+// changes) and an Enter that cannot go on say why in a toast (the shared notification-manager).
 import { TOOL_MODES, MIRROR_STEPS, ORIGIN_JOINT_ID } from '#core/constants.js';
 import { mirrorObjects, mirrorObjectsOf, mirrorObjectsRefusal, mirrorLineRefusal, MIRROR_UNDO_LABEL } from '#core/mirror.js';
 import { activeSketchPick, inActiveSketch } from '#core/sketch-model.js'; // TASK 659: only the active sketch's objects and mirror line (an axis belongs to no sketch)
-import { referenceShape } from '#core/reference-lines.js';
 import { curveRefusal } from '#core/curve-kinds.js'; // TASK 762
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
 
 const HINT_MS = 6000;
-export const MIRROR_HINTS = Object.freeze({
-  [MIRROR_STEPS.OBJECTS]: 'Mirror: click the objects to mirror, then press Enter (Done on touch).',
-  [MIRROR_STEPS.LINE]: 'Mirror: pick the mirror line (a line, a construction line or the X / Y axis), then press Enter (Done on touch).',
-});
-const hint = (text) => showNotification(text, 'info', HINT_MS);
+// Enter on the LINE step with no mirror line picked yet: what is missing (TASK 878: the only step text left, an Enter that cannot go on)
+const NO_LINE_YET = 'Mirror: pick the mirror line (a line, a construction line or the X / Y axis), then press Enter (Done on touch).';
 const refuse = (reason) => showNotification('Mirror: ' + reason + '.', 'warning', HINT_MS);
 
 const selectionObjects = (state) => mirrorObjectsOf([...state.selectedShapes], [...state.selectedJoints]);
@@ -32,7 +29,6 @@ export function beginMirror(state) {
   const objects = selectionObjects(state);
   const ready = isEmpty(objects) ? null : objects;
   state.mirror = { step: ready ? MIRROR_STEPS.LINE : MIRROR_STEPS.OBJECTS, objects: ready, line: null };
-  hint(MIRROR_HINTS[state.mirror.step]);
 }
 
 /** The current step while the Mirror tool is on, else null. */
@@ -58,8 +54,6 @@ export function handleMirrorPointerDown(e, svg, state, hitJoint, hitShape, other
     if (m.line && !m.objects.shapes.includes(m.line)) state.selectedShapes.delete(m.line);
     m.line = shape.id;
     state.selectedShapes.add(shape.id); // lit like the selection (an axis too: svg-renderer lights a reference line in the selected set)
-    const name = shape.reference ? referenceShape(shape.id).label : (shape.isConstruction ? 'the construction line' : 'the line');
-    hint(`Mirror line: ${name}. Press Enter (Done on touch) to mirror, Esc to cancel.`);
     return true;
   }
   return false;
@@ -77,11 +71,10 @@ export function mirrorDone(state) {
     const why = mirrorObjectsRefusal(state, objects);
     if (why) { refuse(why); return 'refused'; }
     m.objects = objects; m.step = MIRROR_STEPS.LINE;
-    hint(MIRROR_HINTS[MIRROR_STEPS.LINE]);
     return 'next';
   }
   if (mirrorStep(state) !== MIRROR_STEPS.LINE) return 'wait';
-  if (!m.line) { hint(MIRROR_HINTS[MIRROR_STEPS.LINE]); return 'wait'; }
+  if (!m.line) { showNotification(NO_LINE_YET, 'info', HINT_MS); return 'wait'; }
   const res = recordConstraintStep(state, MIRROR_UNDO_LABEL, () => mirrorObjects(state, m.objects, m.line));
   if (!res.ok) { refuse(res.reason); return 'refused'; }
   state.selectedShapes.clear(); state.selectedJoints.clear(); state.selectedConstraints.clear();

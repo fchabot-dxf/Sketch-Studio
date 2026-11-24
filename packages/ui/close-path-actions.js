@@ -1,6 +1,7 @@
 // packages/ui/close-path-actions.js — TASK 760: THE Close path command of the Design tab, in every app (SketchStudio, Shaper, Pen Plotter, Trace).
 // The geometry is #core/close-path.js; this module is the command: ONE undo step per run (recordConstraintStep: saved only when something was
-// closed), the notice that says what happened and why anything was refused (never silent), and the import's offer. Its entries:
+// closed), the notice that says what was left open and why anything was refused (TASK 878: a run that closed everything it was given says nothing: the
+// closed outlines are selected), and the import's offer. Its entries:
 //   the ribbon button (Modify, beside Break: #ui/tool-ribbon.js) and its key (tool.closePath, #ui/shortcuts.js) switch to the CLOSE_PATH tool;
 //   switching to it runs beginClosePath (input-manager.js TOOL_BEGIN): with a Select-tool selection its chains are closed at once (TASK 760b: a chain the
 //   selection reaches only through a group holding other curves, e.g. a whole imported file, only when near-closed: #core/close-path.js planCommandClose), else the tool
@@ -28,8 +29,8 @@ function reasonsText(refused) {
  * closePathOnShapes(state, shapeIds, notify) -> { closed: [plan], refused: [plan], leftOpen: [plan] }   the chains of the curves the user picked (a
  * Close path click: [that curve]; the Select tool's selection: the menu entry, the tool's start) are closed as #core/close-path.js planCommandClose
  * says (TASK 760b: a chain reached only through a group that holds other curves is closed only when near-closed; the others are left open), in
- * ONE undo step (none when nothing was closed). notify(message, level) says what was done, what was left open and why anything was refused. The
- * closed chains (and their new lines) are selected: the result is seen.
+ * ONE undo step (none when nothing was closed). notify(message, level) says what was left open and why anything was refused, with what was done; a run
+ * that closed every chain it was given says nothing (TASK 878): the closed chains (and their new lines) are selected, the result is seen.
  */
 export function closePathOnShapes(state, shapeIds, notify = () => {}) {
   const { plans: ok, refused, leftOpen } = planCommandClose(state, shapeIds);
@@ -39,12 +40,13 @@ export function closePathOnShapes(state, shapeIds, notify = () => {}) {
     track('close-path');
     selectClosed(state, ok, results);
   }
+  if (!refused.length && !leftOpen.length) return { closed: ok, refused, leftOpen }; // TASK 878: all closed: seen, no message
   const parts = [];
   if (ok.length) parts.push(`Closed ${plural(ok.length, leftOpen.length ? 'outline' : 'path')}` + (leftOpen.length ? '' : detail(ok, results)));
   else if (leftOpen.length) parts.push('Nothing near-closed in the selected group');
   if (leftOpen.length) parts.push(`${plural(leftOpen.length, 'open path')} left open (click one with Close path to close it)`);
   if (refused.length) parts.push(`${refused.length === 1 && !ok.length && !leftOpen.length ? 'Not closed' : plural(refused.length, 'path') + ' not closed'}: ${reasonsText(refused)}`);
-  notify('Close path: ' + parts.join(' · '), ok.length ? 'success' : (refused.length ? 'warning' : 'info'));
+  notify('Close path: ' + parts.join(' · '), refused.length ? 'warning' : 'info');
   return { closed: ok, refused, leftOpen };
 }
 
@@ -64,12 +66,11 @@ function selectClosed(state, plans, results) {
   for (const r of results) if (r.lineId) state.selectedShapes.add(r.lineId);
 }
 
-/** Switching to the Close path tool (TOOL_BEGIN): a selection's chains are closed at once; with none the tool says what to click. */
+/** Switching to the Close path tool (TOOL_BEGIN): a selection's chains are closed at once; with none the tool waits for a click (what to click is the
+ *  tool's ribbon hint, #ui/design-hints.js: TASK 878, no message on the tool's start). */
 export function beginClosePath(state, notify = () => {}) {
   const sel = state.selectedShapes ? [...state.selectedShapes] : [];
-  if (sel.length) return closePathOnShapes(state, sel, notify);
-  notify('Close path: click an open outline to close it (its open ends are marked).', 'info');
-  return null;
+  return sel.length ? closePathOnShapes(state, sel, notify) : null;
 }
 
 /**
@@ -123,7 +124,8 @@ export function closeOffered(state, offered, notify = () => {}) {
     track('close-path');
     selectClosed(state, res.closed, res.results);
   }
-  notify(res.closed.length ? `Closed ${plural(res.closed.length, 'outline')}` + (res.skipped ? ` · ${res.skipped} changed since the import, not closed` : '')
-    : 'Nothing closed: the outlines changed since the import', res.closed.length ? 'success' : 'warning');
+  if (res.closed.length && !res.skipped) return res; // TASK 878: all closed: seen (selected), no message
+  notify(res.closed.length ? `Closed ${plural(res.closed.length, 'outline')} · ${res.skipped} changed since the import, not closed`
+    : 'Nothing closed: the outlines changed since the import', 'warning');
   return res;
 }

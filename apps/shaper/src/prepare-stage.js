@@ -33,8 +33,6 @@ import { loadBits, TOOL_TABLE_KEY } from './tool-table.js'; // TASK 842: the use
 /** TASK 812: the one notice of a document a NEWER version of the app made (document-buffer.js hostVersion: it is opened, never written over). */
 export const NEWER_VERSION_NOTICE = 'Made by a newer version of the app: reload to edit.';
 /** TASK S3 addition: Recalculate's plain line when there is nothing to do (the brief's words), and when only the selected operations are up to date. */
-export const UP_TO_DATE = 'All toolpaths are up to date.';
-export const SELECTED_UP_TO_DATE = 'The selected toolpaths are up to date.';
 // TASK S3: the Recalculate button's icon (18x18 inner markup in currentColor, as CUT_TYPES.icon): two arrows round a circle
 // TASK 842: the Tool table button's icon (18x18, currentColor): three bits standing in a rack (an end mill, a ball nose, a V-bit)
 const TOOL_TABLE_ICON = "<path d='M3 2.5v8h3v-8M7.5 2.5v7.5a1.5 1.5 0 0 0 3 0V2.5M12 2.5v6.5l1.5 3 1.5-3V2.5' fill='none' stroke='currentColor' stroke-width='1.3' stroke-linejoin='round'/><path d='M1.5 15.5h15' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/>";
@@ -218,18 +216,15 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const fresh = now.length === p.sigs.size && now.every((it) => p.sigs.get(it.id) === pathsSigOf(it.planKey, it.rec, ctx)) && sigs.every((s) => hasResult(s));
     return fresh ? 'fresh' : 'stale';
   }
-  // the Stock's one-line notice (task 472) when the shape `key` becomes the Stock
-  const stockNotice = (prevStock, key) => { if (prevStock && prevStock !== key) prepareNotice('Stock moved to this loop (there is one Stock per document)'); else if (!prevStock) prepareNotice('This closed loop is now the Stock: the board in Export'); };
   // a type picked in the OPEN operation's card changes its type (refused with its line when one of its shapes cannot take it). TASK S3: a new operation is the
   // toolbar's (addOperation below); the card shows only for an open operation.
   function pickType(id) {
     const pv = prepareView, st = sketchState();
     const op = session && pv ? pv.activeOp() : null;
     if (!op) return;
-    const prevStock = stockKeyOf();
     const why = typeRefusal(id, op.geometry.map((r) => r.key));
     if (why) { say(why); refreshCutPanel(); return; }
-    sessionEdit(() => { if (id === STOCK_TYPE_ID && op.geometry.length) stockNotice(prevStock, op.geometry[0].key); changeOpType(op, id, st); });
+    sessionEdit(() => changeOpType(op, id, st)); // TASK 878: a Stock moved here shows (one Stock per document: the Stock type's hint, param-hints.js): no message
   }
   // TASK S3 (owner turns 2944-2950; docs/OPERATIONS-MODEL.md 4.1-4.2): a button of the OPERATIONS TOOLBAR = ALWAYS a NEW operation of its type, created OPEN (S2's
   // session: OK keeps it, Cancel removes it), holding the selected shapes that can take the type (the quick flow, 4.4), or EMPTY when nothing is selected (a click on a
@@ -249,10 +244,9 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       return;
     }
     commitSession();
-    const prevStock = stockKeyOf();
     beginSession(); changed();
     let made;
-    withCarry(() => { if (id === STOCK_TYPE_ID) { if (keys.length) stockNotice(prevStock, keys[0]); made = setStock(keys[0] || null, st).op; } else made = newOperation(id, keys, st); });
+    withCarry(() => { if (id === STOCK_TYPE_ID) made = setStock(keys[0] || null, st).op; else made = newOperation(id, keys, st); }); // TASK 878: no Stock message
     openSession(made.id);
     if (out.length) { say(`${typeRefusal(id, out)} (left out)`); refreshCutPanel(); }
   }
@@ -344,17 +338,17 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   }
   /**
    * recalculate(ids) — THE Recalculate (the toolbar's button, the Export step's action): the out-of-date operations among `ids` (null = every one). Returns
-   * { done: [ids] }, or { line } when there was nothing to do (the plain line: the button says it in Prepare's notice).
+   * { done: [ids] } (empty when there was nothing to do: TASK 878, the rows show no Out of date mark, so nothing is said).
    */
   function recalculate(ids = null) {
     const st = sketchState();
-    if (!st) return { line: UP_TO_DATE };
+    if (!st) return { done: [] };
     // TASK 841: the plan read against the sketch NOW first (cut-plan.js followDesign: renamed shapes, and a moved relief's LEVELS put where its outline is): a
     // Recalculate pressed from the Export step's line, with Prepare never entered since the Design move, generates from the part where it is, never where it was
     followDesign(st);
     const out = describeOperations(st).filter((op) => op.outOfDate);
     const todo = ids ? out.filter((op) => ids.includes(op.id)) : out;
-    if (!todo.length) return { line: out.length ? SELECTED_UP_TO_DATE : UP_TO_DATE };
+    if (!todo.length) return { done: [] };
     recalcOps(todo.map((op) => op.id));
     if (prepareView && getMode() === 'prepare') { prepareView.refreshLook(); refreshCutPanel(); }
     return { done: todo.map((op) => op.id) };
@@ -364,8 +358,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     const ops = opsOf(), lit = ops.filter(isPicked).map((op) => op.id);
     const ids = rowId && ops.some((op) => op.id === rowId) ? [rowId] : lit.length ? lit : null;
     commitSession();
-    const r = recalculate(ids);
-    if (r.line) prepareNotice(r.line);
+    recalculate(ids);
   }
 
   // TASK S3 (owner turns 2944-2950; placement: the owner's choice A, "Ok ribbon"): the OPERATIONS TOOLBAR = Design's shared tool ribbon (#ui/tool-ribbon.js), its own
@@ -424,7 +417,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
     else mountPrepare();
   }
 
-  // TASK 472: a transient one-line notice in Prepare (e.g. the Stock role moved to another loop)
+  // TASK 472: a transient one-line notice in Prepare (a refusal, a restored document's one-time notice; TASK 878: never a confirmation)
   let prepareNoticeTimer = null;
   let pendingRemovedNotice = null; // TASK 741: removedVcarvesNotice(n) of the last restored document (TASK 761: + cutPlanNotice), until Prepare shows it
   function prepareNotice(msg, isError) { // TASK 790: isError (given) = the red error look, else the look stays as it is

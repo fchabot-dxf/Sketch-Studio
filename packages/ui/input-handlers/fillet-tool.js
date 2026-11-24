@@ -286,8 +286,7 @@ export function handleFilletKeyDown(e, svg, state) {
     if (input !== null) {
       const val = parseFilletRadius(input, unit); // world mm; a typed unit suffix overrides the doc unit
       if (val != null) {
-        setFilletRadius(val);
-        showNotification(`Fillet radius set to ${fmtRadiusLabel(val)}`, 'info');
+        setFilletRadius(val); // TASK 878: the radius just typed: no message
         if (hoverCorner) {
           const sEl = resolveCanvasSvg(_ctx);
           renderFilletOverlay(sEl, hoverCorner, state.view);
@@ -462,7 +461,6 @@ export function commitFilletInput() {
   // One history step for the entire pending fillet set, owned here in the tool layer like every other tool.
   // The step is this fillet's own: it must not end the fillet through the history listener.
   _committing = true;
-  const results = [];
   let failReason = null;
   try {
     state.saveState?.('fillet');
@@ -470,7 +468,6 @@ export function commitFilletInput() {
     if (!res0 || !res0.success) {
       failReason = (res0 && res0.reason) || 'unknown';
     } else {
-      results.push(res0);
       const firstArcId = res0.arc.id;
       for (let i = 1; i < corners.length; i++) {
         const orig = corners[i];
@@ -478,7 +475,6 @@ export function commitFilletInput() {
         if (!liveCorner) { failReason = 'corner no longer valid'; break; }
         const resI = applyFillet(state, liveCorner, val, { equalTo: firstArcId });
         if (!resI || !resI.success) { failReason = (resI && resI.reason) || 'unknown'; break; }
-        results.push(resI);
       }
     }
     if (failReason && hasSnap) {
@@ -500,11 +496,7 @@ export function commitFilletInput() {
   _pick = null;
   hoverCorner = null;
   clearFilletOverlay();
-  if (typeof state.triggerDraw === 'function') state.triggerDraw();
-  const msg = results.length > 1
-    ? `${results.length} fillets applied (${fmtRadiusLabel(results[0].radius)})`
-    : `Fillet applied (${fmtRadiusLabel(results[0].radius)})`;
-  showNotification(msg, 'info');
+  if (typeof state.triggerDraw === 'function') state.triggerDraw(); // TASK 878: the fillets show: no message
 }
 
 function removeInput() {

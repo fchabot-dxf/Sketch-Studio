@@ -15,7 +15,7 @@
 //  3. ONE geometry per curve kind (#core/curve-kinds.js): containment / interior point on curved loops, the export's cubic `C` (round trip within 1e-6),
 //     an OPEN chain with a bezier exports its curve, pocket clearing / hold part on a bezier outline give closed paths inside the region.
 //  4. EXISTING CUT PLANS (advisor ruling on the 761 STOP): a stored `chain:` record on an outline that is now a loop MOVES to `loop:<id>` (its operation
-//     order place kept), records with no exact match are removed, both counted in the one notice; a second open changes nothing.
+//     order place kept), records with no exact match are removed, both counted (TASK 878: the one notice says only the removed ones); a second open changes nothing.
 //  (Close path, 760: an arc closed by its own chord and a chain with a bezier closed by Close path are loops: tests/close-path-760-node.test.js section 3.)
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -288,7 +288,7 @@ const profile = await createProfile();
     const svg = shaperSvgOf(app.state, planEntries());
     ok(/shaper:cutType="online"[^>]*\/>|<g[^>]*shaper:cutType="online"/.test(svg) && svg.includes('C 70 90 30 90 0 50'), '4a: the export writes the On line cut WITH the curve (missing from the file before)');
     app.modes.showMode('prepare');
-    eq(noticeOf(app), 'Cut plan updated: 1 cut was on an outline that is now a closed shape and was kept', '4a: the one-time notice, exact');
+    eq(noticeOf(app), null, '4a: TASK 878: a cut kept on the now-closed outline is the plan working: no notice');
     // once: the reconciled plan reconciles to itself; a document saved after it opens without a notice
     eq(reconcileStore(app.state), { edgeMoved: 0, edgeDropped: 0, kept: 0, removed: 0 }, '4a: a second reconciliation (TASK S1: of the store) changes nothing');
     const before = JSON.stringify([...V2_PLAN]);
@@ -323,7 +323,8 @@ const profile = await createProfile();
     eq(noticeOf(app), null, '4c: no notice');
   } finally { V2_PLAN.clear(); V2_PLAN.setOrder([]); await app.close(); }
 }
-eq(cutPlanNotice({ edgeMoved: 1, edgeDropped: 2, kept: 0, removed: 0 }), 'Cut plan updated: 1 edge cut moved to chain, 2 dropped from closed loops', '4: the legacy edge notice keeps its words');
-eq(cutPlanNotice({ edgeMoved: 0, edgeDropped: 0, kept: 2, removed: 1 }), 'Cut plan updated: 2 cuts were on outlines that are now closed shapes and were kept; 1 cut no longer matches a shape and was removed: assign it again', '4: the ruling\'s wording');
+eq(cutPlanNotice({ edgeMoved: 1, edgeDropped: 2, kept: 0, removed: 0 }), 'Cut plan updated: 2 edge cuts dropped from closed loops', '4: TASK 878: only the dropped edge cuts are said (a move to its chain says nothing)');
+eq(cutPlanNotice({ edgeMoved: 0, edgeDropped: 0, kept: 2, removed: 1 }), 'Cut plan updated: 1 cut no longer matches a shape and was removed: assign it again', '4: TASK 878: only the removed cut is said (the kept ones say nothing)');
+eq(cutPlanNotice({ edgeMoved: 3, edgeDropped: 0, kept: 2, removed: 0, keptHoles: 1, lostHoles: 0 }), null, '4: TASK 878: nothing lost: no notice');
 
 console.log(`bezier-loops-761-node: ${checks} checks passed`);

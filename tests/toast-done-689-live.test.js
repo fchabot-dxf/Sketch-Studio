@@ -112,7 +112,8 @@ await (async () => {
       await key('Escape', 'Escape', 27);
       assert.strictEqual(await evalJs(`${STATE}.shapes.filter((s) => s.type === 'line').length`), 7, `[${kind}] offset target line drawn`);
 
-      // ---- 1. FILLET: apply L1 & L1b -> stacked "Fillet applied" toasts show -> open L2 while toasts visible ----
+      // ---- 1. FILLET: apply L1 & L1b -> two stacked toasts show -> open L2 while toasts visible ----
+      // (TASK 878: an applied fillet no longer shows a toast, so the two stacked toasts the phone flow had are shown here, as section 3 does)
       await pressRibbonTool(evalJs, tap, 'tool-fillet');
       for (const [idx, cPt] of [L1.c, L1b.c].entries()) {
         await tap(cPt);
@@ -121,9 +122,10 @@ await (async () => {
         await tap(dPt);
         await waitFor(`${STATE}.shapes.filter((s) => s.type === 'arc').length === ${idx + 1}`, `[${kind}] L1_${idx} applied`);
       }
+      await evalJs(`import('/packages/ui/notification-manager.js').then((m) => { m.showNotification('Fillet applied (R 5.0)', 'info', 10000); m.showNotification('Fillet applied (R 5.0)', 'info', 10000); })`);
       await sleep(360); // allow toast slide-in transition to settle at translateY(0)
 
-      // Pick L2 while "Fillet applied" toasts are on screen
+      // Pick L2 while the toasts are on screen
       await tap(L2.c);
       await waitFor(`!!document.getElementById('fillet-radius-input') && !document.querySelector('.sk-done')?.hidden`, `[${kind}] L2 fillet box + check shown with toast`);
       await sleep(220);

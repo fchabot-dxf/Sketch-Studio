@@ -29,6 +29,7 @@ import {
     openCreationBoxes,
     followCreationBoxes,
     applyLockedSnap,
+    liveExpression,
 } from '#ui/input-handlers/base-tool.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
@@ -43,6 +44,7 @@ const localState = {
     dragStartScreen: null,
     boxOpen: false,
     lockedSpan: null,
+    spanExpression: null,   // TASK 876: the formula the typed span reads as (d1 / 2), or null
     lockedWidth: null,
     cursor: null,
     arcSweep: null,
@@ -161,6 +163,7 @@ function closeSlotBoxes() {
     }
     localState.boxOpen = false;
     localState.lockedSpan = null;
+    localState.spanExpression = null;
     localState.lockedWidth = null;
 }
 
@@ -317,7 +320,7 @@ function commitSlot(svg, state, cursorPt) {
     for (const [jid, snap] of snapsToApply) applyLockedSnap(state, jid, snap);
     // TASK 782: a typed length of the centre-point slot is kept as a dimension between its two end centres (the full length the box shows)
     if (mode === SLOT_MODES.CENTER_POINT && active.typedSpan > 0 && built.meta && built.meta.c1Id && built.meta.c2Id) {
-        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [built.meta.c1Id, built.meta.c2Id], value: active.typedSpan }, { source: 'slot' });
+        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [built.meta.c1Id, built.meta.c2Id], value: active.typedSpan, expression: active.typedSpanExpression }, { source: 'slot' });
     }
 
     closeSlotBoxes();
@@ -336,8 +339,10 @@ function commitSlot(svg, state, cursorPt) {
 function advanceFromSpan(e, svg, state, endPt, snap) {
     const active = state.active;
     active.picks[1] = { pt: { x: endPt.x, y: endPt.y }, snap: snap || null };
+    active.typedSpanExpression = localState.spanExpression;
     active.typedSpan = localState.lockedSpan;   // what was typed in the length box (null: the clicks set it): the dimension the slot keeps
     localState.lockedSpan = null;
+    localState.spanExpression = null;
     localState.dragStartScreen = null;
     localState.isDragging = false;
 
@@ -389,6 +394,7 @@ export function setupSlotTool(svg, state) {
             const v = detail.value;
             if (detail.field === FIELD_SPAN) {
                 localState.lockedSpan = (detail.typed[0] && v > MIN_SPAN) ? v : null;
+                localState.spanExpression = localState.lockedSpan !== null ? liveExpression(detail, 0) : null;
             } else if (detail.field === FIELD_WIDTH) {
                 localState.lockedWidth = (detail.typed[0] && v > 0) ? v : null;
             }
@@ -400,7 +406,7 @@ export function setupSlotTool(svg, state) {
             if (!active) return;
             const v = detail.value;
             if (active.phase === 'span' || active.phase === 'span2') {
-                if (detail.typed[0] && v > MIN_SPAN) localState.lockedSpan = v;   // TASK 782: only a TYPED length locks the span (and becomes a dimension), never the displayed rounding
+                if (detail.typed[0] && v > MIN_SPAN) { localState.lockedSpan = v; localState.spanExpression = liveExpression(detail, 0); }   // TASK 782: only a TYPED length locks the span (and becomes a dimension), never the displayed rounding
                 const p1 = active.picks[0].pt;
                 const endPt = resolveSpanEnd(p1, localState.cursor || { x: p1.x + (localState.lockedSpan || 0) / spanFactor(active.slotMode), y: p1.y }, active.slotMode);
                 if (!(Math.hypot(endPt.x - p1.x, endPt.y - p1.y) > MIN_SPAN)) {
@@ -427,6 +433,7 @@ export function setupSlotTool(svg, state) {
             // Esc in the box also runs input-manager handleEscape -> resetDrawingState -> resetSlotState;
             // keep state.active intact until handleEscape sees it and switches cleanly to Select.
             localState.lockedSpan = null;
+            localState.spanExpression = null;
             localState.lockedWidth = null;
         },
     });
@@ -471,6 +478,7 @@ export function handleSlotPointerDown(e, svg, state, hitSnap, w) {
     const mode = getSlotMode(state);
     const p1 = snapPoint(hitSnap, w);
     localState.lockedSpan = null;
+    localState.spanExpression = null;
     localState.lockedWidth = null;
     localState.arcSweep = null;
     localState.lastArcSpan = 0;

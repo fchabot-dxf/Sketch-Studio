@@ -6,9 +6,8 @@ import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyParameterChange, dimensionInputLabel, isDimensionDetermined, sizeRefusal, SIZE_REFUSAL } from '#core/dimension-seams.js';
 import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
-import { basePer, parse as parseLength } from '#core/units.js';
-import { previewDimensionInput, quantityText, isDimension } from '#core/parameters.js';
-import { evaluateText } from '#core/expression.js';
+import { basePer } from '#core/units.js';
+import { previewDimensionInput, quantityText, isDimension, evaluateBoxText } from '#core/parameters.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
 import { dimLabelAt } from '#ui/hover-manager.js';
@@ -22,13 +21,21 @@ const QUANTITY_UNIT = { length: () => docUnit(), angle: () => 'deg', count: () =
 /** The box text of a value: a length is exactly a dimension label's text (lengthText: the document unit, the Length precision, Fractional 1 1/2" with its
  *  inch mark; no unit otherwise), an angle in degrees at the Angle precision (no degree sign), a count as its number. */
 export const boxValueText = (v, quantity = 'length') => quantityText(Number(v), QUANTITY_UNIT[quantity](), 'bare');
-/** The value a box's text means (base mm / degrees / a number), or NaN. A length is read by units.parse with the DOCUMENT unit as the default: a bare 2 in an
- *  inch document is 2 in (50.8 mm), "50mm", "1 1/2", 1 1/2" and "3/8 in" convert. An angle or a count is read by the same expression parser (45, 45°, 0.5 rad). */
-export function parseBoxValue(text, quantity = 'length') {
-    if (quantity === 'length') { const v = parseLength(text, docUnit()); return v == null ? NaN : v; }
-    const r = evaluateText(String(text), () => null, { target: quantity === 'angle' ? 'angle' : 'none' });
+/** TASK 876: THE reading of a box's text, the dimension edit box's own (#core/parameters.js evaluateBoxText: the one expression parser, the sketch's names):
+ *  { ok:true, v (base mm / degrees / a number), expression (the canonical text when the text reads a name, else null) } | { ok:false, message }.
+ *  A length is read with the DOCUMENT unit as the default: a bare 2 in an inch document is 2 in (50.8 mm), "50mm", "1 1/2", 1 1/2" and "3/8 in" convert,
+ *  "d1/2" is half of dimension d1. An angle or a count is read by the same parser (45, 45°, 0.5 rad). */
+export function readBoxText(text, quantity = 'length', state = uiState.appState) {
+    return evaluateBoxText(state, text, quantity, { unit: docUnit() });
+}
+/** The value a box's text means (see readBoxText), or NaN. */
+export function parseBoxValue(text, quantity = 'length', state = uiState.appState) {
+    const r = readBoxText(text, quantity, state);
     return r.ok ? r.v : NaN;
 }
+/** TASK 876: the keyboard a box asks for on a phone. A name or a formula (d1 / 2) needs letters, so it is the full text keyboard: the dimension edit box's rule,
+ *  declared once for the edit box and the drawing tools' boxes (was the decimal keypad while drawing, O15). */
+const BOX_INPUT_MODE = 'text';
 
 const NUMERIC_INPUT_CSS = `
 .dim-input {
@@ -197,6 +204,8 @@ let uiState = {
     quantities: ['length', 'length'], // TASK 769: what each field holds ('length' | 'angle' | 'count'): its text and its reading (boxValueText / parseBoxValue)
     values: [null, null], // TASK 769: the live value each field shows (base units), and `parsed` what each typed field reads as: a unit change shows them again
     parsed: [NaN, NaN],
+    expressions: [null, null], // TASK 876: what each typed field READS when its text names a dimension / parameter (d1 / 2): the canonical formula the new dimension is driven by; null = a plain value
+    refusalText: '', // TASK 782 / 876: why the refused field is refused (a size of 0 or less, or the edit box's own reason: an unknown name, a syntax error)
     openValues: [null, null], // TASK 769: the values the box opened with (its Ctrl+Z default text, shown again on a unit change)
     refusing: false, // TASK 782: a typed size is 0 or less: the box shows it as invalid, Enter and a click place nothing
     typed: [false, false], // TASK 596: which field the user has typed in (a field showing the live value is NOT typed; only a typed one locks a size)
@@ -212,7 +221,9 @@ let uiState = {
     hintEl: null,
     listEl: null,
     completion: null, // the shared parameter-name completion (#ui/parameter-completion.js) over listEl
-    outsideListening: false // TASK 723: the document's capture pointerdown listener is on while an edit box is open
+    outsideListening: false, // TASK 723: the document's capture pointerdown listener is on while an edit box (TASK 876: or a drawing tool's value box) is open
+    typingIndex: -1, // TASK 876: the creation-box field the user typed in last (its input event): the one a click on a dimension names into, while uiState.typed[it] holds
+    swallowUp: false // TASK 876: a press on a dimension inserted its name into a live box: its pointerup must not place the drawing's next point either
 };
 
 export function setupNumericInput(svg, state) {
@@ -332,7 +343,7 @@ function setupListeners() {
         e.stopPropagation(); // Prevent global shortcuts
     });
     
-    uiState.singleInput.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; handlePreview(); updateAssist(); });
+    uiState.singleInput.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; uiState.typingIndex = 0; handlePreview(); updateAssist(); });
 
     // Dual Input Handlers
     const handleDualKey = (e, field) => {
@@ -360,8 +371,8 @@ function setupListeners() {
     uiState.dualInputW.addEventListener('keydown', (e) => handleDualKey(e, 'width'));
     uiState.dualInputH.addEventListener('keydown', (e) => handleDualKey(e, 'height'));
     
-    uiState.dualInputW.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; handlePreview(); });
-    uiState.dualInputH.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[1] = true; handlePreview(); });
+    uiState.dualInputW.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; uiState.typingIndex = 0; handlePreview(); });
+    uiState.dualInputH.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[1] = true; uiState.typingIndex = 1; handlePreview(); });
 }
 
 // --- Public API ---
@@ -373,6 +384,7 @@ export function showSingleInput(x, y, value, field, initialKey = null, focus = t
     uiState.mode = 'live-single';
     uiState.field = field; // 'length', 'radius'
     uiState.typed = [!!initialKey, false];
+    uiState.typingIndex = initialKey ? 0 : -1;
     uiState.quantities = [quantity, 'length'];
     uiState.values = [typeof value === 'number' ? value : null, null];
     uiState.openValues = uiState.values.slice();
@@ -383,12 +395,13 @@ export function showSingleInput(x, y, value, field, initialKey = null, focus = t
     showNumericInputEl(uiState.singleInput);
     placeLiveBox(uiState.singleInput, x, y);
     
-    // Value. O15: a number being typed WHILE DRAWING stays a plain number, so a phone shows the decimal keypad here (the dimension EDIT box below is text)
-    uiState.singleInput.inputMode = 'decimal';
+    // Value. TASK 876: the box takes names and formulas too, so a phone shows the full text keyboard (BOX_INPUT_MODE)
+    uiState.singleInput.inputMode = BOX_INPUT_MODE;
     const defaultValue = typeof value === 'number' ? boxValueText(value, quantity) : '';
     uiState.defaults = [defaultValue, ''];
     uiState.singleInput.value = initialKey || defaultValue;
     if (initialKey) uiState.parsed[0] = parseBoxValue(initialKey, quantity);
+    listenOutside();   // TASK 876: a click on a dimension names it into the field once the user has typed in it
     if (focus) {   // TASK 597: a touch opens the box WITHOUT focus (no phone keyboard on every click); tapping the box focuses it
         uiState.singleInput.focus();
         if (!initialKey) uiState.singleInput.select();
@@ -413,11 +426,13 @@ export function showDualInput(x, y, w, h, opts = {}) {
     const labels = opts.labels || ['W', 'H'];
     uiState.dualInputW.placeholder = labels[0];
     uiState.dualInputH.placeholder = labels[1];
+    uiState.dualInputW.inputMode = uiState.dualInputH.inputMode = BOX_INPUT_MODE;
     uiState.dualSep.innerText = opts.separator || '×';
 
     uiState.dualContainer.classList.add('sk-live-box');
     showNumericInputEl(uiState.dualContainer);
     placeLiveBox(uiState.dualContainer, x, y);
+    listenOutside();   // TASK 876 (see showSingleInput)
 
     const defW = boxValueText(w, uiState.quantities[0]);
     const defH = boxValueText(h, uiState.quantities[1]);
@@ -432,6 +447,7 @@ export function showDualInput(x, y, w, h, opts = {}) {
     if (opts.initialKey) {   // the digit that opened the box is the first character of the first field, never lost
         uiState.dualInputW.value = opts.initialKey;
         uiState.typed[0] = true;
+        uiState.typingIndex = 0;
         handlePreview();
     }
 }
@@ -503,7 +519,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
     // TASK 724: the prefill is DISPLAY text (rounded to the precision setting); `exactText` is the same number unrounded, what an untouched box commits
     uiState.typed = [typeof initialKey === 'string', false]; // a key that opened the box is an edit
     uiState.exactText = (!hasFormula && typeof prefillValue === 'number') ? String(isAngleDim ? prefillValue : prefillValue / basePer(docUnit())) : null;
-    uiState.singleInput.inputMode = 'text';
+    uiState.singleInput.inputMode = BOX_INPUT_MODE;
     uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey : defaultValue;
     const len = uiState.singleInput.value.length;
     uiState.singleInput.setSelectionRange(typeof initialKey === 'string' ? len : 0, len);
@@ -517,8 +533,16 @@ export function showEditInput(svg, state, constraint, initialKey) {
     // TASK 723: a press anywhere outside the box ends it (Fusion). Capture phase on the document: it runs BEFORE the canvas / ribbon / footer
     // handlers of that same press, which then do their own job on the settled document (one press, not two). Added while the opening press
     // is already past the document's capture phase, so that press never closes the box it opens. resetState removes it.
+    listenOutside();
+}
+
+// TASK 723 / 876: the presses an open box listens for on the document (capture phase): handleOutsidePress, suppressDimFocusLoss, and the pointerup that ends
+// a press the live box swallowed (swallowInsertedUp). ONE add here, ONE remove in resetState.
+function listenOutside() {
+    if (uiState.outsideListening || typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
     document.addEventListener('pointerdown', handleOutsidePress, true);
     document.addEventListener('mousedown', suppressDimFocusLoss, true);
+    document.addEventListener('pointerup', swallowInsertedUp, true);
     uiState.outsideListening = true;
 }
 
@@ -676,6 +700,7 @@ function handleCommit() {
             detail.field = uiState.field;
             detail.value = readLiveField(0);
         }
+        detail.expressions = typedExpressions();
         window.dispatchEvent(new CustomEvent('liveDimensionApplied', { detail }));
         if (detail.keepOpen) return;   // a tool that cannot place anything yet (a zero size) keeps its box open
         hideInput();
@@ -737,23 +762,52 @@ function clickedDimensionConstraint(e) {
     return leader && !isOverGeometry(e, state, svg) ? leader : null;
 }
 
-// TASK 866: insert a referenced parameter name at the edit box's caret (replacing any active selection), keeping box open and focused.
-function insertEditText(name) {
-    const el = uiState.singleInput;
+// TASK 876: the field a click on a dimension inserts its name into, or null. The dimension edit box: its one field. A drawing tool's value box (live-single /
+// live-dual): the field the user typed in last, and only while it is TYPED (uiState.typed[i], set by its input event): until then a click on the canvas is the
+// drawing's click, as ever, even on a dimension.
+function typingField() {
+    if (uiState.mode === 'edit') return uiState.target ? { el: uiState.singleInput, index: 0 } : null;
+    if (uiState.mode !== 'live-single' && uiState.mode !== 'live-dual') return null;
+    const i = uiState.typingIndex;
+    return i >= 0 && i < (uiState.mode === 'live-dual' ? 2 : 1) && uiState.typed[i] ? { el: liveField(i), index: i } : null;
+}
+
+// TASK 866 / 876: insert a referenced parameter name at the caret of the field being typed in (replacing any active selection), keeping the box open and focused.
+// ONE insert for the edit box and the drawing tools' boxes.
+function insertBoxText(name, field) {
+    const el = field.el;
     const from = Math.min(el.selectionStart, el.selectionEnd), to = Math.max(el.selectionStart, el.selectionEnd);
     el.value = el.value.slice(0, from) + name + el.value.slice(to);
     el.setSelectionRange(from + name.length, from + name.length);
     el.focus();
     uiState.undoneToDefault = false;
-    uiState.typed[0] = true;
-    if (uiState.completion) uiState.completion.close();
-    updateAssist({ complete: false });
+    uiState.typed[field.index] = true;
+    if (uiState.mode === 'edit') {
+        if (uiState.completion) uiState.completion.close();
+        updateAssist({ complete: false });
+    } else {
+        handlePreview();   // the drawing shows what the name means now (and a name that cannot be read is refused under the box)
+    }
 }
 
 // TASK 866: touch taps emit a deferred compatibility mousedown after touchend; preventing default keeps #dimInput focused and mobile keypad open.
 function suppressDimFocusLoss(e) {
-    if (!uiState.active || uiState.mode !== 'edit' || !uiState.target) return;
+    if (!uiState.active || !typingField() || insideBox(e)) return;
     if (clickedDimensionConstraint(e)) e.preventDefault();
+}
+
+// TASK 876: the press ended on a dimension whose name went into a live box: the drawing gets neither the press nor its release
+function swallowInsertedUp(e) {
+    if (!uiState.swallowUp) return;
+    uiState.swallowUp = false;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+}
+
+function insideBox(e) {
+    const path = e.composedPath();
+    return [uiState.singleInput, uiState.dualContainer, uiState.hintEl, uiState.listEl].some((el) => el && path.includes(el));
 }
 
 // TASK 723: a press outside the open dimension box (the canvas, a glyph, another label, the ribbon, the footer, the Parameters window, ...).
@@ -761,17 +815,28 @@ function suppressDimFocusLoss(e) {
 // A VALID text that differs from what the box opened with is applied exactly as Enter applies it (handleCommit: one undo step, the same
 // solve / fx / naming path). Anything else (unchanged, empty, refused) is dropped with no notice: the dimension keeps what it has, and a
 // just-placed one stays placed with its measured value (as Enter on the unchanged text leaves it). The press is not stopped.
+// TASK 876: the same press on a drawing tool's value box (live-single / live-dual) that the user has typed in inserts the dimension's name the same way; anything else
+// is the drawing's own press, as ever (the box is neither closed nor committed by it).
 function handleOutsidePress(e) {
-    if (!uiState.active || uiState.mode !== 'edit' || !uiState.target) return;
+    const field = uiState.active ? typingField() : null;
+    if (!field) return;
     if (e.button === 1) return; // the middle button pans the view (as the wheel zooms it): navigating is not working elsewhere, the box stays
-    const path = e.composedPath();
-    if ([uiState.singleInput, uiState.hintEl, uiState.listEl].some((el) => el && path.includes(el))) return;
+    if (insideBox(e)) return;
     const dim = clickedDimensionConstraint(e);
+    if (uiState.mode !== 'edit') {
+        if (!dim) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        uiState.swallowUp = true;
+        if (dim.name) insertBoxText(dim.name, field); else field.el.focus();
+        return;
+    }
     if (dim) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        if (dim !== uiState.target && dim.name) insertEditText(dim.name);
+        if (dim !== uiState.target && dim.name) insertBoxText(dim.name, field);
         else uiState.singleInput.focus();
         return;
     }
@@ -796,6 +861,7 @@ function handlePreview(resetIdx = -1) {
         const h = readLiveField(1);
         if (!isNaN(w)) detail.width = w;
         if (!isNaN(h)) detail.height = h;
+        detail.expressions = typedExpressions();
     } else {
         const v = readLiveField(0);
         detail.typed = uiState.typed.slice();
@@ -804,6 +870,7 @@ function handlePreview(resetIdx = -1) {
             detail.field = uiState.field;
             detail.value = v;
         }
+        detail.expressions = typedExpressions();
     }
     window.dispatchEvent(new CustomEvent('liveDimensionPreview', { detail }));
 }
@@ -813,9 +880,15 @@ function handlePreview(resetIdx = -1) {
 function liveField(index) {
     return uiState.mode === 'live-single' ? uiState.singleInput : (index === 0 ? uiState.dualInputW : uiState.dualInputH);
 }
+/** TASK 876: rides on every live event as detail.expressions: per field, the canonical formula a TYPED field reads as ("d1 / 2"), null for an untyped one or a plain value.
+ *  A tool that turns a typed value into a dimension keeps it (#ui/input-handlers/base-tool.js typedExpression), so the dimension follows the name it was typed from. */
+function typedExpressions() {
+    return uiState.expressions.map((x, i) => (uiState.typed[i] ? x : null));
+}
 function readLiveField(index) {
-    const v = parseBoxValue(liveField(index).value, uiState.quantities[index]);
-    if (uiState.typed[index]) uiState.parsed[index] = v;
+    const r = readBoxText(liveField(index).value, uiState.quantities[index]);
+    const v = r.ok ? r.v : NaN;
+    if (uiState.typed[index]) { uiState.parsed[index] = v; uiState.expressions[index] = r.ok ? r.expression : null; }
     return v;
 }
 // TASK 782: THE refusal of a typed size, one check for every drawing tool's box: a TYPED 'length' field (a rectangle's W / H, a line's L, a circle's
@@ -824,13 +897,18 @@ function readLiveField(index) {
 // An angle may be 0 or negative and a count is clamped by its tool, so only lengths are checked.
 // (TASK 789: the rule and its message are #core/dimension-seams.js sizeRefusal, the one every dimension edit is refused by too.)
 export const SIZE_REFUSAL_HINT = SIZE_REFUSAL[0].toUpperCase() + SIZE_REFUSAL.slice(1) + '.';
+// TASK 876: a TYPED field whose text does not read (a name nothing defines, a syntax error: the edit box's own message) is refused the same way.
 function liveRefusal() {
+    uiState.refusalText = '';
     if (!uiState.active || (uiState.mode !== 'live-dual' && uiState.mode !== 'live-single')) return -1;
     const n = uiState.mode === 'live-dual' ? 2 : 1;
     for (let i = 0; i < n; i++) {
-        if (!uiState.typed[i] || uiState.quantities[i] !== 'length') continue;
-        const v = parseBoxValue(liveField(i).value, 'length');
-        if (Number.isFinite(v) && sizeRefusal(v)) return i;
+        if (!uiState.typed[i]) continue;
+        const text = liveField(i).value;
+        if (String(text).trim() === '') continue;
+        const r = readBoxText(text, uiState.quantities[i]);
+        if (!r.ok) { uiState.refusalText = r.message || 'not a valid value'; return i; }
+        if (uiState.quantities[i] === 'length' && sizeRefusal(r.v)) { uiState.refusalText = SIZE_REFUSAL_HINT; return i; }
     }
     return -1;
 }
@@ -849,7 +927,7 @@ function showLiveRefusal() {
     for (let i = 0; i < n; i++) liveField(i).setAttribute('aria-invalid', i === bad ? 'true' : 'false');
     if (!uiState.hintEl) return;
     if (bad === -1) { hideNumericInputEl(uiState.hintEl); return; }
-    uiState.hintEl.textContent = SIZE_REFUSAL_HINT;
+    uiState.hintEl.textContent = uiState.refusalText;
     uiState.hintEl.classList.add('err');
     showNumericInputEl(uiState.hintEl);
     placeAssist();
@@ -984,7 +1062,9 @@ function resetState() {
     if (uiState.outsideListening) {
         document.removeEventListener('pointerdown', handleOutsidePress, true);
         document.removeEventListener('mousedown', suppressDimFocusLoss, true);
+        document.removeEventListener('pointerup', swallowInsertedUp, true);
         uiState.outsideListening = false;
+        uiState.swallowUp = false;
     }
     hideAssist();
     if (uiState.target) uiState.target.__editing = false;
@@ -1002,6 +1082,9 @@ function resetState() {
     uiState.quantities = ['length', 'length'];
     uiState.values = [null, null];
     uiState.parsed = [NaN, NaN];
+    uiState.typingIndex = -1;
+    uiState.expressions = [null, null];
+    uiState.refusalText = '';
     uiState.openValues = [null, null];
     
     if (uiState.singleInput) {

@@ -597,6 +597,22 @@ export function previewDimensionInput(state, c, text, { unit = 'mm', slot = null
   return { ok: true, kind: 'value', own, others: [], plan, value: myValue, hint: `= ${quantityText(myValue, shown, 'unit')}` };
 }
 
+// TASK 876: THE reading of a text typed in a drawing tool's value box (a line's length, a rectangle's side, a circle's diameter, an angle): the SAME parser and the
+// SAME name lookup as a dimension's edit box (planChange 'setDimension': parseInput, canonicalize against the sketch's evaluated names; a reference
+// dimension and an unknown name are refused with the evaluator's own message). `kind` = 'length' | 'angle' | 'count'.
+// → { ok:true, v (base mm / degrees / a number), expression (the canonical text when the text READS A NAME, else null: a number or "10/2" is just a value) }
+//   | { ok:false, code, message }
+export function evaluateBoxText(state, text, kind = 'length', { unit = 'mm' } = {}) {
+  const parsed = parseInput(String(text == null ? '' : text), { allowAssign: false });
+  if (!parsed.ok) return parsed;
+  const values = new Map();
+  const ev = state && Array.isArray(state.constraints) ? evaluateAll({ parameters: state.parameters || [], constraints: state.constraints }, { unit }) : null;
+  if (ev && ev.values) for (const [name, q] of ev.values) values.set(foldName(name), q);
+  const r = canonicalize(parsed.ast, (key) => values.get(key), { target: targetOf(kind), unit });
+  if (!r.ok) return r;
+  return { ok: true, v: r.v, expression: dependencies(parsed).length > 0 ? r.text : null };
+}
+
 // ── autocomplete (OWNER REQUIREMENT R3, docs/PARAMETERS-DESIGN.md section E): ONE pure function; the DOM list is a thin view over it ──
 export const MAX_COMPLETIONS = 8;
 const isIdentChar = (ch) => !!ch && ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_' || (ch >= '0' && ch <= '9'));

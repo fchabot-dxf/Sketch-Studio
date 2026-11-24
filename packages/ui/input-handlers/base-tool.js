@@ -108,6 +108,13 @@ export function followCreationBoxes(e, values) {
     values.forEach((v, i) => setLiveInputValue(i, v));
 }
 
+/** TASK 876: the formula a TYPED field of the creation box reads as ("d1 / 2", from the box's detail.expressions), or null (untyped, a plain number).
+ *  A tool keeps it beside the locked value and hands it to the dimension it creates (ConstraintManager.createConstraint params.expression: the ONE seam),
+ *  so the new dimension is driven by the name it was typed from and follows it. */
+export function liveExpression(detail, i) {
+    return (detail.typed && detail.typed[i] && detail.expressions && detail.expressions[i]) || null;
+}
+
 /**
  * Wire up liveDimensionApplied / liveDimensionPreview / liveDimensionCancelled listeners.
  * @param {object} state - App state

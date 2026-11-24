@@ -8,6 +8,12 @@ import { ConstraintManager } from './constraint-manager.js';
 import { SolverConfig } from './solver-config.js';
 
 /**
+ * The snap target that says "this point lies on the shape `shapeId`, at `pt`": the one applySnapConstraint's 'shape' case reads. For a caller whose shape
+ * is made AFTER the point it holds (a circle's rim passing through an existing point), so the point is the subject and the new shape the target.
+ */
+export const onShapeSnap = (shapeId, pt) => ({ type: 'shape', isLocked: true, targetId: shapeId, pt });
+
+/**
  * Apply appropriate constraint when a joint snaps to something
  * This is the SINGLE SOURCE OF TRUTH for snap-based constraints
  *

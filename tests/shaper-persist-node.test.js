@@ -46,14 +46,14 @@ let planBefore, stockBefore, exportBefore;
     V2_PLAN.set(keyOf('loop', L[2].id), { cutType: 'interior', cutDepth: 'unset', cutOffset: -2, toolDia: 6.35, cutterShape: 'vbit', cutterAngle: 60 });
     V2_PLAN.set(keyOf('chain', C[0].id), { cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 });
     V2_PLAN.set(keyOf('chain', C[1].id), { cutType: 'guide', cutDepth: 'unset', cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90 });
-    setStockField('thickness', 25.4); setStockField('margin', 6);
+    setStockField('thickness', 25.4); // TASK 879: no field sets the margin (it is always the declaration's: a stored one is not read, tests/board-extent-879-node)
     openMode(app, 'prepare');
     assert(edges(app) >= 14, 'Prepare shows the seeded geometry');
     planBefore = planJson(); stockBefore = stockJson(); exportBefore = exportStr(app);
     assert.strictEqual(JSON.parse(planBefore).length, 5, 'five cut records assigned');
-    assert.deepStrictEqual(JSON.parse(stockBefore), { thickness: 25.4, width: null, height: null, margin: 6 });
+    assert.deepStrictEqual(JSON.parse(stockBefore), { thickness: 25.4, width: null, height: null, margin: 152.4 });
     const d = await app.storedDoc(); // the autosave (page-hide path)
-    assert(d.hosts.shaper && storedRecords(d.hosts.shaper).length === 5 && d.hosts.shaper.stock.thickness === 25.4 && d.hosts.shaper.stock.margin === 6, 'the autosave stores the cut plan and stock');
+    assert(d.hosts.shaper && storedRecords(d.hosts.shaper).length === 5 && d.hosts.shaper.stock.thickness === 25.4 && d.hosts.shaper.stock.margin === 152.4, 'the autosave stores the cut plan and stock');
   } finally { await app.close(); }
 }
 
@@ -121,7 +121,7 @@ await profile.adapter.updateDesign(designId, (d) => { delete d.document.hosts.sh
   try {
     openMode(app, 'prepare');
     assert.strictEqual(planJson(), '[]', 'an old document (no sidecar) has an empty cut plan');
-    assert.deepStrictEqual(JSON.parse(stockJson()), { thickness: 19.05, width: null, height: null, margin: 12.7 }, 'and the owner-confirmed stock defaults: 3/4 in thick, 1/2 in margin');
+    assert.deepStrictEqual(JSON.parse(stockJson()), { thickness: 19.05, width: null, height: null, margin: 152.4 }, 'and the owner-confirmed stock defaults: 3/4 in thick, 6 in margin (TASK 879, owner turn 3480)');
     assert(edges(app) >= 14, 'the geometry still loads');
   } finally { await app.close(); }
 }

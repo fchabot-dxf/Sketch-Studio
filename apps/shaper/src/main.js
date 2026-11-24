@@ -5,6 +5,7 @@ import { download } from './download.js';
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
 import { sketchesSignature } from '#core/sketch-model.js';
+import { drawingExtent } from '#core/geometry-bounds.js'; // TASK 879: the board with no Stock loop = the drawing's extent + the margin
 import { checkOriginRules, formatOriginRuleWarning } from '#core/origin-rules.js'; // TASK 803: every exported file is checked against the Origin rules
 import { exportEncoding } from './shaper.js'; // TASK 803: the cut types' encoding, injected into the check like the exporter's
 import { createToolRibbon } from '#ui/tool-ribbon.js';
@@ -765,10 +766,9 @@ mountAppFooter({
 
 // TASK 459: Review = the finished workpiece in 3D, built only from the Prepare cut plan + the declared stock.
 const reviewInputs = (st) => {
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const j of st.joints.values()) { minX = Math.min(minX, j.x); maxX = Math.max(maxX, j.x); minY = Math.min(minY, j.y); maxY = Math.max(maxY, j.y); }
-  // TASK 757: an EMPTY design (no shapes: its only joint is the origin) has no bounds, so the 3D view builds no board (it was a margin-sized cube round the origin)
-  return { stock: resolveStock(st).stock, items: planReliefItems(st, TICKED), bounds: st.shapes.length && Number.isFinite(minX) ? { minX, maxX, minY, maxY } : null, notes: planNotes(st, TICKED) }; // TASK 798: the ticked operations // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing; TASK 839: assembled in ONE place (cut-plan.js planNotes: a line the same for every operation once)
+  // TASK 879: the design's bounds are THE DRAWING'S EXTENT (#core/geometry-bounds drawingExtent: each shape by what it draws, never an arc's centre joint or the
+  // origin: a part far from its arcs' centres made a board from the origin to the part). TASK 757: an EMPTY design (nothing drawn) has none, so no board.
+  return { stock: resolveStock(st).stock, items: planReliefItems(st, TICKED), bounds: drawingExtent(st), notes: planNotes(st, TICKED) }; // TASK 798: the ticked operations // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing; TASK 839: assembled in ONE place (cut-plan.js planNotes: a line the same for every operation once)
 };
 const reviewSig = (st) => JSON.stringify([storeSignature(), getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(),
   SettingsManager.get('LENGTH_PRECISION'), SettingsManager.get('ANGLE_PRECISION'), SettingsManager.get('TRAILING_ZEROS'), SettingsManager.get('INCH_DISPLAY'), SettingsManager.get('LENGTH_FRACTION')]); // TASK 714 / 743 / 770: rebuilds on doc unit, precision or trailing-zeros change

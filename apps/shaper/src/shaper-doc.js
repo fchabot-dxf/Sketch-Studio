@@ -3,7 +3,7 @@
 //   • TASK S1 (version 3, docs/OPERATIONS-MODEL.md 1.2): the OPERATIONS (in list order: their type, settings and shapes, each shape with its file-order `seq`),
 //     the REGIONS (per geometry key: slope, levels, source) and nextSeq (operations-store.js); a version 2 document (the per-geometry cut plan records
 //     `cutPlan` + the operation order `opOrder`) is MIGRATED here, the one read of a stored Shaper document (migrateV2, section 3);
-//   • the STOCK the 3D Review reads (apps/shaper/src/stock.js, the one declaration; defaults 3/4 in thick, 1/2 in margin);
+//   • the STOCK the 3D Review reads (apps/shaper/src/stock.js, the one declaration; defaults 3/4 in thick, 6 in margin (TASK 879));
 // Plain JSON-safe data. An old document has no sidecar: the defaults below apply.
 
 import { reconcileCutPlan, reconcileStore, keepHolesFromOtherSketches, v2PlanEntries, isContourKey, partKeyOf, settingsPart, recordOf } from './cut-plan.js'; // TASK 761: the stored plan reconciled with the document's regions, here, once; TASK 774; TASK S1

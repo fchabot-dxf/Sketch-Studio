@@ -2,8 +2,8 @@
 // (tests/fixtures/opfirst/), one function for the frozen baseline (taken on origin/main before S1) and for the corpus test after it, so both measure alike.
 //   loadCase(c, state?)  -> a plain sketch state holding the case's geometry (no solve: the stored joints are the solved positions) with the case's display settings set
 //   measure({ state, entries, ops, reliefItems, selections }) -> { a, b, c, d, dContent, e, eNoId, f } md5s:
-//     a         the downloaded SVG (export-payload.js shaperSvgOf)
-//     b         the Export step's 2D preview copy (shaperPreviewOf) without its data-op attributes (an operation's id is not part of what is drawn)
+//     a         the downloaded SVG (export-payload.js shaperSvgOf), its page as before TASK 879 (tests/helpers/page-879.js pageBefore879: the baseline's page held every joint)
+//     b         the Export step's 2D preview copy (shaperPreviewOf) without its data-op attributes (an operation's id is not part of what is drawn), its page as before TASK 879
 //     c         the Paths view: the bit-centre travel of every written element (export-payload.js bitCentrePaths over shaperPreviewOf's `written`)
 //     d         the 3D Review's input: planReliefItems' `sig` list, in order
 //     dContent  the same items' content (cut type, depth, footprints, cutter shape) as key-sorted JSON (a sig hashes the record's own key order)
@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 import SettingsManager from '#core/settings-manager.js';
 import { shaperSvgOf, shaperPreviewOf, bitCentrePaths } from '../../apps/shaper/src/export-payload.js';
 import { createOpList } from '../../apps/shaper/src/op-list.js';
+import { pageBefore879 } from './page-879.js';
 
 export const md5 = (s) => crypto.createHash('md5').update(typeof s === 'string' ? s : JSON.stringify(s)).digest('hex');
 
@@ -52,8 +53,8 @@ export function measure({ state, entries, ops, reliefItems, selections }) {
   const p = shaperPreviewOf(state, entries);
   const items = opListItems(ops);
   return {
-    a: md5(a),
-    b: md5(p.svg.replace(/ data-op="[^"]*"/g, '')),
+    a: md5(pageBefore879(a, state)),
+    b: md5(pageBefore879(p.svg.replace(/ data-op="[^"]*"/g, ''), state)),
     c: md5(bitCentrePaths(state, p.written)),
     d: md5(reliefItems.map((i) => i.sig)),
     dContent: md5(canonical(reliefItems.map((i) => ({ cutType: i.cutType, cutDepth: i.cutDepth, footprints: i.footprints, shape: i.shape })))),

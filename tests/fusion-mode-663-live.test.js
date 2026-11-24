@@ -89,7 +89,7 @@ try {
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', JSON.stringify({ action: 'selection_data', version: 1, regions: [{ id: 'reg_0' }, { id: 'reg_1' }] }))`);
   const selNotice = await evalJs(`({ hidden: document.getElementById('prepare-notice').hidden, text: document.getElementById('prepare-notice').textContent, isError: document.getElementById('prepare-notice').classList.contains('is-error') })`);
   assert.strictEqual(selNotice.hidden, false, 'selection_data notice is visible');
-  assert.strictEqual(selNotice.text, 'Added selection: 2 regions, 0 chains', 'selection_data notice text matches');
+  assert.strictEqual(selNotice.text, 'Added selection: 2 regions', 'selection_data notice text matches');
   assert.strictEqual(selNotice.isError, false, 'selection_data notice is not an error');
 
   // Desktop screenshot (1280x800) showing Prepare + Review tabs, Add selection, Connected status, and selection_data notice

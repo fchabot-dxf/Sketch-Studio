@@ -14,6 +14,7 @@ import { planEntries, planReliefItems } from '../../apps/shaper/src/cut-plan.js'
 import { describeOperations } from '../../apps/shaper/src/operations.js';
 import { importFusionSelection } from '../../apps/shaper/src/fusion-import.js';
 import { open } from './node-app.js';
+import { pageBefore879 } from './page-879.js'; // TASK 879: the downloads and previews are hashed with their page as before 879 (the base's page held every joint)
 import { V2_PLAN } from './plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 
 const fx = (p) => new URL('../fixtures/' + p, import.meta.url);
@@ -68,9 +69,9 @@ const noOpIds = (svg) => svg.replace(/ data-op="[^"]*"/g, '');
 function facets(st, entries, stripMarks = false) {
   V2_PLAN.use(st).load(entries.map((e) => [`${e.target.kind}:${e.target.id}`, { ...e.rec }]));
   const ents = planEntries();
-  const pv = shaperPreviewOf(st, ents);
+  const pv = { svg: pageBefore879(shaperPreviewOf(st, ents).svg, st) }; // TASK 879: the base's page held every joint (tests/helpers/page-879.js)
   const relief = reliefOf(st, stripMarks);
-  const dl = shaperSvgOf(st, ents);
+  const dl = pageBefore879(shaperSvgOf(st, ents), st);
   const ops = opsWords(st, ents);
   V2_PLAN.use(null).clear();
   return {
@@ -116,8 +117,8 @@ export async function leadinDigest() {
       importFusionSelection(fs.readFileSync(fx(f), 'utf8'), { controller: app.controller, prepare: app.prepare });
       const st = app.state, entries = planEntries();
       const relief = reliefOf(st);
-      const pv = shaperPreviewOf(st, entries);
-      digest['fusion/' + f] = { plan: { download: hash(shaperSvgOf(st, entries)), preview: hash(noOpIds(pv.svg)), ops: hash(opsWords(st, entries)), relief: hash(relief) }, ...digestOf(st) };
+      const pv = { svg: pageBefore879(shaperPreviewOf(st, entries).svg, st) }; // TASK 879
+      digest['fusion/' + f] = { plan: { download: hash(pageBefore879(shaperSvgOf(st, entries), st)), preview: hash(noOpIds(pv.svg)), ops: hash(opsWords(st, entries)), relief: hash(relief) }, ...digestOf(st) };
     }
   } finally { V2_PLAN.clear(); V2_PLAN.setOrder([]); await app.close(); }
   return digest;

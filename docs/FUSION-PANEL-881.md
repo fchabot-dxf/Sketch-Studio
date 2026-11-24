@@ -156,7 +156,7 @@ files today.
 
 ## 11. Redesign direction (owner turns 3534-3535)
 
-Recorded only; not built in this task (STEP 2 still waits for task 880).
+Recorded only; not built in this task (the redesign comes after the offline panel of sections 12-13).
 
 1. OPERATION-FIRST in Fusion (like Fusion CAM): no "Add selection", no selection list, no imported copy of the geometry. The user clicks a
    cut type (Outside / Inside / Pocket / ...), Fusion's own selection dialog opens, they pick faces / edges for THAT operation, and the
@@ -166,3 +166,81 @@ Recorded only; not built in this task (STEP 2 still waits for task 880).
 3. The website keeps its draw / open-file -> assign-cuts flow; only the Fusion panel changes.
 4. Clarification (owner turn 3538): point 2 is PREPARE's canvas: in the Fusion panel it shows the toolpaths, not the art. EXPORT keeps its
    views as today (the 3D / 2D / Paths simulation).
+5. Owner turns 3572-3582 (for AFTER the offline panel; not built now):
+   - Fusion's Prepare has NO canvas: Fusion's own viewport shows the paths and the volumes.
+   - HYBRID: native Fusion command dialogs create and edit operations and setups; the palette keeps the setups + operations list, Export,
+     and the shared JS engine.
+   - SETUPS (like Fusion CAM): one board each = the picked part(s) / bodies (the "Model") + the Stock (default: the parts' bounds + a
+     margin, thickness from the part; or a picked sketch) + its operations + one SVG export. A file can mix separate boards and parts
+     nested on one board; an operation's dialog accepts only faces of its setup's parts.
+   - The Stock is an operation-like item, picked as a Fusion sketch.
+
+## 12. STEP 2: the build (done)
+
+`node scripts/build-site.cjs shaper-fusion [--out <dir>]` (default `dist-fusion/`, git-ignored) writes the Fusion panel folder. One source:
+
+- **The page** is the website's `apps/shaper/index.html`, written as the folder's `index.html` with ONE change: its module script
+  `src/main.js` becomes `src/fusion-main.js` (build-site.cjs `FUSION_PANEL.entry`; the build fails unless there is exactly one such script).
+- **The boot**: `apps/shaper/src/shaper-app.js` (new) holds Shaper's page wiring, moved from main.js unchanged except where a page
+  DECLARES its part (`startShaperApp({...})`: fusion, mountChrome, createDocumentBuffer, bufferStore, menu, beforeChrome, afterChrome,
+  createImporter, mountDesignBrowser, createSettingsPanel, onDesignContext). `main.js` (the website, both modes) passes the website's
+  parts; `fusion-main.js` (the panel) passes Fusion mode, the plain drawer with Log only, and an in-memory store.
+- **Shared layers take what they used to import** (the Q1 ruling): `#ui/app-shell.js` (new: the header, a declared drawer, the
+  analytics visit; `mountPlainSidebar`) under `#ui/app-chrome.js` (the shell + the project drawer + feedback + settings sync);
+  `#ui/document-buffer-core.js` (the autosave loop, `store` passed) under `#ui/document-buffer.js` (default: the page's shared store);
+  `#ui/project-store-core.js` (the store engine: no Google sign-in, Drive client or router) under `#ui/project-store.js` (re-exports it,
+  adds `getProjectStore()`); `#ui/cloud/drive-errors.js` (driveErrorText, re-exported by drive-adapter.js); `CURRENT_DESIGN_KEY` defined in
+  the store engine (router-adapter.js re-exports it); `mountFusionPrepareBar({ fusionMode })` (default: the page's `?host=fusion`, as
+  before); the SKETCHES browser mount moved to `apps/shaper/src/shaper-browser.js`; `export-payload.js`, `fusion-bridge.js`,
+  `fusion-import.js` and `design-canvas.js` import the core modules.
+- **The folder** holds only what the panel page reaches (scripts/site-closure.cjs), plus `LICENSE.md`, `THIRD-PARTY-NOTICES.md`, the
+  licence files of the vendor folders it reaches, and the manifest `fusion-panel.json`. References that only worked because a URL's `..`
+  stops at the site root, or that start at the root, are rewritten in the panel's copy only (13: in index.html the import map's
+  `../../packages/` values (4) and the sketcher.css link; `../../../packages/core/` imports (7) in src/op-derive.js and src/op-paths.js, the
+  module worker's; `/assets/constraint-glyphs.svg` in packages/ui/glyph-sheet.js). The build then proves the folder: the same files as
+  from the repo page, nothing missing, no reference leaving the folder when it is served under any path, nothing in it the page does not
+  load (but the licences and the manifest).
+- **Excluded by the module graph** (tests/fusion-panel-881-node.test.js asserts each is reached by the website and not by the panel, and
+  is not in the folder): src/main.js, addin-download.js, cut-import.js, shaperhub-login.js, shaper-browser.js; packages/ui design-browser,
+  app-chrome, sidebar-projects, project-actions, project-manager, document-tabs, save-button, account-avatar, file-dialog, sketch-import,
+  feedback, style-panel, project-store, document-buffer, cloud/google-account, cloud/auth-state, cloud/providers, cloud/drive-adapter,
+  cloud/router-adapter, cloud/settings-sync; about.html (and privacy.html). The website page reaches 275 files, the panel page 243.
+- **Kept although the panel does not show them** (part of the shared Design tab engine the panel runs, or of a used module): the Design
+  view's DOM and its tool ribbon instance (#design-ribbon; the ribbon module is Prepare's toolbar too), the sketch engine's text support
+  (text-fonts.js, opentype, the bundled fonts: about 1.2 MB), the template picker's modal (transform-box.js uses it), the store engine's
+  Drive write queue (drive-writer.js, content-print.js, drive-errors.js: never used with the memory store), analytics.js (track() is
+  called by shared modules; it sends nothing from 127.0.0.1, analytics-events.js LOCAL_HOST).
+
+Changed / new modules (the website's behaviour unchanged; the website build differs from the one before 881 by exactly these): NEW
+src/shaper-app.js, src/fusion-main.js, src/shaper-browser.js, packages/ui/app-shell.js, document-buffer-core.js, project-store-core.js,
+cloud/drive-errors.js; CHANGED src/main.js, design-canvas.js, export-payload.js, fusion-bridge.js, fusion-import.js, packages/ui/app-chrome.js,
+document-buffer.js, project-store.js, cloud/drive-adapter.js, cloud/router-adapter.js. The website's index.html is byte-identical. The
+website build also carries src/fusion-main.js (its app folder is copied whole); its page never loads it.
+
+Behaviour differences for existing users: none intended. Two orders change with no observable effect: app-chrome starts the feedback
+ask and the settings sync before the analytics visit (independent services), and the website's Google session probe runs once the stage
+list is computed (beforeChrome) instead of just before it.
+
+## 13. STEP 3: what the add-in must serve (SA-32)
+
+- **One folder**, `index.html` at its top: `index.html`, `src/` (45 files), `styles/main.css`, `assets/` (3), `packages/` (196: core, ui
+  with vendor/three, vendor/opentype, vendor/fonts), `LICENSE.md`, `THIRD-PARTY-NOTICES.md`, and `fusion-panel.json`. 248 files + the
+  manifest, 7,685,886 bytes (build 2026-11-24). Every reference is relative and stays inside the folder, so it works at the server root
+  or under a path.
+- **The entry**: `index.html` (its module: `src/fusion-main.js`). No query string is needed: the panel is Fusion mode, with its workspace
+  in the Fusion design (in memory in the page), by declaration. A `?host=fusion&project=design` the add-in still passes is ignored.
+- **http only**: file:// is ruled out (live-checked by the advisor in Fusion 2706.1.17: module imports, module workers and import() are
+  blocked on file://); not re-tested here.
+- **What the server must do**: answer `GET /<path>` for every path in the manifest's `files` (case-exact, no rewrites, no extensionless
+  URLs, no directory listing; `/` may answer index.html), with the media type of its extension (the manifest's `mime`): `.html`
+  text/html, `.js` text/javascript (REQUIRED: the browser refuses a module script of any other type), `.css` text/css, `.svg`
+  image/svg+xml, `.jpg` image/jpeg, `.woff` font/woff, `.json` application/json, `.txt` / `.license` / no extension text/plain, `.md`
+  text/markdown. Anything else: 404. The reference server is `servePanel` in tests/fusion-panel-881-live.test.js.
+- **Pin the release with the manifest**: `count`, `bytes`, and each file's `bytes` + `sha256`.
+- **Keep the port fixed**: the panel's settings live in the page's localStorage (the tool table / My bits, units, the 3D look, the open
+  stage), which belongs to the origin `http://127.0.0.1:<port>`: a new port each run starts from empty settings.
+- **Run-time calls outside the folder** (the manifest's `network`): `/api/shaper-upload` from src/shaper-app.js, Send to ShaperHub (R1).
+  On the add-in's server it answers 404, so Send to ShaperHub does not work offline; out of scope here (advisor ruling), the open item for
+  a follow-up task. Nothing else is fetched from shaper-svg.pages.dev or any other host (the live test records every request: all to the
+  panel's own server, all 200). Open ShaperHub (My Files) and the export status line's link open hub.shapertools.com in a new window (a
+  link the user follows, not a load).

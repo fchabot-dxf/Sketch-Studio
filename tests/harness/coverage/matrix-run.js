@@ -25,6 +25,7 @@ const evt = (x, y) => ({ clientX: x, clientY: y, pointerType: 'mouse', pointerId
 // ui(kx, ky): would the tool accept this selection? nominal(kx, ky): the DOF the constraint should remove (sep variant).
 const both = (f) => (x, y) => f(x) && f(y);
 const anyLine = (x, y) => lineLike(x) || lineLike(y);
+const arcKind = (k) => k === 'A' || k === 'F';   // the kinds whose shape is an arc (an arc, a fillet arc): task 875's midpoint of an arc
 export const ROWS = [
   { id: 'coincident', label: 'coincident', type: 'coincident', arity: 2, tool: TOOL_MODES.COINCIDENT, ui: () => true, nominal: () => 2, hits: (X, Y) => [{ joint: X.jn }, { joint: Y.jn }], produces: c => c.type === 'coincident' },
   { id: 'horizontal-2pt', label: 'horizontal (2 joints)', type: 'horizontal', arity: 2, tool: TOOL_MODES.HORIZONTAL_VERTICAL, ui: () => true, nominal: () => 1, layout: [170, 20], hits: (X, Y) => [{ joint: X.jn }, { joint: Y.jn }], produces: c => c.type === 'horizontal' },
@@ -39,8 +40,12 @@ export const ROWS = [
     // two fillet arcs: each already carries a driving R. (Two circles: 1 since task 515, a circle's radius is a solver unknown like
     // Fusion's and PlaneGCS's; it was 0 while the radius was shape data.)
     nominal: (x, y) => (lineLike(x) ? 1 : ((x === 'F' && y === 'F') ? 0 : 1)), hits: (X, Y) => [{ shape: X }, { shape: Y }], produces: c => c.type === 'equal' },
-  { id: 'midpoint-line', label: 'midpoint (line + joint)', type: 'midpoint', arity: 2, tool: TOOL_MODES.MIDPOINT, ui: anyLine, nominal: () => 2,
+  // a pair with no line picks Y's curve, then X's point: an ARC Y makes the arc form (task 875: the arc, then a point), any other curve is refused
+  { id: 'midpoint-line', label: 'midpoint (line + joint)', type: 'midpoint', arity: 2, tool: TOOL_MODES.MIDPOINT, ui: (x, y) => anyLine(x, y) || arcKind(y), nominal: () => 2,
     hits: (X, Y) => (lineLike(X.k) ? [{ shape: X }, { joint: Y.jn }] : [{ shape: Y }, { joint: X.jn }]), produces: c => c.type === 'midpoint' },
+  // task 875: a point, then an ARC (the other pick order of the arc form; X is the arc when it is one, else Y): the point at the arc's sweep midpoint
+  { id: 'midpoint-arc', label: 'midpoint (joint + arc)', type: 'midpoint', arity: 2, tool: TOOL_MODES.MIDPOINT, ui: (x, y) => arcKind(x) || arcKind(y), nominal: () => 2,
+    hits: (X, Y) => (arcKind(X.k) ? [{ joint: Y.jn }, { shape: X }] : [{ joint: X.jn }, { shape: Y }]), produces: c => c.type === 'midpoint' && !!c.shape },
   { id: 'midpoint-3pt', label: 'midpoint (3 joints)', type: 'midpoint', arity: 2, tool: TOOL_MODES.MIDPOINT, ui: () => true, nominal: () => 2, extraPoint: true,
     hits: (X, Y, Z) => [{ joint: X.jn }, { joint: Y.jn }, { joint: Z.jn }], produces: c => c.type === 'midpoint' },
   // task 563: symmetric about the Y axis (the third pick, a built-in reference line): two lines (task 572: the infinite lines mirror, lengths
@@ -330,6 +335,8 @@ export function selfSelection(S, row, hits) {
   if (row.type === 'coincident' && js.length === 2 && S.state.shapes.some(sh => sh.joints && sh.joints.includes(js[0]) && sh.joints.includes(js[1]))) return 'degenerate: both joints belong to one shape (coincident would collapse it)';
   const line = hits.find(h => h.shape && h.shape.shape && L.shape(S, h.shape.shape) && L.shape(S, h.shape.shape).type === 'line');
   if (line && js.length === 1 && L.shape(S, line.shape.shape).joints.includes(js[0])) return 'the joint is an end of the line it is paired with';
+  const arc = row.type === 'midpoint' && hits.find(h => h.shape && h.shape.shape && L.shape(S, h.shape.shape) && L.shape(S, h.shape.shape).type === 'arc');
+  if (arc && js.length === 1 && L.shape(S, arc.shape.shape).joints.includes(js[0])) return 'the point is one of the arc joints, its centre or an end (task 875: the tool refuses it, told)';
   return null;
 }
 function dimHits(S, row, X, Y) {
@@ -374,6 +381,10 @@ export function classify(c) {
   if (r.startsWith('dim-angle') && has('bite') && shared) return { v: 'F4' };   // shared-joint angle not enforced (F4; tolerated)
   // the clockwise pick order moves the drawing at the angle's own measured value (F3), with or without a shared joint (after task 510 a shared-corner angle is enforced, so it shows F3 too)
   if (r.startsWith('dim-angle') && (has('dim-moved-geometry') || has('residual'))) return { v: 'F3' };
+  // task 875: the midpoint of a FILLET arc (it stores no direction: drawn the shortest way, so its midpoint is on the side it is drawn on): the
+  // bite's jitter (3 % of the drawing, the size of the fillet's radius 10) flips the shortest way of an arc bent near 180 deg by the creation
+  // solve (locked: the placement moves the fillet without its virtual-sharp point V) or moved by a shared joint, and the re-solve does not come back
+  if ((r === 'midpoint-arc' || r === 'midpoint-line') && c.cols.includes('F') && c.issues.length === 1 && has('bite')) return { v: 'NEW-11' };
   if (has('nullity!=fd')) return { v: 'F6' };
   return { v: 'UNCLASSIFIED', why: c.issues.join('+') };
 }

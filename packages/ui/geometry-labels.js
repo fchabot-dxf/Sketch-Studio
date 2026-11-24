@@ -72,7 +72,7 @@ export function constraintGeometryText(c, shapes, label) {
     if (arc) return `${label({ shape: arc.id })} radius`;
     return `${joint(a)} – ${joint(b)}`;
   };
-  if (c.type === 'pointOnLine' && c.joint && c.shape) return `${joint(c.joint)} on ${label({ shape: c.shape })}`;
+  if ((c.type === 'pointOnLine' || c.type === 'midpoint') && c.joint && c.shape) return `${joint(c.joint)} on ${label({ shape: c.shape })}`;   // task 875: a midpoint of an arc, as a line's
   if (c.type === 'symmetric' && c.line) {   // task 563: the two entities, then the symmetry line (an axis by its name)
     const ents = Array.isArray(c.shapes) && c.shapes.length === 2 ? c.shapes.map((id) => label({ shape: id })) : (Array.isArray(c.joints) ? c.joints : []).map(joint);
     return `${ents.join(sep)} about ${referenceShape(c.line) ? referenceShape(c.line).label : label({ shape: c.line })}`;

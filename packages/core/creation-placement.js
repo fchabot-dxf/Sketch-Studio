@@ -22,7 +22,7 @@ import { symmetricOperands, mirrorPoint } from './symmetric.js';
 import { isPatternConstraint, patternCopyOperands } from './pattern.js';
 import { getCoincidentJoints } from './joints.js';
 import { findShapeById } from './reference-lines.js';
-import { isPointLineDistance } from './geometry.js';
+import { isPointLineDistance, arcSweepMidpoint } from './geometry.js';
 import { rigidBlocks } from './group-model.js';
 
 const EPS_SAT = 1e-6;     // a residual at or below this (mm or rad) is satisfied
@@ -125,6 +125,8 @@ function moverOf(state, fr, op, anchorOp, mode, rigid) {
   for (const c of cs) {
     if (c.type === T.POINT_ON_LINE && body.shapes.some(s => s.id === c.shape) && !body.joints.has(c.joint) && !jointFree(fr, c.joint)) hard.push(pos(state, c.joint));
     if (c.type === T.MIDPOINT && c.joints && c.joints.length === 3 && body.joints.has(c.joints[0]) && body.joints.has(c.joints[1]) && !body.joints.has(c.joints[2]) && !jointFree(fr, c.joints[2])) hard.push(pos(state, c.joints[2]));
+    // task 875: a held point at the sweep midpoint of an arc of the body (the arc form { joint, shape })
+    if (c.type === T.MIDPOINT && c.joint && body.shapes.some(s => s.id === c.shape) && !body.joints.has(c.joint) && !jointFree(fr, c.joint)) hard.push(pos(state, c.joint));
   }
   const pivots = [];
   for (const p of hard) if (p && !pivots.some(q => len(sub(p, q)) < EPS_POS)) pivots.push(p);
@@ -173,6 +175,7 @@ function pointMotion(M, Q, T) {
 const lineEnds = (state, sh) => [pos(state, sh.joints[0]), pos(state, sh.joints[1])];
 const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 const project = (X, a, b) => { const u = sub(b, a), l2 = u.x * u.x + u.y * u.y; const k = ((X.x - a.x) * u.x + (X.y - a.y) * u.y) / l2; return { x: a.x + k * u.x, y: a.y + k * u.y }; };
+const arcMid = (state, sh) => arcSweepMidpoint(pos(state, sh.joints[0]), pos(state, sh.joints[1]), pos(state, sh.joints[2]), { sweep: sh.sweep });
 const unitNormal = (a, b) => { const u = sub(b, a), l = len(u); return { x: -u.y / l, y: u.x / l }; };
 
 // The placement that is not one similarity: the least-change solve of the mover alone (trySolveAlone), the anchor frozen. Fusion moves the
@@ -270,6 +273,16 @@ export const PLACE = {
       return pointMotion(M, mid(p, q), pos(state, A.id));
     },
   },
+  // midpoint of an ARC (task 875, { joint, shape }): the point moves to the arc's sweep midpoint, or the arc moves (slides, or turns + scales
+  // about its held point) so its midpoint lands on the point (a similarity keeps the arc's shape and direction: its midpoint goes with it)
+  'midpoint-arc': {
+    body: 'component',
+    operands: (s, c) => [{ kind: 'joint', id: c.joint }, { kind: 'shape', id: c.shape }],
+    place: (state, M, A) => {
+      if (M.op.kind === 'joint') return pointMotion(M, pos(state, M.op.id), arcMid(state, shapeOf(state, A.id)));
+      return pointMotion(M, arcMid(state, shapeOf(state, M.op.id)), pos(state, A.id));
+    },
+  },
   'tangent-line-circle': {
     operands: (s, c) => (c.line && c.circle ? [{ kind: 'shape', id: c.line }, { kind: 'shape', id: c.circle }] : shapesOp(c)),
     place: (state, M, A) => {
@@ -359,7 +372,9 @@ export function placementKey(state, type, c) {
       return 'dim-' + (c.dimMode || 'aligned');
     }
     case T.ANGLE: return isDriving(c) && typeof c.value === 'number' && isLine(shp(0)) && isLine(shp(1)) ? 'dim-angle' : null;
-    case T.MIDPOINT: return Array.isArray(c.joints) && c.joints.length === 3 && lineOfPair(state, c.joints[0], c.joints[1]) ? 'midpoint' : null;
+    case T.MIDPOINT:
+      if (c.joint && c.shape && !c.joints) { const s = shapeOf(state, c.shape); return s && s.type === 'arc' ? 'midpoint-arc' : null; }   // task 875
+      return Array.isArray(c.joints) && c.joints.length === 3 && lineOfPair(state, c.joints[0], c.joints[1]) ? 'midpoint' : null;
     case T.SYMMETRIC: return symmetricOperands(c, state.shapes) ? 'symmetric' : null;
     case T.TANGENT: {
       const pair = c.line && c.circle ? [shapeOf(state, c.line), shapeOf(state, c.circle)] : [shp(0), shp(1)];
@@ -389,10 +404,13 @@ export function creationOperands(state, type, c) {
 
 // ---------------------------------------------------------------------------------------------------------- 2. reading the table
 const rankOf = (entry, cls) => { const i = entry ? entry.tiers.findIndex(t => t.includes(cls)) : -1; return i < 0 ? null : i; };
+// A key with no recorded Fusion cell that reads another key's ranking: 'midpoint-arc' (task 875) ranks as a point on a circle (the one Fusion
+// check, advisor 2026-11-24: a free point and a free arc -> the point moved to the arc's midpoint, the arc stayed, as a point goes onto a circle).
+const RANKED_AS = Object.freeze({ 'midpoint-arc': 'pointOnCircle' });
 // true when the FIRST pick is the one that gives way: its class is in a lower tier; the same tier, or a class the table does not rank,
 // follows the key's tie rule (Fusion's usual: the second pick gives way; a key without an entry uses that too)
 export function firstGivesWay(key, clsFirst, clsSecond) {
-  const e = WHO_MOVES[key], rf = rankOf(e, clsFirst), rs = rankOf(e, clsSecond);
+  const e = WHO_MOVES[RANKED_AS[key] || key], rf = rankOf(e, clsFirst), rs = rankOf(e, clsSecond);
   if (rf != null && rs != null && rf !== rs) return rf < rs;
   return !!e && e.tie === 'first';
 }

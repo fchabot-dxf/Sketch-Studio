@@ -60,7 +60,7 @@ const COVER = {
     closePath: ['deferred', 'joins the free ends of ONE picked chain with a coincident or a new line + coincidents (no pair of existing operands): tests/close-path-760-node.test.js'], fillet: ['kinds', 'F'],
     dim: ['rows', 'dim-aligned', 'dim-horizontal', 'dim-vertical', 'dim-length', 'dim-point-line', 'dim-line-line', 'dim-angle-xy', 'dim-radius'],
     coincident: ['rows', 'coincident'], hv: ['rows', 'horizontal-2pt', 'vertical-2pt', 'horizontal-line', 'vertical-line'], parallel: ['rows', 'parallel'], perp: ['rows', 'perpendicular'],
-    collinear: ['rows', 'collinear'], tangent: ['rows', 'tangent'], equal: ['rows', 'equal'], midpoint: ['rows', 'midpoint-line', 'midpoint-3pt'], symmetric: ['rows', 'symmetric'],
+    collinear: ['rows', 'collinear'], tangent: ['rows', 'tangent'], equal: ['rows', 'equal'], midpoint: ['rows', 'midpoint-line', 'midpoint-arc', 'midpoint-3pt'], symmetric: ['rows', 'symmetric'],
     mirror: ['deferred', 'copies shapes + links them with the symmetric row (covered there): tests/mirror.test.js, mirror-fusion-node.test.js'],
     offset: ['deferred', 'makes a NEW chain from one picked chain (no pair of existing operands, so no constraint x geometry cell): tests/offset-650.test.js, offset-tool-650-node.test.js'],
     circularPattern: ['deferred', 'makes NEW copies of the picked objects about a centre (no pair of existing operands): tests/pattern-658.test.js, pattern-tool-658-node.test.js'],
@@ -96,6 +96,7 @@ ok('a diameter dimension is covered through Slot width (not a separate matrix ro
 const KNOWN = {
   'NEW-6': 'feasible tangent refused in the shared variant: equal concentric circles (lockTangentBranch locks external) and an arc centred on another arc rim (the nearest solve collapses it); the radius-must-change cells were fixed by tasks 515 and 523',
   'NEW-10': 'coincident onto a fillet arc whose centre is shared with the other operand (LF / CF / SF shared): feasible (PlaneGCS keeps the fillet arc at 83 degrees) but our solve collapses it (its two ends meet, 79 -> 0 degrees): refused (task 550: a zero-sweep arc is never accepted; before task 550 the collapse was accepted and the cell read PASS); solving to the non-collapsed pose is follow-up work, the same family as the feasible cells refused by task 521',
+  'NEW-11': 'midpoint of a FILLET arc (task 875), bite only: a fillet arc stores no direction (drawn the shortest way, its midpoint on the side it is drawn on) and the bite jitter (3 % of the drawing, the size of the fillet radius 10) flips that side when the arc is near 180 deg (locked LF / CF / OF: the creation solve bends the fillet to 169 deg, the who-moves placement moving the fillet without its virtual-sharp point V) or is moved by a shared joint (FF shared): the re-solve does not come back. Carrying V with its fillet in the placement is follow-up work',
   // NEW-9 (coincident of a line end onto a rect corner that shares the line's other end, refused by a collapsing solve) was deleted by task 525:
   // the who-moves placement moves one operand and no matrix cell fails it any more.
 };

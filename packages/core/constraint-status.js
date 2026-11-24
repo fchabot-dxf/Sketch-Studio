@@ -465,6 +465,14 @@ export function analyzeConstraintStatus({ joints, shapes, constraints, groups = 
                                 }
                             }
                         }
+                    } else if (c.joint && c.shape) {
+                        // task 875: the arc form { joint, shape }: the arc's three joints held -> its sweep midpoint is held
+                        const arc = shapes.find(sh => sh && sh.id === c.shape);
+                        if (arc && arc.type === 'arc' && arc.joints && arc.joints.length >= 3 && arc.joints.slice(0, 3).every(id => getDOF(id) <= 0) && getDOF(c.joint) > 0) {
+                            setDOF(c.joint, 0);
+                            dofSources.set(c.joint, (dofSources.get(c.joint) || []).concat(`${c.type}:${c.id || 'auto'}`));
+                            checkAndEnqueue(c.joint);
+                        }
                     }
                     break;
 

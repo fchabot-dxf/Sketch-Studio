@@ -1,4 +1,4 @@
-import { getDist, projectPointOnLine, perpendicularDistance, resolveJoints, isPointLineDistance, getLineIntersection } from './geometry.js';
+import { getDist, projectPointOnLine, perpendicularDistance, resolveJoints, isPointLineDistance, getLineIntersection, arcSweepMidpoint } from './geometry.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { constraintReferencesAxis, sceneJoints, sceneShapes } from './reference-lines.js';
 import { angleSectorOf, angleSectorTarget, angleSectorUnderLabel, angleLabelAngle } from './angle-sector.js';
@@ -327,6 +327,15 @@ export function measureResidual(c, joints, shapes) {
         }
 
         case CONSTRAINT_TYPES.MIDPOINT: {
+            // task 875: the arc form { joint, shape }: |point - the arc's sweep midpoint| (geometry.js arcSweepMidpoint, the solver row's point)
+            if (c.joint && c.shape && !c.joints) {
+                const arc = shapes.find(s => s && s.id === c.shape);
+                if (!arc || arc.type !== 'arc' || !arc.joints || arc.joints.length < 3) return 0;
+                const [pc, ps, pe] = arc.joints.slice(0, 3).map(id => joints.get(id)), pm = joints.get(c.joint);
+                if (!pc || !ps || !pe || !pm) return 0;
+                const M = arcSweepMidpoint(pc, ps, pe, { sweep: arc.sweep });
+                return Math.hypot(pm.x - M.x, pm.y - M.y);
+            }
             if (!c.joints || c.joints.length !== 3) return 0;
             const p1 = joints.get(c.joints[0]), p2 = joints.get(c.joints[1]), mid = joints.get(c.joints[2]);
             if (!p1 || !p2 || !mid) return 0;

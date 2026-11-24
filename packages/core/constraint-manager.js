@@ -5,7 +5,7 @@ import { CONSTRAINT_TYPES } from './constants.js';
 import * as constraints from './constraints.js';
 import { SolverConfig } from './solver-config.js';
 import { measureResidual, measureShapeSizes, findCollapsedShape, withIndefiniteArticle } from './constraint-verifier.js';
-import { isPointLineDistance } from './geometry.js';
+import { isPointLineDistance, arcSweepMidpoint } from './geometry.js';
 import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
 import { placeForCreation as placeByTable } from './creation-placement.js';
 import { reverseLineInAngleSectors } from './angle-sector.js';
@@ -913,6 +913,17 @@ export class ConstraintManager {
 
             // ── MIDPOINT ──────────────────────────────────────────────────
             case CONSTRAINT_TYPES.MIDPOINT: {
+                // task 875: the arc form: the arc's three joints and the point all held, the point off the arc's sweep midpoint
+                if (params.joint && params.shape && !params.joints) {
+                    const arc = shapes.find(s => s && s.id === params.shape);
+                    if (!arc || arc.type !== 'arc' || !arc.joints || arc.joints.length < 3) return null;
+                    const ids = [...arc.joints.slice(0, 3), params.joint];
+                    if (!ids.every(isEffectivelyFixed)) return null;
+                    const [pc, ps, pe, pm] = ids.map(getPos);
+                    if (!pc || !ps || !pe || !pm) return null;
+                    const M = arcSweepMidpoint(pc, ps, pe, { sweep: arc.sweep });
+                    return Math.hypot(pm.x - M.x, pm.y - M.y) > (SolverConfig.GEOMETRY_TOLERANCE || 0.05) ? 'all joints are fixed and the point is not at the arc midpoint' : null;
+                }
                 if (!params.joints || params.joints.length !== 3) return null;
                 const [ep1, ep2, mid] = params.joints;
                 if (isEffectivelyFixed(ep1) && isEffectivelyFixed(ep2) && isEffectivelyFixed(mid)) {
@@ -1051,7 +1062,8 @@ export class ConstraintManager {
                 return (params.shapes && Array.isArray(params.shapes) && params.shapes.length === 2)
                     || (params.joints && Array.isArray(params.joints) && params.joints.length >= 4);
             case CONSTRAINT_TYPES.MIDPOINT:
-                return params.joints && Array.isArray(params.joints) && params.joints.length === 3;
+                // three joints (a line's ends + the point), or task 875's point + ARC { joint, shape }
+                return (params.joints && Array.isArray(params.joints) && params.joints.length === 3) || (!params.joints && !!(params.joint && params.shape));
             case CONSTRAINT_TYPES.SYMMETRIC:
                 // two points { joints: [p, q] } or two shapes { shapes: [s1, s2] }, and the symmetry line
                 return !!params.line && ((Array.isArray(params.shapes) && params.shapes.length === 2)

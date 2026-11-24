@@ -685,3 +685,22 @@ corner). Two cells needed a harness rule, both judged by our finite-difference n
 .evidence/572/sr-shared-derivation.txt: line 2's horizontal line mirrors onto itself, so only line 1's direction is fixed), and RR/shared is
 refused as redundant (two rect tops sharing a corner are one horizontal line; the raw add leaves the fd nullity unchanged; PlaneGCS says 6 -> 4).
 Row after task 572: `PASS=178 N/A=2`; whole matrix `3564 cells: N/A=1418 NA-BUILD=163 NEW-10=3 NEW-6=2 PASS=1978` (unchanged counts).
+
+## Midpoint of an arc (task 875)
+
+The Midpoint tool takes a point and an ARC (Fusion's `addMidPoint(point, arc)`: the point at the arc's sweep midpoint), stored
+`{ type: 'midpoint', joint, shape }`. The matrix covers it in two rows: `midpoint-line` (a pair with no line picks Y's curve, then X's point:
+an arc Y is now the arc form, so its `ui` is `anyLine || arc Y`) and the new `midpoint-arc` (a point, then the arc: the other pick order). The
+PlaneGCS translation (tests/harness/audit/lib.js) gives the arc form as `point_on_circle` + `equal_length(start-point, point-end)` (2 equations;
+PlaneGCS has no arc-midpoint primitive). A point that is the arc's own centre or end is refused by the tool with a notice (`selfSelection`).
+Rows: `midpoint-line N/A=50 NEW-11=2 PASS=128`, `midpoint-arc N/A=116 NEW-11=4 PASS=60`; whole matrix
+`3744 cells: N/A=1516 NA-BUILD=162 NEW-10=3 NEW-11=6 NEW-6=1 PASS=2056` (before: `3564 cells: N/A=1418 NA-BUILD=162 NEW-10=3 NEW-6=1 PASS=1980`).
+
+### NEW-11 (LOW): the midpoint of a fillet arc does not survive the bite jitter (6 cells, bite only)
+
+A fillet arc stores no direction: it is drawn the shortest way, so its midpoint is on the side it is drawn on (the solver row reads the
+direction at each assembly, as the renderer does). The bite's jitter (3 % of the drawing, the size of the fillet's radius 10) flips that side
+when the fillet is near 180 deg: in LF / CF / OF `locked` (both rows) the creation solve bends the fillet to 169 deg (the who-moves placement
+moves the fillet but not its virtual-sharp point V, which is held on the two lines by point-on-line rows, so the solve repairs V by turning the
+lines), and in FF `shared` the shared joint moves it. The re-solve does not come back (residual 2.3 and 4.1). An arc with a stored direction
+(the Arc tool's, `A`) passes every cell. Follow-up: carry V with its fillet in the placement.

@@ -164,3 +164,5 @@ Recorded only; not built in this task (STEP 2 still waits for task 880).
    the part is edited in Fusion, the operation re-reads its references. SA-16's "Select in Fusion" per operation is the existing seed.
 2. The panel's CANVAS shows the TOOLPATHS (like Export's Paths view), not the art: the geometry is already in Fusion's own view.
 3. The website keeps its draw / open-file -> assign-cuts flow; only the Fusion panel changes.
+4. Clarification (owner turn 3538): point 2 is PREPARE's canvas: in the Fusion panel it shows the toolpaths, not the art. EXPORT keeps its
+   views as today (the 3D / 2D / Paths simulation).

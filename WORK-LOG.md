@@ -17901,3 +17901,4 @@ Shaper Fusion selection notice made plain: ONE builder `selectionCountText(regio
   Insert STL kept; R1 a follow-up; 127.0.0.1 only). Still waiting: task 880 not on origin/main at this check.
 - 881: owner redesign direction (turns 3534-3535: operation-first with Fusion references, the canvas shows toolpaths, website flow unchanged)
   recorded in docs/FUSION-PANEL-881.md section 11; not built.
+- 881: section 11 clarified (owner turn 3538): Prepare's canvas shows the toolpaths in the Fusion panel; Export keeps its 3D / 2D / Paths views.

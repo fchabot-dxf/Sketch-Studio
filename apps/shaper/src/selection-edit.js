@@ -179,3 +179,11 @@ export function clearSelections(controller, { prepare = null, onDone = null } = 
   if (typeof onDone === 'function') onDone();
   return { ok: true, message: `Cleared ${all.length} selections` };
 }
+
+/** TASK 877: the count text of a selection notice, ONE builder for every "Added / Updated / Replaced with <name>: ..." line: singular or plural, a zero count left out, none at all = "nothing to cut". An open chain is a "path" (the Paths view and the cut panel's own word). */
+export const selectionCountText = (regionCount, chainCount) => {
+  const parts = [];
+  if (regionCount > 0) parts.push(`${regionCount} ${regionCount === 1 ? 'region' : 'regions'}`);
+  if (chainCount > 0) parts.push(`${chainCount} ${chainCount === 1 ? 'path' : 'paths'}`);
+  return parts.length ? parts.join(', ') : 'nothing to cut';
+};

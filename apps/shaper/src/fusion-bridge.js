@@ -17,6 +17,7 @@ import { UNITS } from '#core/units.js';
 import { emptyDocument } from '#ui/project-store.js';
 import { getSelections, setSelections, onSelectionsChange, selectionRowsOf } from './selection-list.js'; // TASK 795 / 795c: the selection list the Prepare bar shows
 import { storeOps, regionOf, captureStore, applyStore, renameGeometry } from './operations-store.js';
+import { selectionCountText } from './selection-edit.js';
 import { partKeyOf } from './cut-plan.js';
 import { getStock, setStock } from './stock.js';
 import { loadBits, saveBits } from './tool-table.js';
@@ -380,7 +381,7 @@ export function createFusionBridge({
       }
       const warnings = (res && Array.isArray(res.warnings)) ? res.warnings
         : (Array.isArray(data.warnings) ? data.warnings.filter(Boolean).map(String) : []);
-      const baseMsg = (res && res.message) || `Added ${srcName}: ${regionCount} regions, ${chainCount} chains`;
+      const baseMsg = (res && res.message) || `Added ${srcName}: ${selectionCountText(regionCount, chainCount)}`;
       const msg = selectionNotice(baseMsg, warnings);
       dbg.log('fusion', msg, { regions: regionCount, chains: chainCount, warnings });
       onNotice(msg, data);

@@ -127,7 +127,7 @@ eq(resolveInitialMode('review', { fusion: true }), 'review', 'Fusion mode keeps 
   // selection_data routing -> "Added <source name>: N regions, M chains" + importer hook + keeps payload
   const sampleSel = { action: 'selection_data', version: 1, units: 'mm', regions: [{ id: 'reg_0' }, { id: 'reg_1' }] };
   fakeWin.fusionJavaScriptHandler.handle('selection_data', JSON.stringify(sampleSel));
-  eq(notices.at(-1).text, 'Added selection: 2 regions, 0 chains', 'selection_data shows Added message');
+  eq(notices.at(-1).text, 'Added selection: 2 regions', 'selection_data shows Added message');
   eq(selections.length, 1, 'selection_data calls onSelectionData importer hook');
   deepEq(bridge.getLastSelection(), sampleSel, 'bridge keeps last selection payload for tests');
 

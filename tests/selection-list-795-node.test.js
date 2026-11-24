@@ -56,7 +56,7 @@ try {
   let h0 = st.history.length;
   const r1 = imp(A());
   ok(r1.ok && r1.imported === 5, 'A imported');
-  eq(r1.message, 'Added Tray: 2 regions, 0 chains', 'an add says Added');
+  eq(r1.message, 'Added Tray: 2 regions', 'an add says Added');
   eq(st.history.length, h0 + 1, 'an add is ONE undo step');
   eq(texts(), ['Tray · body'], 'the list: A, its summary text');
   eq(getStock().thickness, 12, '794: a fresh start takes the part\'s stock thickness');
@@ -146,7 +146,7 @@ try {
   upd.regions[1].label = 'Hole renamed';
   upd.regions[0].depthMm = 15; // Changed depth -> NOT the same region under canonical identity: leaves old op empty, arrives unassigned
   const r4 = imp(upd);
-  eq(r4.message, 'Updated Tray: 2 regions, 0 chains', 'the same id again says Updated');
+  eq(r4.message, 'Updated Tray: 2 regions', 'the same id again says Updated');
   eq(st.history.length, h0 + 1, 'an update is ONE undo step');
   eq(ids(), ['sel-A'], 'still one row');
   eq(st.shapes.length, 5, 'the old regions are replaced, not piled up');
@@ -161,7 +161,7 @@ try {
   imp(B());
   const old = msg('Body1', [{ id: 'o', cutType: 'outside', depthMm: 8, outer: { closed: true, segments: rectSegs(0, 0, 10, 10) }, holes: [] }, { id: 'p', cutType: 'pocket', depthMm: 4, outer: { closed: true, segments: rectSegs(20, 0, 10, 10) }, holes: [] }]);
   const r5 = imp(old);
-  eq(r5.message, 'Replaced with Body1: 2 regions, 0 chains', 'an old payload replaces');
+  eq(r5.message, 'Replaced with Body1: 2 regions', 'an old payload replaces');
   eq(texts(), ['Body1 · 2 regions'], 'the fallback row text');
   ok(!getSelections()[0].fusion && getSelections()[0].id.startsWith('local-'), 'a local id; the add-in has no overlay for it');
   eq(st.shapes.length, 8, 'only the replacing selection\'s shapes');

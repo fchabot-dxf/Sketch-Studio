@@ -19,6 +19,7 @@ import zlib from 'node:zlib';
 import './node-app.js';
 import { loadCase, measure, md5 } from './opfirst-measure.js';
 import { shaperSvgOf } from '../../apps/shaper/src/export-payload.js';
+import { pageBefore879 } from './page-879.js';
 import { planEntries, planReliefItems } from '../../apps/shaper/src/cut-plan.js';
 import { describeOperations } from '../../apps/shaper/src/operations.js';
 import { applyShaperDoc, captureShaperDoc, capturePrepare, applyPrepare, DOC_VERSION } from '../../apps/shaper/src/shaper-doc.js';
@@ -129,12 +130,12 @@ export async function runCorpus(part, parts) {
       const state3 = loadCase({ ...x, geometry: serializeDocument(state).geometry });
       applyShaperDoc(asV3, state3);
       assert.deepEqual(JSON.parse(JSON.stringify(captureShaperDoc())).operations.map((o) => [o.type, o.settings.cutDepth, o.settings.walls, o.settings.wallSide]), v3.operations.map((o) => [o.type, o.settings.cutDepth, o.settings.walls, o.settings.wallSide]), `${c.name}: a version 3 document's Contours read back with the same own values`); checks++;
-      if (md5(shaperSvgOf(state3, planEntries())) !== now.a) differ.push(`${c.name}.a (v3 -> v4)`);
+      if (md5(pageBefore879(shaperSvgOf(state3, planEntries()), state3)) !== now.a) differ.push(`${c.name}.a (v3 -> v4)`);
     }
     const state2 = loadCase({ ...x, geometry: serializeDocument(state).geometry }); // the saved document: its geometry as the load left it (a version 1 document's kept holes are combined profiles now)
     applyShaperDoc(JSON.parse(JSON.stringify(v3)), state2);
     assert.deepEqual(JSON.parse(JSON.stringify(captureShaperDoc())), v3, `${c.name}: version 3 saved -> reloaded = the same version 3 JSON`); checks++;
-    const againA = md5(shaperSvgOf(state2, planEntries())); // the reloaded version 3 document's download (its JSON is equal above: the rest derives alike)
+    const againA = md5(pageBefore879(shaperSvgOf(state2, planEntries()), state2)); // TASK 879: `a` is measured with the page as before 879 // the reloaded version 3 document's download (its JSON is equal above: the rest derives alike)
     if (againA !== now.a) differ.push(`${c.name}.a (v3 reload)`);
     // an undo snapshot right after loading gives the same document back
     const snap = capturePrepare();

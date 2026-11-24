@@ -15,6 +15,7 @@ import './node-app.js';
 import { loadCase, md5, canonical } from './opfirst-measure.js';
 import { TABS_PLACED_822, LEAD_IN_REMOVED_836 } from './opfirst-corpus.js'; // the cases whose files changed on purpose since the baseline (tasks 822, 836)
 import { nodeWorkerPort } from './node-paths-worker.js';
+import { pageBefore879 } from './page-879.js'; // TASK 879: the baseline's page held every joint (the file is compared with its page as then)
 import { applyShaperDoc } from '../../apps/shaper/src/shaper-doc.js';
 import { planMemberItems, pathsInputOf, pathsCtx, loopsWithPolygons, planOwnedLoops } from '../../apps/shaper/src/cut-plan.js';
 import { exportFileOf, exportFileInBackground, bitCentrePaths } from '../../apps/shaper/src/export-payload.js';
@@ -70,9 +71,9 @@ export async function runPathsCorpus(part, parts) {
         files++;
         continue;
       }
-      eq(md5(bg.svg), base.a, `${c.name}: the file made in the worker = the baseline frozen before S1 (a)`);
+      eq(md5(pageBefore879(bg.svg, state)), base.a, `${c.name}: the file made in the worker = the baseline frozen before S1 (a)`);
       const pb = await exportFileInBackground(state, { preview: true });
-      eq(md5(noOpIds(pb.svg)), base.b, `${c.name}: the preview copy made in the worker = the baseline (b)`);
+      eq(md5(pageBefore879(noOpIds(pb.svg), state)), base.b, `${c.name}: the preview copy made in the worker = the baseline (b)`);
       eq(md5(pb.bitPaths), base.c, `${c.name}: the Paths view's travel made in the worker = the baseline (c)`);
       if (files < 12) { // and, for the first cases of the part, against the main thread's own files directly
         eq(bg.svg, exportFileOf(state).svg, `${c.name}: the file made in the worker = the main thread's`);

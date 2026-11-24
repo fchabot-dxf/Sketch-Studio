@@ -3,7 +3,7 @@ import { TOOL_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { addConstraint } from '#core/constraints.js';
 import { setupNumericInput, showSingleInput, hideInput, resetLockedDimensions, isInputActive } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { applySnapConstraint } from '#core/snap-constraints.js';
+import { applySnapConstraint, onShapeSnap } from '#core/snap-constraints.js';
 import { worldToScreen } from '#ui/coords.js';
 import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, tooSmall, applyLockedSnap, snapPoint } from '#ui/input-handlers/base-tool.js';
 import { newShapeId } from '#core/shape-id.js';
@@ -89,7 +89,7 @@ export function handleCirclePointerMove(e, svg, state, w){
  */
 function applyRimSnap(state, shapeId, snap, rimPt) {
     if (circleState.lockedRadius != null || !snap || (snap.type !== 'joint' && snap.type !== 'point')) return;
-    applyLockedSnap(state, snap.id || snap.targetId, { type: 'shape', isLocked: true, targetId: shapeId, pt: rimPt });
+    applyLockedSnap(state, snap.id || snap.targetId, onShapeSnap(shapeId, rimPt));
 }
 
 export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlobal){

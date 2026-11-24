@@ -146,7 +146,7 @@ try {
   // 4. the outline chamfered top and bottom: Stepped outside, the undercut cut straight
   await openStage('prepare');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('x2-outline-chamfer-top-bottom'))})`);
-  await waitFor(`/Replaced with Body1: 1 regions/.test(document.getElementById('prepare-notice').textContent)`, 'x2 imported');
+  await waitFor(`/Replaced with Body1: 1 region/.test(document.getElementById('prepare-notice').textContent)`, 'x2 imported');
   await clickWorld(60, -40);
   const x2Menu = await menuIds();
   assert.ok(x2Menu.includes('roughing') && !x2Menu.some((id) => id.startsWith('stepped')), 'x2 outline: Roughing (TASK 792: in place of Stepped outside): ' + x2Menu);

@@ -19,7 +19,7 @@ import { ringWalk, readLevels } from '#core/stepped-cut.js'; // TASK 792: readLe
 import { setStlSource } from './stl-source.js'; // TASK 790: the replaced design's STL source goes with it (an STL import sets its own after)
 import { DEFAULT_STOCK } from '#core/relief-model.js'; // TASK 794: the stock thickness of a design that starts over, when the payload has none
 import { getSelections, setSelections, makeClearToken } from './selection-list.js'; // TASK 795: the selection list
-import { buildEntry, dropPriorSketchOnly, regionSig, payloadSig } from './selection-edit.js';
+import { buildEntry, dropPriorSketchOnly, regionSig, payloadSig, selectionCountText } from './selection-edit.js';
 import { frameOf, placePoint, placeLevels, IDENTITY } from './relief-frame.js'; // TASK 841: a part with levels keeps its own frame (its levels follow it); an inserted STL is placed
 
 const upsert = (list, entry) => (list.some((e) => e.id === entry.id) ? list.map((e) => (e.id === entry.id ? entry : e)) : [...list, entry]);
@@ -231,7 +231,7 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
       name: selectionDesignName(data.source),
       selectionId: prior.id,
       replaced: false,
-      message: `Updated ${sourceName}: ${regions.length} regions, ${chains.length} chains`,
+      message: `Updated ${sourceName}: ${selectionCountText(regions.length, chains.length)}`,
     };
   }
 
@@ -299,7 +299,7 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
     indices: intern(c.segs),
   }));
 
-  const counts = `${regions.length} regions, ${chains.length} chains`;
+  const counts = selectionCountText(regions.length, chains.length);
   const cSig = payloadSig({ ...data, assign: undefined });
   let clearTok;
   if (isSameIdUpdate && clearGroup) {
@@ -339,7 +339,7 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
         name: selectionDesignName(data.source),
         selectionId,
         replaced: false,
-        message: `Updated ${sourceName}: 0 regions, 0 chains`,
+        message: `Updated ${sourceName}: ${selectionCountText(0, 0)}`,
       };
     }
     return {

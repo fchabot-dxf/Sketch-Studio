@@ -19,7 +19,8 @@ import earcut from './plot/vendor/earcut.js';
 import { cutterTerraces, terraceCount, terracesPerItem, isShapedCutter } from './cutter-profile.js';
 
 // Declared stock (all BASE mm, like cutDepth). width/height null = derived from the design bounds + margin on every side.
-export const DEFAULT_STOCK = Object.freeze({ thickness: 19.05, width: null, height: null, margin: 12.7 });
+// TASK 879 (owner turn 3480): the margin is 6 in (152.4 mm) round the design; no field sets it, so it is always this declaration's (apps/shaper/src/stock.js setStock).
+export const DEFAULT_STOCK = Object.freeze({ thickness: 19.05, width: null, height: null, margin: 152.4 });
 
 // Unset-depth labels closer than this share one label (the labels are screen-sized, so nearer cuts would overprint).
 const MARK_MERGE_MM = 10;

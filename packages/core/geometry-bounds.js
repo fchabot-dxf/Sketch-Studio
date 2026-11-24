@@ -44,6 +44,24 @@ function cubicInteriorRoots1D(p0, p1, p2, p3) {
  * `construction: false` (TASK 725: a drawing that does not show construction geometry, the clean display profile) leaves construction shapes out.
  */
 export function computeGeometryBounds(state, { construction = true } = {}) {
+  return geometryBox(state, { construction, hiddenSketches: false, freeJoints: true });
+}
+
+/**
+ * TASK 879: THE DRAWING'S EXTENT `{ minX, minY, maxX, maxY, w, h }`, or null when nothing is drawn: every shape by the geometry it DRAWS (the
+ * same per-shape extents as computeGeometryBounds: lines by their ends, circles by centre ± r, arcs by their swept extremes, beziers by their
+ * curve extremes, any other shape by its points), never construction geometry, never a joint no shape draws (an arc's / circle's centre, the
+ * sketch origin, a free point: they are not on the board). A HIDDEN sketch counts: hiding is a view of the canvas, its shapes are still the
+ * design (cut and exported). Shaper's board with no Stock loop (this + the margin, #core/relief-model buildRelief) and the export page
+ * (#core/shaper-export boundsOf) read it.
+ */
+export function drawingExtent(state) {
+  return geometryBox(state, { construction: false, hiddenSketches: true, freeJoints: false });
+}
+
+// construction: construction shapes count; hiddenSketches: a hidden sketch's shapes count; freeJoints: a state with no shapes is boxed by its
+// joints (the origin excepted), as Fit frames a points-only sketch.
+function geometryBox(state, { construction, hiddenSketches, freeJoints }) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   let hasGeometry = false;
   const ext = (x, y) => {
@@ -56,7 +74,7 @@ export function computeGeometryBounds(state, { construction = true } = {}) {
   };
 
   const J = state && state.joints;
-  const hidden = hiddenSketchIds(state); // geometry of a hidden sketch is not on the canvas, so it is not in the box
+  const hidden = hiddenSketches ? new Set() : hiddenSketchIds(state); // geometry of a hidden sketch is not on the canvas, so it is not in the box (the drawing's extent keeps it)
   const shapes = ((state && state.shapes) || []).filter((s) => !(s && hidden.has(sketchOf(s))) && !(s && !construction && s.isConstruction));
 
   if (state && Array.isArray(state.shapes) && state.shapes.length > 0 && J) {
@@ -123,7 +141,7 @@ export function computeGeometryBounds(state, { construction = true } = {}) {
         }
       }
     }
-  } else if (J && typeof J.entries === 'function') {
+  } else if (freeJoints && J && typeof J.entries === 'function') {
     for (const [id, j] of J.entries()) {
       if (j && id !== 'j_origin' && !hidden.has(sketchOf(j)) && Number.isFinite(j.x) && Number.isFinite(j.y)) {
         ext(j.x, j.y);

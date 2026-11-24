@@ -10,6 +10,8 @@
 //     that read those samples were re-written BY NAME for the 6 drawings with arcs whose facets changed (loopPolys of owner-trapezoid.document.json,
 //     angle-dimension/owner-trapezoid-angle.json, drag/owner-two-arcs-575.json, legacy-angles#1 owner-trapezoid-angle, dxf/fusion-sketch4.dxf,
 //     fusion/real-solid-plate-711.json; that last one's shaperOutside, download and relief too); every drawing without an arc is unchanged (WORK-LOG TURN 847).
+//     TASK 879: the Shaper download facets are hashed with their page as before 879 (tests/helpers/page-879.js pageBefore879: the digest's page held every joint;
+//     it holds the drawing's extent now): every element is still compared byte for byte (tests/board-extent-879-node checks the new page).
 //  2. findLoops: a bezier is an EDGE; the angular sort at a node uses each curve's TANGENT there, the bounded test the curve's real area: line + bezier,
 //     bezier + bezier, arc + its chord, a lens of two arcs, bezier + line two-edge loops, a bezier outline with a hole, nesting; areas and orientation.
 //  3. ONE geometry per curve kind (#core/curve-kinds.js): containment / interior point on curved loops, the export's cubic `C` (round trip within 1e-6),
@@ -36,6 +38,7 @@ import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
+import { pageBefore879 } from './helpers/page-879.js'; // TASK 879
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
@@ -57,13 +60,14 @@ const stateOf = (g) => ({
 const rec = (cutType, extra = {}) => ({ cutType, cutDepth: 6, cutOffset: 0, toolDia: 3.175, cutterShape: 'endmill', cutterAngle: 90, ...extra });
 function digestOf(st, { heavy = false } = {}) {
   const loops = findLoops(st), chains = findOpenChains(st, loops);
+  const page = (svg) => pageBefore879(svg, st); // TASK 879
   const byId = new Map(st.shapes.map((s) => [s.id, s]));
   const out = {
     loops: hash(loops), chains: hash(chains.map((c) => c.id)),
     loopPaths: hash(loops.map((l) => [loopToPathD(l, st), loopToPathD(l, st, { reverse: true })])),
     loopPolys: hash(loops.map((l) => loopPolygon(l, st, byId))),
     chainPaths: hash(chains.map((c) => chainToPathD(c, st))),
-    shaperOutside: hash(shaperSvgOf(st, [...loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('exterior') })), ...chains.map((c) => ({ target: { kind: 'chain', id: c.id }, rec: rec('online') }))])),
+    shaperOutside: hash(page(shaperSvgOf(st, [...loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('exterior') })), ...chains.map((c) => ({ target: { kind: 'chain', id: c.id }, rec: rec('online') }))]))),
     studioSvg: hash(buildSVG(st) || ''), studioDxf: hash(buildDXF(st) || ''),
   };
   if (heavy) {
@@ -83,8 +87,8 @@ function digestOf(st, { heavy = false } = {}) {
       }
       return kept.join('\n');
     };
-    out.shaperSpiral = hash(stripStartMarks(shaperSvgOf(st, loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('pocket', { clearing: 'linked', toolDia: 25.4 }) })))));
-    out.shaperTabs = hash(shaperSvgOf(st, loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('exterior', { holdPart: 'tabs', holdThickness: 1, tabWidth: 6, tabCount: 'auto' }) }))));
+    out.shaperSpiral = hash(stripStartMarks(page(shaperSvgOf(st, loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('pocket', { clearing: 'linked', toolDia: 25.4 }) }))))));
+    out.shaperTabs = hash(page(shaperSvgOf(st, loops.map((l) => ({ target: { kind: 'loop', id: l.id }, rec: rec('exterior', { holdPart: 'tabs', holdThickness: 1, tabWidth: 6, tabCount: 'auto' }) })))));
   }
   return out;
 }
@@ -114,7 +118,7 @@ for (const d of docs) digest[d.name] = { bezier: hasBezier(d.st), ...digestOf(d.
       importFusionSelection(fs.readFileSync(fx(f), 'utf8'), { controller: app.controller, prepare: app.prepare });
       const st = app.state;
       const relief = planReliefItems(st).map((i) => [i.key, i.sig, i.cutType, i.cutDepth, i.footprints]);
-      digest['fusion/' + f] = { bezier: hasBezier(st), ...digestOf(st), plan: hash([...V2_PLAN]), download: hash(shaperSvgOf(st, planEntries())), relief: hash(relief) };
+      digest['fusion/' + f] = { bezier: hasBezier(st), ...digestOf(st), plan: hash([...V2_PLAN]), download: hash(pageBefore879(shaperSvgOf(st, planEntries()), st)), relief: hash(relief) };
     }
   } finally { V2_PLAN.clear(); V2_PLAN.setOrder([]); await app.close(); }
 }

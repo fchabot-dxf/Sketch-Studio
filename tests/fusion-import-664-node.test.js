@@ -83,7 +83,7 @@ const realSketchMessage = {
     const res = importFusionSelection(realSketchMessage, { controller: app.controller, prepare: app.prepare });
 
     eq(res.ok, true, 'real sketch import succeeds');
-    eq(res.message, 'Added Sketch1: 2 regions, 2 chains', 'notice message matches spec');
+    eq(res.message, 'Added Sketch1: 2 regions, 2 paths', 'notice message matches spec');
     eq(app.state.sketches.length, sketchesBefore + 1, 'exactly 1 new sketch created');
     eq(res.sketch.name, 'Sketch1', 'sketch named after source.name');
     eq(app.state.activeSketchId, res.sketch.id, 'new sketch is active');
@@ -185,7 +185,7 @@ const realSketchMessage = {
     };
 
     bridge.handle(FUSION_ACTIONS.SELECTION_DATA, JSON.stringify(arcPayload));
-    eq(notices.at(-1), 'Added ArcPlate: 1 regions, 0 chains (1 spline flattened to lines)', 'bridge surfaces warnings in notice');
+    eq(notices.at(-1), 'Added ArcPlate: 1 region (1 spline flattened to lines)', 'bridge surfaces warnings in notice');
 
     const arcShape = app.state.shapes.find((s) => s.type === 'arc');
     ok(arcShape, 'real arc shape emitted (not flattened)');
@@ -295,7 +295,7 @@ const realSketchMessage = {
     const r2 = importFusionSelection(msg2, { controller: app.controller, prepare: app.prepare });
     eq(r1.sketch.name, 'FirstPart', 'first import made FirstPart');
     eq(r2.sketch.name, 'SecondPart', 'second import made SecondPart');
-    eq(r2.message, 'Replaced with SecondPart: 1 regions, 0 chains', 'the second notice says Replaced');
+    eq(r2.message, 'Replaced with SecondPart: 1 region', 'the second notice says Replaced');
     eq(app.state.sketches.map((s) => s.name).join('|'), 'Sketch 1|SecondPart', 'only SecondPart after the 2nd Add selection (FirstPart replaced)');
     eq(app.state.shapes.length, 4, 'only the second selection shapes');
     eq(V2_PLAN.size, 1, 'only the second selection cut plan entry');

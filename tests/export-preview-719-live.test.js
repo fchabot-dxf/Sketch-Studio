@@ -188,7 +188,7 @@ try {
   };
   await openStage('prepare');
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(fixture('sa7-slope/x2-outline-chamfer-top-bottom'))})`);
-  await waitFor(`/Replaced with Body1: 1 regions/.test(document.getElementById('prepare-notice').textContent)`, 'x2 imported');
+  await waitFor(`/Replaced with Body1: 1 region/.test(document.getElementById('prepare-notice').textContent)`, 'x2 imported');
   await clickWorld(60, -40);
   await setPlan('roughing');
   // the card remembers the last Adaptive / Resolution from the R3 steps above (the 17 terraces of the first run): set the record to Step depth 1 mm, Adaptive off

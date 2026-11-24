@@ -8,6 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
+import { showExportSettings } from './helpers/export-actions.js'; // TASK 880: the Export settings are the footer's
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/730');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -138,7 +140,8 @@ try {
 
     // Review: the stock thickness
     await openMode('review');
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'review built');
+    await waitFor(REVIEW_BUILT, 'review built');
+    await showExportSettings({ evalJs, waitFor }, clickEl); // TASK 880: the thickness is the footer's (a fold card where the footer row is short)
     const t0 = Number(await val('#review-stock-thickness'));
     const sizesR = await evalJs(`[...document.querySelectorAll('#review-stock .cut-step')].map((b) => { const r = b.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })`);
     console.log(label + ' stock targets: ' + JSON.stringify(sizesR));
@@ -149,7 +152,7 @@ try {
     await clickEl('#review-stock .cut-step[data-d="-1"]'); await clickEl('#review-stock .cut-step[data-d="-1"]');
     near(Number(await val('#review-stock-thickness')), Math.floor(t0 + 1e-9) - 1, label + ' stock - 1 mm twice');
     await shot(`review-stock-${label}.png`, '#review-stock');
-    const rfit = await evalJs(`(() => { const p = document.getElementById('review-side'); return { sw: p.scrollWidth, cw: p.clientWidth, docScroll: document.documentElement.scrollWidth, vw: innerWidth }; })()`);
+    const rfit = await evalJs(`(() => { const p = document.getElementById('review-settings'); return { sw: p.scrollWidth, cw: p.clientWidth, docScroll: document.documentElement.scrollWidth, vw: innerWidth }; })()`);
     assert.ok(rfit.docScroll <= rfit.vw, label + ' review does not scroll the page sideways: ' + JSON.stringify(rfit));
   };
 

@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const BEFORE = process.env.TASK720_BEFORE === '1';
 const EVIDENCE_DIR = path.resolve(BEFORE ? '.evidence/720/before' : '.evidence/720');
@@ -60,7 +61,7 @@ const openStage = async (id) => {
 };
 const download = async () => {
   for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
-  await clickEl('#btn-generate-svg');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg');
   let file = null;
   for (let i = 0; i < 100 && !file; i++) { const f = fs.readdirSync(dlDir).find((n) => n.endsWith('.svg')); if (f) file = path.join(dlDir, f); else await sleep(100); }
   assert.ok(file, 'the export downloaded');

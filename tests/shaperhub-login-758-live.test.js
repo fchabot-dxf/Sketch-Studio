@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/758');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -127,7 +128,7 @@ const planRectangle = async (label) => {
 const fields = () => evalJs(`({ email: document.getElementById('sync-email').value, password: document.getElementById('sync-password').value })`);
 const openSignIn = async (label) => {
   await openStage('review');
-  await clickEl('#btn-sync-shaper');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-sync-shaper');
   await waitFor(`document.getElementById('shaper-sync-modal').open`, label + ': the sign-in dialog opens');
   await sleep(200);
 };

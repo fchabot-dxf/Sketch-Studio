@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { REVIEW_BUILT, REVIEW_BUILD } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 await (async () => {
   const cdp = await launchBrowser({
@@ -61,11 +62,13 @@ await (async () => {
       plan.V2_PLAN.set(plan.keyOf('loop', B.id), { cutType: 'pocket', cutDepth: 8, cutOffset: 0, toolDia: 6.35 });
     })()`);
     await openMode('review');
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'the Review model info', 10000);
+    await waitFor(REVIEW_BUILT, 'the Review model info', 10000);
     const infoText = await evalJs(`document.getElementById('review-info').textContent`);
     console.log('review info:', infoText);
-    assert.match(infoText, /\d+ triangles/, 'the Review built a model: ' + infoText);
-    const tri = Number(/(\d+) triangles/.exec(infoText)[1]), ms = Number(/built in (\d+) ms/.exec(infoText)[1]);
+    // TASK 880: the build's numbers are not on screen (the debug log only): the view's lastBuild says them
+    const build = await evalJs(REVIEW_BUILD);
+    assert.ok(!/triangles|built in/.test(infoText), 'no build numbers on screen: ' + infoText);
+    const tri = build.triangles, ms = Math.round(build.ms);
     assert.ok(tri > 100 && tri < 100000, 'triangle count within budget: ' + tri);
     assert.ok(/depth unset shown cut through/.test(infoText), 'the unset Inside is flagged: ' + infoText);
 

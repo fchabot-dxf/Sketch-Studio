@@ -19,6 +19,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser, startServer, sleep, sendRealKey } from './helpers/cdp-browser.js';
 import worker from '../analytics/src/index.js';
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const require = createRequire(import.meta.url);
 const { buildSite } = require('../scripts/build-site.cjs');
@@ -151,7 +152,7 @@ const importSvg = async () => {
 };
 const generate = async () => {
   for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
-  await press('#btn-generate-svg');
+  await pressExportAction({ evalJs, waitFor }, press, 'btn-generate-svg'); // TASK 880: the header's action (the drawer's on a phone)
   await until(() => fs.readdirSync(dlDir).some((n) => n.endsWith('.svg')), 'the Shaper SVG download');
   await sleep(200);
 };
@@ -161,8 +162,9 @@ async function shaperToExport(url) {
   await waitFor(`import('/src/cut-plan.js').then((m) => m.planEntries().length > 0)`, 'the imported cut in the plan');
   await openStage('review');
 }
-// every element of the Export panel's column except the card's slot and the elements that CONTAIN it (the panel grows to hold the card): where it is (so "nothing moved" is a comparison)
-const columnSnapshot = () => evalJs(`(() => { const col = document.querySelector('#simexport-panel').closest('aside') || document.querySelector('#simexport-panel').parentElement; const out = [];
+// every element of the Export view's cards column (TASK 880: over the view, no side panel) except the card's slot and the elements that CONTAIN it (the column grows to
+// hold the card): where it is (so "nothing moved" is a comparison)
+const columnSnapshot = () => evalJs(`(() => { const col = document.getElementById('review-cards'); const out = [];
   for (const e of col.querySelectorAll('*')) { if (e.closest('[data-feedback-slot]') || e.querySelector('[data-feedback-slot]')) continue; const r = e.getBoundingClientRect(); out.push([e.id || e.className || e.tagName, Math.round(r.left * 10) / 10, Math.round(r.top * 10) / 10, Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10]); }
   return JSON.stringify(out); })()`);
 
@@ -236,10 +238,10 @@ try {
   await generate();
   assert.strictEqual(await cards(), 0, 'C: the FIRST export shows no card');
   const before = await columnSnapshot();
-  const panelBefore = await rect('#simexport-panel');
+  const panelBefore = await rect('#review-cards');
   await generate();
   await waitFor(`document.querySelectorAll('.sk-fb-card').length === 1`, 'C: the card after the second export');
-  assert.strictEqual(await evalJs(`!!document.querySelector('#simexport-panel [data-feedback-slot] .sk-fb-card')`), true, 'C: the card is in the Export card\'s own slot');
+  assert.strictEqual(await evalJs(`!!document.querySelector('#review-cards [data-feedback-slot] .sk-fb-card')`), true, 'C: the card is in the Export view\'s own slot');
   assert.strictEqual(await evalJs(`document.querySelector('[data-feedback]') === null`), true, 'C: it is a card, not a window: nothing blocks the work');
   const after = await columnSnapshot();
   assert.strictEqual(after, before, 'C: nothing in the Export column moved or resized when the card appeared (0 px)');

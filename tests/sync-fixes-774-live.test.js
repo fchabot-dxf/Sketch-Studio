@@ -14,6 +14,7 @@ import { launchBrowser, sendRealKey, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { createFakeShaperApi, FAKE_LOGIN, FAKE_TOKEN } from './shaperhub-fake-api.js';
 import { handleShaperUpload } from '../packages/core/shaper-cloud.js';
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVID = process.env.EVIDENCE_DIR ? path.resolve(process.env.EVIDENCE_DIR) : path.resolve('.evidence/774');
 fs.mkdirSync(EVID, { recursive: true });
@@ -84,7 +85,7 @@ try {
     cp.V2_PLAN.set('loop:' + lf.findLoops(st)[0].id, { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 }); })()`);
   await clickEl('.sk-header-tab[data-tab="review"]');
   await waitFor(`!document.getElementById('view-review').hidden`, 'Export step');
-  await clickEl('#btn-sync-shaper');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-sync-shaper');
   await waitFor(`document.getElementById('shaper-sync-modal').open`, 'Sync dialog open');
 
   // ── 4f (a): a refused password shows the hint ──
@@ -175,7 +176,7 @@ try {
   await waitFor(`!document.getElementById('shaper-sync-modal').open`, 'dialog closes after the success');
 
   // ── 4f (b): an expired session: no wrong-password hint ──
-  await clickEl('#btn-sync-shaper');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-sync-shaper');
   await waitFor(`document.getElementById('shaper-sync-modal').open && !document.getElementById('sync-session').hidden`, 'session kept in page memory');
   await waitFor(`!document.getElementById('sync-btn-refresh').disabled && !document.getElementById('sync-modal-status').classList.contains('is-loading')`, 'reopen listing done');
   api.rotateToken('rotated-jwt-774');

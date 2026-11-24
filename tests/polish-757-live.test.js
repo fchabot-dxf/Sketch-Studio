@@ -17,6 +17,7 @@ import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { drawTray, selectWidths } from './polish-757-tray.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/757/live');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -147,10 +148,10 @@ try {
 
   // ── 5. desktop: the 3D info is not folded ──
   await openMode('review');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'the 3D part built', 60000);
+  await waitFor(REVIEW_BUILT, 'the 3D part built', 60000);
   const info = await evalJs(`({ head: !!document.querySelector('#review-info .review-info-head'), lines: document.querySelectorAll('#review-info > div').length })`);
   console.log('5 desktop info: ' + JSON.stringify(info));
-  assert.ok(!info.head && info.lines >= 3, '5: desktop: every info line shown, no fold');
+  assert.ok(!info.head && info.lines >= 2, '5: desktop: every info line shown, no fold'); // TASK 880: the build numbers line is gone (2 notes here)
 
   // ── 1. Export 2D: the Stock guide behind the cuts ──
   await clickEl('#review-view-2d');

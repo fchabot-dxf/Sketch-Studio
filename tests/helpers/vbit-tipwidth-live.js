@@ -11,6 +11,7 @@ import { launchBrowser, sleep } from './cdp-browser.js';
 import { resetBufferLive } from './reset-buffer.js';
 import { installFakeDriveSession } from './fake-drive-session.js';
 import { TOOL_TABLE_KEY } from '../../apps/shaper/src/tool-table.js';
+import { REVIEW_BUILT } from './review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SHOT_DIR = process.env.EVIDENCE_DIR || path.join(REPO_ROOT, '.evidence', '852d');
@@ -235,7 +236,7 @@ export async function runVbitTipwidthLive({ phone = false } = {}) {
     // Check 3D Review for programmed ball-nose pocket (desktop captures zoomed 3D close-up)
     await press('.cut-ok', 'commit ball nose pocket');
     await openStage('review', 'open Export 3D for ball nose pocket');
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, '3D built for ball nose pocket', 25000);
+    await waitFor(REVIEW_BUILT, '3D built for ball nose pocket', 25000);
     await press('#review-reset', 'reset 3D view');
     await sleep(400);
     if (!phone) {
@@ -268,7 +269,7 @@ export async function runVbitTipwidthLive({ phone = false } = {}) {
     await press('.cut-ok', 'commit bowl pocket');
     if (!phone) {
       await openStage('review', 'open Export 3D for bowl pocket');
-      await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, '3D built for bowl pocket', 25000);
+      await waitFor(REVIEW_BUILT, '3D built for bowl pocket', 25000);
       await press('#review-reset', 'reset 3D view');
       await sleep(400);
       const rc = await evalJs(`(() => { const r = document.querySelector('#review-canvas-host').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);

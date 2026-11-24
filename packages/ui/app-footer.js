@@ -6,7 +6,8 @@
 //   right: Recenter (every host whose Design surface the footer is told about; Construction moved to .sk-canvas-corner in design-browser.js in TASK 619)
 //          then Settings (TASK 726, the gear: the host's Style panel, the same one the drawer's Style item toggles), then (TASK 776, where the host has the project
 //          layer) THE Save button and THE account avatar at the far right end (footer-slot.js; sidebar-projects.js puts them there)
-// mountAppFooter({ router, view, footer, parameters, settings }) -> { el, refresh, destroy }
+//   middle (TASK 880): a stage's own CONTROLS (a host DECLARES them: `controls`), between the two groups; shown while their stage shows (<html data-sk-stage>, app-chrome.js)
+// mountAppFooter({ router, view, footer, parameters, settings, controls }) -> { el, refresh, destroy }
 //   router: the host's history router (createHistoryRouter).
 //   view(): { svg, state } of the Design surface that shows now, or null while the stage has none (Pen Plotter's Toolpath, ...):
 //     Delete / Clear sketch show only while a sketch (`v.state`) is shown; Recenter shows whenever `v` is truthy. Recenter is pan-zoom.js fitViewToExtents.
@@ -14,6 +15,9 @@
 //   parameters (default true): the Parameters button + its window (#ui/parameters-window.js, opened over `view().svg`, undo / redo through `router`);
 //     false = a declared opt-out (Trace: no project file, decision O14). ONE declaration here for every host.
 //   settings (default null): the host's style panel (createStylePanel(), already rendered); given, the footer shows the gear that toggles it (aria-pressed follows the panel).
+//   controls (default []): TASK 880: [{ el, stage, label }]: the host's own element (its markup, ids and wiring stay the host's) shown in the footer while `stage` shows.
+//     Where the row is short (FOOTER_FOLD_QUERY) they fold into ONE footer button (`label` its name) that opens them in a small card above the footer (closed by
+//     a press outside it, Esc, or a stage change).
 //   footer: an element the host already has (SketchStudio's status bar): the groups go into it. Without one a footer is created at the page's bottom
 //     (position fixed; body gets class sk-has-footer and the height is --sk-footer-h, which a host with absolutely placed views subtracts).
 import { mountHistoryButtons } from '#ui/history-control.js';
@@ -29,6 +33,13 @@ import { mountTooltip } from '#ui/hint.js';
 import { CHROME_HINTS } from '#ui/design-hints.js';
 import { isTextEditingTarget } from '#ui/clipboard.js';
 import { FOOTER_END_CLASS, FOOTER_PHONE_MIN_W } from '#ui/footer-slot.js'; // TASK 776: the right end also holds THE Save button and THE account avatar (the project layer puts them there)
+import { SHORT_VIEWPORT_QUERY } from '#ui/short-viewport.js';
+import { listenOutsidePress } from '#ui/outside-press.js';
+
+/** TASK 880: where a stage's footer controls fold into one button (a phone, a narrow window, a phone in landscape where the footer floats in the canvas corner). */
+export const FOOTER_FOLD_QUERY = `(max-width: 800px), ${SHORT_VIEWPORT_QUERY}`;
+// the fold button's artwork: three sliders
+const SLIDERS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>';
 
 let stylesInjected = false;
 function injectStyles() {
@@ -70,6 +81,17 @@ function injectStyles() {
 .sk-footer-btn.ink { color: var(--sk-footer-ink); }
 .sk-footer-btn[aria-pressed="true"], .sk-footer-btn[aria-expanded="true"] { background: var(--sk-header-hover, rgba(0,0,0,0.08)); box-shadow: inset 0 2px 4px rgba(0,0,0,0.15); } /* TASK 677: the Parameters window is open */
 .sk-footer-end { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; flex: 0 0 auto; }
+/* TASK 880: a stage's controls, centred between the two groups; FOLDED (data-folded, set from FOOTER_FOLD_QUERY: a host styles its controls' folded layout on it)
+   into one button whose card opens above the footer */
+.sk-footer-controls { position: relative; display: inline-flex; align-items: center; margin-left: auto; flex: 0 1 auto; min-width: 0; }
+.sk-footer-controls[hidden], .sk-footer-controls-box > [hidden] { display: none; }
+.sk-footer-controls-box { display: inline-flex; align-items: center; gap: 16px; }
+.sk-footer-controls > .sk-footer-controls-toggle { display: none; }
+.sk-footer-controls[data-folded="true"] > .sk-footer-controls-toggle { display: inline-flex; }
+.sk-footer-controls[data-folded="true"] > .sk-footer-controls-box { display: none; position: fixed; left: 8px; bottom: calc(var(--sk-footer-h) + var(--sk-footer-clear, 0px) + 8px); max-width: calc(100vw - 16px); box-sizing: border-box; z-index: 31;
+  flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; border-radius: 10px; pointer-events: auto;
+  background: var(--sk-header-bg, #f1f5f9); color: var(--sk-header-fg, #334155); border: 1px solid var(--sk-header-sep, #cbd5e1); box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
+.sk-footer-controls[data-folded="true"][data-open="true"] > .sk-footer-controls-box { display: flex; }
 /* TASK 776: THE Save button and THE account avatar in the footer's end: the footer's own button size (32 px, 44 px on touch) */
 .sk-footer-end > .sk-save, .sk-footer-end > .sk-account { width: var(--sk-footer-btn-w); height: var(--sk-footer-btn-h); }
 @media (pointer: coarse) and (max-width: 480px) { :root { --sk-footer-btn-w: max(${FOOTER_PHONE_MIN_W}px, min(44px, calc((100vw - 42px) / 9))); --sk-footer-danger-gap: 4px; } } /* nine buttons (undo, redo, delete, clear, fx, recenter, settings, save, account) on one row of a phone: 44 px high, as wide as the row allows (FOOTER_PHONE_MIN_W at 360, 44 px from 440) */
@@ -145,7 +167,7 @@ function askConfirm(message, { okLabel = 'OK', returnFocusTo = null } = {}) {
   });
 }
 
-export function mountAppFooter({ router, view = () => null, footer = null, parameters = true, settings = null }) {
+export function mountAppFooter({ router, view = () => null, footer = null, parameters = true, settings = null, controls = [] }) {
   injectStyles();
   ensureIconSymbols(['icon-recenter', 'icon-circle-x', 'icon-trash']);
   let el = footer;
@@ -231,6 +253,44 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
       paramsBtn.click();
     };
     document.addEventListener('keydown', onParamsKey);
+  }
+
+  // TASK 880: the stages' declared controls (the host's elements, moved in), between the groups; one fold button opens them where the row is short
+  let ctl = null;
+  if (controls.length) {
+    const slot = document.createElement('span'); slot.className = 'sk-footer-controls'; slot.hidden = true;
+    const toggle = mk(slot, 'btn-footer-controls', controls[0].label || 'Settings', 'icon-recenter', 'ink sk-footer-controls-toggle');
+    toggle.innerHTML = SLIDERS_ICON;
+    toggle.setAttribute('aria-expanded', 'false');
+    const box = document.createElement('span'); box.className = 'sk-footer-controls-box';
+    for (const c of controls) box.appendChild(c.el);
+    slot.appendChild(box);
+    el.insertBefore(slot, end);
+    let stopOutside = null;
+    const setOpen = (open) => {
+      slot.dataset.open = String(open); toggle.setAttribute('aria-expanded', String(open));
+      if (stopOutside) { stopOutside(); stopOutside = null; }
+      if (open) stopOutside = listenOutsidePress((e) => { if (!slot.contains(e.target)) setOpen(false); });
+    };
+    toggle.addEventListener('click', () => setOpen(slot.dataset.open !== 'true'));
+    const onKey = (e) => { if (e.key === 'Escape' && slot.dataset.open === 'true') { setOpen(false); toggle.focus(); } };
+    document.addEventListener('keydown', onKey);
+    const show = () => { // the shown stage is named on <html data-sk-stage> (app-chrome.js markStage)
+      const stage = document.documentElement.dataset.skStage;
+      let any = null;
+      for (const c of controls) { c.el.hidden = c.stage !== stage; if (!c.el.hidden && !any) any = c; }
+      slot.hidden = !any;
+      if (any) { toggle.title = any.label || 'Settings'; toggle.setAttribute('aria-label', any.label || 'Settings'); }
+      setOpen(false);
+    };
+    const watch = new MutationObserver(show);
+    watch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-sk-stage'] });
+    const foldMq = window.matchMedia(FOOTER_FOLD_QUERY);
+    const fold = () => { slot.dataset.folded = String(foldMq.matches); setOpen(false); };
+    foldMq.addEventListener('change', fold);
+    fold();
+    show();
+    ctl = { destroy: () => { watch.disconnect(); foldMq.removeEventListener('change', fold); document.removeEventListener('keydown', onKey); if (stopOutside) stopOutside(); slot.remove(); } };
   }
 
   const recenterBtn = mk(end, 'btn-recenter-view', 'Recenter view', 'icon-recenter');
@@ -327,6 +387,7 @@ export function mountAppFooter({ router, view = () => null, footer = null, param
         for (const ev of docEvs) document.removeEventListener(ev, scheduleRefresh, false);
       }
       if (stopSettingsWatch) stopSettingsWatch();
+      if (ctl) ctl.destroy();
       if (onParamsKey) document.removeEventListener('keydown', onParamsKey);
       if (offParamsTitle) offParamsTitle();
       tips.forEach((t) => t.destroy());

@@ -7,6 +7,7 @@ import assert from 'node:assert';
 import path from 'node:path';
 import { openPocketPage } from './helpers/pocket-live.js';
 import { sleep } from './helpers/cdp-browser.js';
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 const t = await openPocketPage({
   tag: '787-review',
@@ -50,7 +51,7 @@ try {
   })()`);
   await openMode('review');
   await clickEl('#review-view-3d');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'Export 3D built');
+  await waitFor(REVIEW_BUILT, 'Export 3D built');
   await sleep(500);
   const errs = JSON.parse(await evalJs(`document.documentElement.dataset.t787errs`));
   eq(errs, [], 'no page error opening Export 3D');

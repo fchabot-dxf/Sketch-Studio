@@ -15,6 +15,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import * as M from './helpers/stl-mesh.js';
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 const EVIDENCE_DIR = path.resolve('.evidence/823');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -140,7 +141,7 @@ try {
     await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(realSolid)})`);
     await waitFor(`/8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the real solid imported');
     for (let i = 0; i < 5 && await evalJs(`document.getElementById('view-review').hidden`); i++) { await clickEl('.sk-header-tab[data-tab="review"]'); await sleep(300); }
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'the 3D build', 15000);
+    await waitFor(REVIEW_BUILT, 'the 3D build', 15000);
     await clickEl('#review-reset'); await sleep(400);
   };
   await resetBufferLive(cdp);

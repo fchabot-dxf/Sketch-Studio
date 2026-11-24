@@ -21,6 +21,8 @@ import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import * as M from './helpers/stl-mesh.js';
 import { openOpLive, okLive, previewLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed; TASK 817: its Preview
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVIDENCE_DIR = path.resolve('.evidence/792');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -131,7 +133,7 @@ const ops = () => evalJs(`[...document.querySelectorAll('#prepare-ops .ops-tool,
 const review = async (what) => {
   const t0 = Date.now();
   await openStage('review');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, what + ': the Review built', 180000);
+  await waitFor(REVIEW_BUILT, what + ': the Review built', 180000);
   const ms = Date.now() - t0;
   const info = await evalJs(`document.getElementById('review-info').textContent`);
   console.log(`${what}: Review ${ms} ms: ${info.slice(0, 300)}`);
@@ -245,7 +247,7 @@ try {
   await phase('desktop');
   // Generate Shaper SVG: the roughing pockets (1/4 in) and the contour passes (1/8 in)
   const t0 = Date.now();
-  await clickEl('#btn-generate-svg');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg');
   let svgFile = null;
   for (let i = 0; i < 600 && !svgFile; i++) { const f = fs.readdirSync(dlDir).find((n) => n.endsWith('.svg')); if (f) svgFile = path.join(dlDir, f); else await sleep(100); }
   assert.ok(svgFile, 'the export downloaded');

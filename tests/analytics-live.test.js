@@ -19,6 +19,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { launchBrowser, startServer, sleep } from './helpers/cdp-browser.js';
 import worker from '../analytics/src/index.js';
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const require = createRequire(import.meta.url);
 const { buildSite } = require('../scripts/build-site.cjs');
@@ -81,7 +82,7 @@ const clickEl = async (sel) => {
 const openStage = async (id) => { await clickEl(`.sk-header-tab[data-tab="${id}"]`); await waitFor(`!document.getElementById('view-${id}').hidden`, `the ${id} stage`); };
 const generate = async () => {
   for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
-  await clickEl('#btn-generate-svg');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg');
   await until(() => fs.readdirSync(dlDir).some((n) => n.endsWith('.svg')), 'the Shaper SVG download');
 };
 const events = (from) => points.slice(from).map((p) => `${p.blobs[0]} ${p.blobs[1] || '-'} ${p.blobs[3]} ${p.blobs[5]} dev=${p.blobs[8]}`);

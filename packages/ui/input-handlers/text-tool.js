@@ -150,8 +150,7 @@ export function convertSelectedText(state, notify = showNotification) {
   if (!t) { notify('Select one text to convert it to shapes', 'warning'); return false; }
   if (session && session.text === t) commitTextEditor();
   state.saveState(TEXT_UNDO_LABELS.convert);
-  const ids = convertTextToShapes(state, t);
-  notify(`Converted to ${ids.length} curve${ids.length === 1 ? '' : 's'}: it is no longer text`, 'success');
+  convertTextToShapes(state, t); // TASK 878: the curves show: no message
   return true;
 }
 

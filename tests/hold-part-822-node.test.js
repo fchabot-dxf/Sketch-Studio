@@ -73,7 +73,8 @@ const exportOf = (st, entries) => exportShaperSVG({ state: st, entries, encoding
   // the note (inch document)
   SettingsManager.set('DOC_UNIT', 'in'); SettingsManager.set('LENGTH_PRECISION', null);
   eq(holdNoteItems(OWNER, hold).map((i) => i.text), ['Inside: 5 tabs, 0.063 in wide, 0.063 in thick: 1 pass at 0.093 in + 5 gaps at 0.156 in', 'Placed where a gap strip fits: part of the outline is too narrow for one', 'Gaps: cut the side against the part; the return leg is optional'], 'the note: the honest fact');
-  ok(holdNoteItems(OWNER, hold)[1].warn, 'in the warning style (TASK 825: a line of its own, listed first on the card)');
+  ok(!holdNoteItems(OWNER, hold)[1].warn, 'TASK 878: every tab placed: a plain card line, not in the warning style (nothing is wrong)');
+  ok(holdNoteItems(OWNER, holdOf(cutsOf(st, 'big', { ...OWNER, tabCount: 20 })))[1].warn, 'fewer tabs than asked stays in the warning style');
   const many = holdOf(cutsOf(st, 'big', { ...OWNER, tabCount: 20 }));
   eq([many.role, many.requested, many.count], ['pass', 20, 8], '20 asked: the 8 that fit on the circle');
   eq(holdNoteItems(OWNER, many)[1].text, 'Only 8 of 20 tabs fit: part of the outline is too narrow for a gap strip', 'the note: only 8 of 20 tabs fit');

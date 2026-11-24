@@ -15,9 +15,9 @@ export const RIBBON_HINTS = Object.freeze({
   text: 'Click where the text starts (its baseline), type it, then choose the font, size and spacing. Double-click a text to edit it.',
   trim: 'Click a line or curve segment to cut it back to the nearest intersection.',
   break: 'Click a line or curve where you want to split it into two connected pieces.',
-  closePath: 'Join the two open ends of an outline into a closed shape.',
+  closePath: 'Click an open outline (its open ends are marked) to join its two free ends into a closed shape; outlines selected first are closed at once.', // TASK 878: was the tool's start message
   fillet: 'Click two connected lines or their shared corner to round the corner with an arc.',
-  mirror: 'Pick shapes to reflect, pick the mirror line, then press Enter to apply.',
+  mirror: 'Click the objects to mirror (a selection made first counts) and press Enter, then pick the mirror line (a line, a construction line or the X / Y axis) and press Enter again (Done on touch).', // TASK 878: was the step messages
   circularPattern: 'Repeat selected shapes around a centre point at equal angles.',
   rectPattern: 'Repeat selected shapes in rows and columns along chosen directions.',
   offset: 'Copy an outline or open chain parallel to itself at a chosen distance.',

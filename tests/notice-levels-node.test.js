@@ -1,7 +1,7 @@
-// tests/notice-levels-node.test.js - TASK 612: a notice carries an explicit level and the toast paints that level. The shared Style panel's
-// "Save as preset..." / delete / reset say 'success' (they showed as red error toasts: the toast defaulted to 'error'); the default level
-// is 'info'; a real error still paints red. The real createStylePanel + the real showNotification in a happy-dom page (the page's wiring is
-// onNotify: showNotification), driven by clicks. The toast's level is its data-level; its colour is the level's declared background.
+// tests/notice-levels-node.test.js - TASK 612: a notice carries an explicit level and the toast paints that level: the default level is 'info'; a real
+// error still paints red. TASK 878 (owner: a notice only when something is wrong): the shared Style panel's "Save as preset..." / delete / reset
+// say NOTHING (they showed a success toast; the panel itself shows the result) and the panel has no toast hook any more. The real createStylePanel
+// + the real showNotification in a happy-dom page, driven by clicks. The toast's level is its data-level; its colour is the level's declared background.
 import assert from 'node:assert';
 import { Window } from 'happy-dom';
 
@@ -20,30 +20,29 @@ const read = (t) => ({ level: t.getAttribute('data-level'), bg: t.style.backgrou
 const GREEN = '#22c55e', BLUE = '#3b82f6', RED = '#ef4444';
 const same = (a, b) => String(a).replace(/\s/g, '').toLowerCase() === b || String(a).replace(/\s/g, '') === 'rgb(' + [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16)).join(',') + ')';
 
-const panel = createStylePanel({ hostId: 'notice-test', onNotify: showNotification });
+const panel = createStylePanel({ hostId: 'notice-test' });
 panel.render(document.body); panel.open();
 const P = document.querySelector('.sk-style-panel');
 const click = (el) => { assert(el, 'element missing'); el.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); };
 win.addEventListener('error', (e) => console.log('PAGE ERROR', e.message));
 const settle = () => new Promise((r) => setTimeout(r, 10));
+const presetNames = () => [...P.querySelectorAll('option')].map((o) => o.textContent);
 
-// 1. Save as preset -> a success toast: green, the check icon, no warning sign
+// 1. TASK 878: Save as preset -> the preset is in the list, and no toast
 click(P.querySelector('[data-action="save-preset"]'));
 const inp = P.querySelector('.sk-style-ask-input'); inp.value = 'Fusion2';
 click(P.querySelector('.sk-style-ask .ok')); await settle();
-let t = toasts(); assert.strictEqual(t.length, 1, 'one toast');
-let r = read(t[0]);
-assert.strictEqual(r.text.trim(), 'Saved style preset "Fusion2".');
-assert.strictEqual(r.level, 'success'); assert(same(r.bg, GREEN), 'green: ' + r.bg); assert.strictEqual(r.icon, '✅'); assert(!r.icon.includes('⚠'), 'no warning sign');
+assert(presetNames().includes('Fusion2'), 'the saved preset is listed: ' + presetNames());
+assert.strictEqual(toasts().length, 0, 'TASK 878: Save as preset says nothing');
 
-// 2. Delete (confirm) and Reset -> success too
-clearToasts();
+// 2. TASK 878: Delete (confirm) and Reset -> no toast either
 click(P.querySelector('[data-action="delete-preset"]')); click(P.querySelector('.sk-style-ask .ok')); await settle();
-r = read(toasts()[0]); assert.strictEqual(r.text.trim(), 'Deleted style preset "Fusion2".'); assert.strictEqual(r.level, 'success');
-clearToasts();
+assert(!presetNames().includes('Fusion2'), 'the deleted preset is gone from the list');
+assert.strictEqual(toasts().length, 0, 'TASK 878: Delete preset says nothing');
 click([...P.querySelectorAll('button')].find((b) => /^reset$/i.test(b.textContent))); await settle();
-r = read(toasts()[0]); assert.strictEqual(r.text.trim(), 'Reset to factory defaults.'); assert.strictEqual(r.level, 'success');
+assert.strictEqual(toasts().length, 0, 'TASK 878: Reset says nothing');
 
+let r;
 // 3. no level given -> info (blue), never error
 clearToasts(); showNotification('plain');
 r = read(toasts()[0]); assert.strictEqual(r.level, 'info'); assert(same(r.bg, BLUE), 'blue: ' + r.bg); assert.strictEqual(r.icon, 'ℹ️');
@@ -57,14 +56,5 @@ assert(toasts()[0].querySelector('.notif-copy-btn'), 'the error toast keeps its 
 for (const lvl of ['success', 'info', 'warning']) { clearToasts(); showNotification('x', lvl); assert(!toasts()[0].querySelector('.notif-copy-btn'), lvl + ' toast has no Copy button'); }
 clearToasts(); showNotification('plain'); assert(!toasts()[0].querySelector('.notif-copy-btn'), 'a level-less toast (info) has no Copy button');
 
-// 5. a throw from onNotify is not swallowed
-const loud = createStylePanel({ hostId: 'notice-test-2', onNotify: () => { throw new Error('host notify broke'); } });
-loud.render(document.body); loud.open();
-const L = [...document.querySelectorAll('.sk-style-panel')].pop();
-let thrown = null; const onErr = (e) => { thrown = e; };
-win.addEventListener('error', onErr);
-click(L.querySelector('[data-action="save-preset"]')); L.querySelector('.sk-style-ask-input').value = 'X';
-await new Promise((res) => { process.once('uncaughtException', (e) => { thrown = e; res(); }); click(L.querySelector('.sk-style-ask .ok')); setTimeout(res, 100); });
-assert(thrown && /host notify broke/.test(String(thrown.message || thrown)), 'the host hook\'s throw surfaces: ' + thrown);
 console.log('notice-levels-node: ok');
 process.exit(0);

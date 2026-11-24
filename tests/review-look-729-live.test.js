@@ -19,7 +19,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 import { REVIEW_BUILT, reviewBuilt } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
-import { showExportSettings } from './helpers/export-actions.js'; // TASK 880: the Export settings are the footer's
+import { pressExportAction, showExportSettings } from './helpers/export-actions.js'; // TASK 880: the Export settings are the footer's
 
 const EVIDENCE_DIR = path.resolve('.evidence/729');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });

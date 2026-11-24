@@ -267,7 +267,9 @@ try {
   await tap(q.x, q.y);
   assert.strictEqual(await label(), 'pocket · 7.333 mm · step 2 of 4', 'phone: a tap on the step 2 band says its type, depth and step');
   await shot('phone-2d-r3-fillet-step2.png');
-  // a tap on a list row (the step 3 row) picks it
+  // a tap on a list row (the step 3 row) picks it (TASK 880: the Cuts card unfolded again by a tap on its title)
+  { const h = await evalJs(`(() => { const r = document.getElementById('review-cuts-head').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`); await tap(h.x, h.y); }
+  await waitFor(`document.getElementById('review-cuts').dataset.open === 'true'`, 'phone: the Cuts card unfolded');
   await evalJs(`[...document.querySelectorAll('#review-cuts-list .rv2d-row')].find((b) => /step 3 of 4/.test(b.textContent)).scrollIntoView({ block: 'nearest' })`);
   await sleep(200);
   const row3 = await evalJs(`[...document.querySelectorAll('#review-cuts-list > button')].findIndex((b) => b.classList.contains('rv2d-row') && /step 3 of 4/.test(b.textContent))`);

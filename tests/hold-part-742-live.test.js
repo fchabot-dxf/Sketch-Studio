@@ -16,7 +16,7 @@ import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { clickOpenLive, stepLive, previewLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed; TASK 817: its paths drawn on its Preview
 import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
-import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
+import { pressExportAction, showExportSettings } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/742');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -227,6 +227,7 @@ try {
     // 3D: the info lists the pass and the gaps; the tabs stand (the stock as thick as the cut is deep, so the gaps go through and the tabs bridge them)
     await clickEl('#review-view-3d');
     await waitFor(REVIEW_BUILT, label + ': the 3D board');
+    await showExportSettings({ evalJs, waitFor }, clickEl); // TASK 880: the thickness is the footer's (a fold card on a phone)
     await typeInto('#review-stock-thickness', unit === 'in' ? '0.75' : '18');
     await waitFor(REVIEW_BUILT, label + ': the 3D board, stock = the cut depth');
     const info = await evalJs(`document.getElementById('review-info').textContent`);

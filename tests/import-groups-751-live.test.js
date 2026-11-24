@@ -193,13 +193,20 @@ try {
     // tool picks with the group NOT entered (the Select tool's rule is the Select tool's only)
     const nCons = await evalJs(`${ST}.constraints.length`);
     const corner = async (name, k) => { const w = await evalJs(`import('/packages/core/group-model.js').then((m) => { const st = ${ST}; const g = st.groups.find((x) => x.name === ${JSON.stringify(name)}); const ids = m.shapesInGroup(st, g.id); const s = st.shapes.filter((x) => ids.includes(x.id) && x.type === 'line')[${k}]; const a = st.joints.get(s.joints[0]); return { id: s.joints[0], x: a.x, y: a.y }; })`); return { ...(await toS(w.x, w.y)), id: w.id }; };
-    // a constraint button with the file group selected: the notice
+    // a constraint button with the file group selected: the group is not its operand (TASK 878: said by nothing: no notice, normal behaviour)
     p = await onGroupLine('O', 1); await click(p);
     assert.deepStrictEqual(await sel(), await groupIds('letters'), 'B. (the file group selected)');
+    const groupsBefore = await evalJs(`JSON.stringify(${ST}.groups)`), fileJBefore = await jointsOf(file);
     await pressRibbonTool(evalJs, click, 'tool-coincident'); await sleep(300);
     const notice = await evalJs(`(document.getElementById('notification-container') || {}).textContent || ''`);
     console.log('B. Coincident pressed with the file group selected: notice = ' + JSON.stringify(notice.slice(0, 200)));
-    assert.ok(/single curves and points/.test(notice), 'B. the constraint button says a group is not its operand');
+    assert.strictEqual(notice, '', 'B. TASK 878: the constraint button says nothing about the group');
+    const started = await evalJs(`(() => { const st = ${ST}; const pc = st.pendingConstraint; return { tool: st.currentTool, type: pc && pc.type, first: pc ? pc.firstElement : 'none', n: st.constraints.length }; })()`);
+    console.log('B. Coincident started: ' + JSON.stringify(started));
+    assert.deepStrictEqual(started, { tool: 'coincident', type: 'coincident', first: null, n: nCons }, 'B. the Coincident tool started with no pick from the group (the group is not its operand) and nothing added');
+    assert.strictEqual(await evalJs(`JSON.stringify(${ST}.groups)`), groupsBefore, 'B. the groups are as they were');
+    const fileJAfter = await jointsOf(file);
+    assert.ok(Object.keys(fileJBefore).every((k) => fileJBefore[k][0] === fileJAfter[k][0] && fileJBefore[k][1] === fileJAfter[k][1]), 'B. starting the tool moved nothing');
     // Coincident: a corner of O and a corner of B (two members of the same un-entered group): picks the points. TASK 752: the file group is ONE
     // rigid block (it only translates), so a coincident between two of its points would deform it: the add is refused (the existing conflict
     // notice), nothing is added (no undo step) and nothing moves

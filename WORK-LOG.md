@@ -17895,3 +17895,5 @@ Midpoint of an ARC, as Fusion does it (owner 3426; advisor's Fusion check: addMi
   question. (2) Send to ShaperHub posts to the relative /api/shaper-upload (main.js:381): offline it reaches the add-in's local server; the
   Pages function has no CORS. (3) Rate & feedback refuses to send from a local page (analytics.js:114, 123).
 - Stopped before STEP 2 on the advisor's order: task 880 (new Export layout) is not on origin/main yet (`git log origin/main | grep "task 880"`: nothing).
+## TURN 877
+Shaper Fusion selection notice made plain: ONE builder `selectionCountText(regions, chains)` (apps/shaper/src/selection-edit.js) used by fusion-bridge.js (Added fallback) and fusion-import.js (3 places: Updated same-id, Updated empty, and the shared `counts` for Added / Replaced with / nothing-importable). Singular/plural, zero left out, none = "nothing to cut". Chains are worded "path" (Paths view, cut panel "open paths"). Tests updated: fusion-import-664 (node+live), fusion-mode-663 (node+live), fusion-replace-712 (node+live), selection-list-795-node, export-preview-719-live, stepped-cut-714-live; new selection-notice-877-node. gate:quick 588/588.

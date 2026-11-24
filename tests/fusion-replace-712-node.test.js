@@ -62,7 +62,7 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     const clickAt = (x, y) => clickOpen(app, () => clickRaw(x, y)); // TASK S2: OK the open operation, click, open the clicked shape's operation (tests/helpers/prepare-open.js)
 
     bridge.handle(FUSION_ACTIONS.SELECTION_DATA, JSON.stringify(FIRST));
-    eq(notices.at(-1), 'Added FirstPart: 1 regions, 0 chains', 'a first selection into an empty palette says Added');
+    eq(notices.at(-1), 'Added FirstPart: 1 region', 'a first selection into an empty palette says Added');
     eq(sketchNames(st), ['Sketch 1', 'FirstPart'], 'the first selection lands in its own sketch');
     eq(st.shapes.length, 4, 'the first selection: 4 lines');
     const firstShapes = shapeIds(st);
@@ -77,7 +77,7 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     const histBefore = st.history.length;
     bridge.handle(FUSION_ACTIONS.SELECTION_DATA, JSON.stringify(SECOND));
     console.log('after the second selection:', JSON.stringify({ notice: notices.at(-1), sketches: sketchNames(st), shapes: st.shapes.length, plan: planTypes() }));
-    eq(notices.at(-1), 'Replaced with Body1: 2 regions, 0 chains', 'the notice says the design was replaced');
+    eq(notices.at(-1), 'Replaced with Body1: 2 regions', 'the notice says the design was replaced');
     eq(sketchNames(st), ['Sketch 1', 'Body1'], 'only the new selection\'s sketch (the first one\'s sketch is gone)');
     eq(st.shapes.length, 5, 'only the new selection\'s shapes: 4 lines + 1 circle');
     ok(!firstShapes.some((id) => st.shapes.some((s) => s.id === id)), 'no shape of the first selection is left');
@@ -124,7 +124,7 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     importFusionSelection(FIRST, { controller: app.controller, prepare: app.prepare }); // something already in the palette
     const res = importFusionSelection(combined, { controller: app.controller, prepare: app.prepare });
     console.log('combined:', JSON.stringify({ message: res.message, sketches: sketchNames(st), shapes: st.shapes.length, plan: planTypes() }));
-    eq(res.message, 'Replaced with Body1 + lines: 2 regions, 2 chains', 'the combined notice counts the regions and the chains');
+    eq(res.message, 'Replaced with Body1 + lines: 2 regions, 2 paths', 'the combined notice counts the regions and the chains');
     eq(sketchNames(st), ['Sketch 1', 'Body1 + lines'], 'the combined selection is ONE sketch');
     eq(st.shapes.length, 8, '4 outline lines + 1 circle + 2 chain lines + 1 construction line');
     eq(planTypes(), [['loop', 'exterior'], ['loop', 'interior']], 'ONE plan: the body\'s outline + hole (TASK S1: the open chain has no cut type: in no operation)');
@@ -151,7 +151,7 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     eq([pile.sketches, pile.shapes.length], [['Sketch 1', 'old-a', 'old-b'], 8], 'a pile-up of several imports (several sketches) is in the design');
     app.modes.showMode('prepare');
     const res = importFusionSelection(SECOND, { controller: app.controller, prepare: app.prepare });
-    eq(res.message, 'Replaced with Body1: 2 regions, 0 chains', 'the pile-up is replaced');
+    eq(res.message, 'Replaced with Body1: 2 regions', 'the pile-up is replaced');
     eq(sketchNames(st), ['Sketch 1', 'Body1'], 'after: only the new selection');
     eq(st.shapes.length, 5, 'after: only its 5 shapes');
     st.undo();
@@ -187,7 +187,7 @@ const shapeIds = (st) => st.shapes.map((s) => s.id).sort();
     importFusionSelection(FIRST, { controller: app.controller, prepare: app.prepare });
     const before = { sketches: sketchNames(st), shapes: shapeIds(st), plan: planTypes(), hist: st.history.length };
     const res = importFusionSelection(msg('Empty', [], []), { controller: app.controller, prepare: app.prepare });
-    eq(res.message, 'Added Empty: 0 regions, 0 chains', 'the notice for an empty selection (unchanged wording)');
+    eq(res.message, 'Added Empty: nothing to cut', 'the notice for an empty selection (TASK 877: plain wording)');
     eq({ sketches: sketchNames(st), shapes: shapeIds(st), plan: planTypes(), hist: st.history.length }, before, 'an empty selection changes nothing');
   } finally {
     await app.close();

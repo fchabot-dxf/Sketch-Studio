@@ -117,7 +117,7 @@ try {
     };
   })()`);
   assert.strictEqual(afterImport.noticeHidden, false, 'notice visible');
-  assert.strictEqual(afterImport.noticeText, 'Added Sketch1: 2 regions, 2 chains', 'notice shows source name, region count, chain count');
+  assert.strictEqual(afterImport.noticeText, 'Added Sketch1: 2 regions, 2 paths', 'notice shows source name, region count, chain count');
   assert.strictEqual(afterImport.circles, 1, 'no duplicate circle elements in Prepare');
   assert.strictEqual(afterImport.lines, 5, '5 line elements in Prepare (4 rect + the open chain; TASK 757: not the construction line)');
   assert.strictEqual(afterImport.sketchName, 'Sketch1', 'sketch named after Fusion source');

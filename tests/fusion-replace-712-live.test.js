@@ -106,7 +106,7 @@ async function run({ width, height, pileUp }) {
     await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 4`, 'the first selection in Prepare');
     const first = await look();
     console.log(`[${label}] first:`, JSON.stringify(first));
-    assert.deepStrictEqual([first.notice, first.sketches, first.plan], ['Added Test plate: 1 regions, 0 chains', ['Sketch 1', 'Test plate'], []], `[${label}] the first selection (TASK S1: its region has no cut type, so it is in no operation)`);
+    assert.deepStrictEqual([first.notice, first.sketches, first.plan], ['Added Test plate: 1 region', ['Sketch 1', 'Test plate'], []], `[${label}] the first selection (TASK S1: its region has no cut type, so it is in no operation)`);
     await clickWorld(20, -15);
     // TASK S3: a shape click shows no card; the operations toolbar's Pocket makes the new operation (open) holding the plate
     await waitFor(`window.__prepareView && window.__prepareView.selectedTargets().length === 1`, 'the plate selected');
@@ -120,7 +120,7 @@ async function run({ width, height, pileUp }) {
     const second = await look();
     console.log(`[${label}] second:`, JSON.stringify(second));
     if (width === 480) await shot('second-selection-480x731.png');
-    assert.deepStrictEqual(second, { notice: 'Replaced with Body1: 2 regions, 0 chains', edges: 5, sketches: ['Sketch 1', 'Body1'], shapes: 5, plan: ['loop:exterior', 'loop:interior'] },
+    assert.deepStrictEqual(second, { notice: 'Replaced with Body1: 2 regions', edges: 5, sketches: ['Sketch 1', 'Body1'], shapes: 5, plan: ['loop:exterior', 'loop:interior'] },
       `[${label}] only the second selection shows`);
 
     // 3. the footer Undo -> the first with its Pocket; Ctrl+Y -> the second
@@ -139,7 +139,7 @@ async function run({ width, height, pileUp }) {
     await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 7`, 'the combined selection (7 edges)'); // TASK 757: 8 shapes, the construction line c1 is not drawn in Prepare
     const combined = await look();
     console.log(`[${label}] combined:`, JSON.stringify(combined));
-    assert.deepStrictEqual(combined, { notice: 'Replaced with Body2 + lines: 2 regions, 2 chains', edges: 7, sketches: ['Sketch 1', 'Body2 + lines'], shapes: 8, plan: ['loop:exterior', 'loop:interior'] } /* TASK S1: the open chain has no cut type: in no operation */,
+    assert.deepStrictEqual(combined, { notice: 'Replaced with Body2 + lines: 2 regions, 2 paths', edges: 7, sketches: ['Sketch 1', 'Body2 + lines'], shapes: 8, plan: ['loop:exterior', 'loop:interior'] } /* TASK S1: the open chain has no cut type: in no operation */,
       `[${label}] a body + chains payload lands as one plan`);
 
     // 5. a reload in Fusion mode shows the last selection (the stored design)
@@ -171,7 +171,7 @@ async function run({ width, height, pileUp }) {
       await waitFor(`document.querySelectorAll('#prepare-world-group .sk-edge').length === 5`, 'the selection replaces the pile-up');
       const afterPile = await look();
       console.log(`[${label}] selection over the pile:`, JSON.stringify(afterPile));
-      assert.deepStrictEqual([afterPile.notice, afterPile.sketches, afterPile.shapes], ['Replaced with Body1: 2 regions, 0 chains', ['Sketch 1', 'Body1'], 5], `[${label}] the pile-up is replaced whole`);
+      assert.deepStrictEqual([afterPile.notice, afterPile.sketches, afterPile.shapes], ['Replaced with Body1: 2 regions', ['Sketch 1', 'Body1'], 5], `[${label}] the pile-up is replaced whole`);
       await clickEl('#btn-undo');
       await waitFor(`window.__designController.state.sketches.length === ${pile.sketches.length}`, 'Undo: the pile-up back');
       const back = await evalJs(`({ sketches: window.__designController.state.sketches.map((s) => s.name), shapes: window.__designController.state.shapes.length })`);

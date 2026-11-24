@@ -53,7 +53,7 @@ const counts = (r) => ({ keptHoles: r.keptHoles, lostHoles: r.lostHoles });
   eq([...V2_PLAN.keys()], [`profile:${state.profiles[0].id}`], 'islands: the record moved to an explicit combined profile');
   eq(state.profiles.length, 1, 'islands: one combined profile (visible in Design, Uncombine undoes it)');
   eq(state.profiles[0].inners.length, 2, 'islands: with the two islands');
-  eq(cutPlanNotice(r), 'Cut plan updated: 1 cut kept its holes from other sketches (now a combined profile)', 'islands: the one-time notice');
+  eq(cutPlanNotice(r), null, 'islands: TASK 878: holes kept (a combined profile) is the plan working: no notice');
 
   // a second open of the SAVED (migrated) document changes nothing: the sidecar is version 2 now, the record a profile record
   const saved = captureShaperDoc();

@@ -19,7 +19,7 @@ import { toggleDriving } from '#core/dimension-seams.js';
 import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/context-menu.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
-import { stepOutOfGroup, selectedGroups, pickOwner, selectUnit, shapesInGroup, enteredGroup, isInGroup, leaveGroups } from '#core/group-model.js'; // TASK 751: Esc steps out of the entered user group, one level; a group is no constraint operand
+import { stepOutOfGroup, pickOwner, selectUnit, shapesInGroup, enteredGroup, isInGroup, leaveGroups } from '#core/group-model.js'; // TASK 751: Esc steps out of the entered user group, one level; a group is no constraint operand
 import { groupSelection, ungroupSelection, groupMenuActions } from '#ui/group-actions.js'; // TASK 756: THE group commands (keys + menus), every app
 import { beginClosePath, handleClosePathPointerDown, closePathMenuActions } from '#ui/close-path-actions.js'; // TASK 760: Close path (the tool, its menu entry), every app
 import { handleTextPointerDown, commitTextEditor, cancelTextEditor, textMenuActions } from '#ui/input-handlers/text-tool.js'; // TASK 845: the Text tool and its editor, every app
@@ -1368,8 +1368,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
                 const isCircleLike = (s) => s && (s.type === 'circle' || s.type === 'arc');
                 if ((s1 && s2 && s1.type === 'line' && s2.type === 'line') || (isCircleLike(s1) && isCircleLike(s2))) {
                     recordConstraintStep(state, TOOL_MODES.EQUAL, () => ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.EQUAL, { shapes: [s1.id, s2.id] }, { source: 'toolbar' }));
-                    // Keep selections and the tool active — do not reset or switch away; user will exit manually.
-                    try { showNotification('Equal constraint applied', 'success'); } catch(_) {}
+                    // Keep selections and the tool active — do not reset or switch away; user will exit manually. (TASK 878: its glyph shows: no message)
                     e.preventDefault();
                     return;
                 } else {
@@ -1560,11 +1559,8 @@ export function switchToTool(state, toolName) {
     // Update UI manually (ancillary P4b: host's toolbar/status hooks; default = SketchStudio DOM)
     inputCtx.highlightActiveTool?.(toolName);
 
-    // TASK 751: a constraint / dimension takes single curves and points, never a user group. When the Select-tool selection holds a whole
-    // group the tool says so; its picks go to single curves and points whatever the group level (the selection is not used as its operand).
-    if ((CONSTRAINT_TOOLS.includes(toolName) || toolName === TOOL_MODES.DIMENSION) && selectedGroups(state).length) {
-        showNotification('Constraints and dimensions take single curves and points: pick them on the canvas. The selected group is not used (double click a group to work inside it).', 'info');
-    }
+    // TASK 751: a constraint / dimension takes single curves and points, never a user group: its picks go to single curves and points whatever the
+    // group level (the selection is not used as its operand). TASK 878: normal behaviour, no message on the tool's start (owner ruling: a notice only when something is wrong).
 
     // Fallback preselection for constraint tools (matches toolbar behavior)
     if (CONSTRAINT_TOOLS.includes(toolName)) {
@@ -1579,8 +1575,7 @@ export function switchToTool(state, toolName) {
             const s = state.shapes.find(x => x.id === firstEl.id);
             if (s && s.type === 'line') {
                 recordConstraintStep(state, TOOL_MODES.HORIZONTAL_VERTICAL, () => ConstraintManager.addHorizontalOrVertical(state, s.joints));
-                // Keep the current tool active (do not switch to Select). User will exit the tool manually.
-                try { showNotification('Horizontal/Vertical constraint applied', 'success'); } catch(_) {}
+                // Keep the current tool active (do not switch to Select). User will exit the tool manually. (TASK 878: its glyph shows: no message)
                 return;
             }
         }

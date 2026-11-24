@@ -8,7 +8,7 @@ import { loopPolygon } from '#core/loop-geometry.js';
 /**
  * Combine selected loops into a compound profile.
  * @param {object} state - Sketch app state
- * @param {function} [notify] - User toast/status callback: (msg, type) => void
+ * @param {function} [notify] - User toast/status callback for a refusal: (msg, type) => void
  * @returns {object|null} The created profile, or null on failure
  */
 export function doCombine(state, notify = () => {}) {
@@ -27,15 +27,13 @@ export function doCombine(state, notify = () => {}) {
     return null;
   }
   try { state.saveState && state.saveState('combine'); } catch (_) {}
-  const prof = makeProfile(state, val.outerLoop, val.innerLoops);
-  notify(`Combined into ${prof.name || prof.id} (${val.innerLoops.length} hole${val.innerLoops.length === 1 ? '' : 's'})`, 'success');
-  return prof;
+  return makeProfile(state, val.outerLoop, val.innerLoops); // TASK 878: the profile shows: no message (notify says only a refusal)
 }
 
 /**
  * Uncombine any combined profiles touching the selected shapes.
  * @param {object} state - Sketch app state
- * @param {function} [notify] - User toast/status callback: (msg, type) => void
+ * @param {function} [notify] - User toast/status callback for a refusal: (msg, type) => void
  * @returns {number} Number of profiles uncombined
  */
 export function doUncombine(state, notify = () => {}) {
@@ -55,7 +53,6 @@ export function doUncombine(state, notify = () => {}) {
     return 0;
   }
   try { state.saveState && state.saveState('uncombine'); } catch (_) {}
-  for (const pid of toRemove) uncombineProfile(state, pid);
-  notify(`Uncombined ${toRemove.size} profile${toRemove.size === 1 ? '' : 's'}`, 'success');
+  for (const pid of toRemove) uncombineProfile(state, pid); // TASK 878: seen on the canvas: no message
   return toRemove.size;
 }

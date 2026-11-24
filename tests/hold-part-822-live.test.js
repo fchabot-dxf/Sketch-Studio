@@ -141,7 +141,7 @@ try {
     await waitFor(`[...document.querySelectorAll('.cut-note div')].some((d) => /5 tabs/.test(d.textContent))`, label + ': the 5 tabs note');
     const n0 = await note();
     console.log(label + ' note: ' + JSON.stringify(n0));
-    assert.ok(n0[0] === 'Placed where a gap strip fits: part of the outline is too narrow for one' && n0[1].startsWith('Inside: 5 tabs, 0.063 in wide, 0.063 in thick'), label + ': placed, the note says where');
+    assert.ok(n0[0].startsWith('Inside: 5 tabs, 0.063 in wide, 0.063 in thick') && n0.includes('Placed where a gap strip fits: part of the outline is too narrow for one'), label + ': placed, the note says where (TASK 878: a plain line, not a warning listed first)');
     const k = await frame();
     await sleep(300);
     console.log(label + ' frame: ' + JSON.stringify(k));

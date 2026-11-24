@@ -51,7 +51,7 @@ let _press = null;          // a press on the canvas while the box is open: a cl
 let _viewListening = false;
 let _committing = false;
 
-// TASK 728 / 770: the box / notice text is lengthText's (the one length-format decider: decimals or an inch fraction 1/2")
+// TASK 728 / 770: the box text is lengthText's (the one length-format decider: decimals or an inch fraction 1/2")
 function ensureDistance() {
   const unit = docUnit();
   if (currentDistance == null || _distanceUnit !== unit) { currentDistance = defaultOffsetDistance(unit); _distanceUnit = unit; }
@@ -248,8 +248,7 @@ export function commitOffsetInput() {
   try { res = recordConstraintStep(state, OFFSET_UNDO_LABEL, () => applyOffset(state, chain, v, _open.side)); } finally { _committing = false; }
   if (!res.ok) { showNotification('Offset: ' + res.reason + '.', 'warning', HINT_MS); return; }
   currentDistance = d; // |v|: the distance USED is the remembered one
-  cancelAll();
-  showNotification(`Offset applied (${lengthText(d, { show: 'compact' })})`, 'info');
+  cancelAll(); // TASK 878: the offset shows: no message
   if (_exit) _exit();
 }
 

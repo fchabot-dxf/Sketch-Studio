@@ -224,8 +224,10 @@ try {
     await listOpen(true);
     await waitFor(`document.querySelectorAll('#prepare-ops .ops-row.is-out-of-date').length === 0`, D + ': Recalculate: the mark gone');
     if (D === 'phone') await listOpen(false);
+    const said0 = await notice();
     await clickEl('#op-recalculate');
-    assert.strictEqual(await notice(), 'All toolpaths are up to date.', D + ': nothing to do: the plain line');
+    await sleep(200);
+    assert.strictEqual(await notice(), said0, D + ': nothing to do: TASK 878: no notice of its own (no row shows an Out of date mark)');
     await designEdit();
     await openMode('review');
     await evalJs(`document.getElementById('btn-generate-svg').scrollIntoView({ block: 'center' })`); await sleep(200);

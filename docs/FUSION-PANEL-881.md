@@ -142,3 +142,14 @@ difference. This is the question for STEP 2 (see the REPORT).
 
 Nothing in the Fusion path loads code or styles from shaper-svg.pages.dev: every module, stylesheet, three.js and the worker are relative
 files today.
+
+## 10. Rulings for STEP 2 (advisor + owner turn 3503 "ok good")
+
+- Refactor, never a fork: main.js is split into shared wiring + web-only + Fusion-only parts; app-chrome, document-buffer and fusion-bridge
+  TAKE the Drive / projects / templates layers as passed values instead of importing them. The website stays BEHAVIOUR-identical (not
+  byte-identical), proven by the existing website and Fusion-mode tests plus shell-smoke; every changed / new module is listed.
+- Rate & feedback and the "Enjoying Shaper?" card: UNUSED in the Fusion panel (they cannot send from 127.0.0.1): left out of the Fusion build.
+- Insert STL (Prepare toolbar): KEPT in the Fusion panel for now (owner to review later).
+- Send to ShaperHub offline (R1): out of scope; the open item for a follow-up task. functions/ and the add-in are not touched.
+- STEP 3 targets http://127.0.0.1 only (file:// ruled out live).
+- STEP 2 starts only once task 880 is on origin/main, merged in first.

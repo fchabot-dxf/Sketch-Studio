@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/S3');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -230,10 +231,9 @@ try {
     assert.strictEqual(await notice(), said0, D + ': nothing to do: TASK 878: no notice of its own (no row shows an Out of date mark)');
     await designEdit();
     await openMode('review');
-    await evalJs(`document.getElementById('btn-generate-svg').scrollIntoView({ block: 'center' })`); await sleep(200);
-    await clickEl('#btn-generate-svg');
+    await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg'); // TASK 880: the header's action (the drawer's on a phone)
     await waitFor(`/1 operation is out of date/.test(document.getElementById('simexport-status').textContent) && !!document.querySelector('#simexport-status .sk-wait-action')`, D + ': Generate waits: "1 operation is out of date" with Recalculate');
-    await shot(`${D}-8-export-out-of-date.png`, '#simexport-panel', D === 'desktop' ? 2 : 1);
+    await shot(`${D}-8-export-out-of-date.png`, '#review-cards', D === 'desktop' ? 2 : 1); // TASK 880: the status line is a card over the view
     await evalJs(`document.querySelector('#simexport-status .sk-wait-action').scrollIntoView({ block: 'center' })`); await sleep(200);
     await clickEl('#simexport-status .sk-wait-action');
     await waitFor(`/^Exported /.test(document.getElementById('simexport-status').textContent)`, D + ': Recalculate: then the file');

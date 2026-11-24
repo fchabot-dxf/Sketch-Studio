@@ -16,6 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/798');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -95,7 +96,7 @@ try {
   const download = async () => {
     await openMode('review');
     for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
-    await clickEl('#btn-generate-svg');
+    await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg'); // TASK 880
     let file = null;
     for (let i = 0; i < 100 && !file; i++) { const f = fs.readdirSync(dlDir).find((n) => n.endsWith('.svg') && !n.endsWith('.crdownload')); if (f) file = path.join(dlDir, f); else await sleep(100); }
     assert.ok(file, 'the export downloaded');
@@ -183,7 +184,7 @@ try {
     console.log(label + ' 3D (Outside unticked): ' + JSON.stringify(build1) + ' line: ' + JSON.stringify(line));
     assert.deepStrictEqual(line, { hidden: false, text: `Exporting 2 of 3 operations (unticked: 4. Outside · ${full} (⅛″ end mill)). Place it with the same anchor as the earlier file.` }, label + ': the Export line names the unticked Outside');
     await shot(`${D}-export-3d-outline-unticked.png`);
-    await shot(`${D}-export-line.png`, '#simexport-panel', 2);
+    await shot(`${D}-export-line.png`, '#review-cards', 2); // TASK 880: the line is a card over the view
     await view('2d');
     await waitFor(`document.querySelectorAll('#review-cuts-list .rv2d-op').length > 0`, label + ': the 2D list');
     const list2d = await evalJs(`[...document.querySelectorAll('#review-cuts-list .rv2d-op')].map((e) => e.firstChild.textContent)`);

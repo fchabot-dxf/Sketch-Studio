@@ -36,7 +36,11 @@ for (const rel of ['apps/shaper/src', 'packages/core', 'apps/penplotter/src', 'a
 assert.match(modes, /commonStage\('export', 'review'\)/); // TASK 707: the stage id stays 'review', its label is the common "Export"
 assert.doesNotMatch(modes, /id:\s*'simexport'/);
 assert.doesNotMatch(html, /Simulate\/Export/);
-assert.match(html, /id="view-review"[\s\S]*id="btn-generate-svg"/, 'the export panel lives inside the Review view');
+// TASK 880: no export panel: the actions are the Export stage's header actions, its settings the footer's (declared in main.js, the markup in the page)
+assert.match(main, /s\.id === 'review' \? \{ \.\.\.s, actions: EXPORT_ACTIONS \}/, 'the Export stage declares its header actions');
+assert.match(main, /id: 'btn-generate-svg'[\s\S]*id: 'btn-sync-shaper'[\s\S]*id: 'link-shaper-hub'/, 'Generate, Sync, Open ShaperHub');
+assert.match(main, /controls: \[\{ el: document\.getElementById\('review-settings'\), stage: 'review'/, 'the Export settings are the footer settings, on the Export stage');
+assert.doesNotMatch(html, /id="review-side"/, 'no side panel');
 assert.strictEqual((await import('../apps/shaper/src/modes.js')).resolveInitialMode('simexport'), 'review', 'a stored simexport opens Review'); // TASK 706: the page's own copy of this mapping went; modes.js resolveInitialMode is the one
 assert.match(main, /resolveInitialMode\(initMode/, 'the page resolves its stored stage through modes.js');
 assert.match(modes, /review:\s+doc\.getElementById\('view-review'\)/);

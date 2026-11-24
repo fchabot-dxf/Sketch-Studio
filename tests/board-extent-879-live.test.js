@@ -5,13 +5,14 @@
 //      buildRelief has always merged the cuts' footprints) + the declared 6 in (152.4 mm) on every side (it was a 1.5 m strip from the origin, the arcs'
 //      centre, to the part, with a 1/2 in margin), the stored 12.7 margin not read;
 //   2. the downloaded file's page is the part's box (it ran from y 0);
-//   3. the Review card says the board is the design bounds + margin.
+//   3. the Thickness tooltip says the board is the design bounds + margin (TASK 880: no note laid out under the field).
 // Screenshots (.evidence/879/): 879-desktop-export3d.png, 879-phone-export3d.png (the Export 3D view, top, after Fit).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 const EVIDENCE_DIR = path.resolve(process.env.EVIDENCE_DIR || '.evidence/879');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -86,7 +87,7 @@ async function phase({ phone }) {
       window.__prepareView.refreshLook(); })()`);
     await openMode('review');
     if (await evalJs(`document.querySelector('#review-view-switch button[data-view="3d"]').getAttribute('aria-pressed')`) !== 'true') await clickEl('#review-view-switch button[data-view="3d"]');
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'the 3D view is built');
+    await waitFor(REVIEW_BUILT, 'the 3D view is built');
     const box = await evalJs(`import('/apps/shaper/src/main.js').then((m) => m.currentReviewView().inspect().box)`);
     const F = 6.35; // the Outside cut's footprint: the bit (dia 6.35) beside the outline (a polygon of its arcs: within 0.05 mm)
     const want = { minX: PART.minX - F - M, maxX: PART.maxX + F + M, minZ: PART.minY - F - M, maxZ: PART.maxY + F + M, y: -38.1 };
@@ -94,8 +95,8 @@ async function phase({ phone }) {
     for (const k of Object.keys(want)) assert.ok(near(box[k], want[k], 0.05), `[${tag}] 1. the board's ${k} = ${want[k]} (the part and its cut + 6 in), got ${box[k]}`);
     const stock = await evalJs(`import('/apps/shaper/src/stock.js').then((S) => S.getStock())`);
     assert.strictEqual(stock.margin, 152.4, `[${tag}] 1. the stored 12.7 margin is not read`);
-    const note = await evalJs(`document.getElementById('review-stock-note').textContent`);
-    assert.match(note, /design bounds \+ margin/, `[${tag}] 3. the card says what the board is`);
+    const note = await evalJs(`import('/apps/shaper/src/hint.js').then((m) => m.hintFor(document.getElementById('review-stock-label')))`); // TASK 880: the note is the Thickness label's tooltip
+    assert.match(note, /design bounds \+ margin/, `[${tag}] 3. the Thickness tooltip says what the board is`);
     const head = await evalJs(`import('/apps/shaper/src/export-payload.js').then((m) => import('/tests/helpers/plan-v2.js').then((C) => m.shaperSvgOf(window.__designController.state, C.planEntries()).split('\\n')[0]))`);
     const vb = head.match(/viewBox="([^"]+)"/)[1].split(' ').map(Number);
     console.log(`[${tag}] file page: viewBox="${vb.join(' ')}"`);
@@ -104,7 +105,7 @@ async function phase({ phone }) {
     await clickEl('#review-top'); await sleep(300); await clickEl('#review-fit'); await sleep(600);
     const name = `879-${tag}-export3d.png`;
     let clip = null;
-    if (!phone) clip = await evalJs(`(() => { const rs = ['#review-canvas-host', '#review-stock-note'].map((q) => document.querySelector(q).getBoundingClientRect());
+    if (!phone) clip = await evalJs(`(() => { const rs = ['#review-canvas-host'].map((q) => document.querySelector(q).getBoundingClientRect());
       const x = Math.max(0, Math.min(...rs.map((r) => r.left)) - 6), y = Math.max(0, Math.min(...rs.map((r) => r.top)) - 6);
       return { x, y, width: Math.min(innerWidth, Math.max(...rs.map((r) => r.right)) + 6) - x, height: Math.min(innerHeight, Math.max(...rs.map((r) => r.bottom)) + 6) - y, scale: 1 }; })()`);
     const { data } = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip } : {}) });

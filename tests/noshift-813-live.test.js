@@ -178,12 +178,12 @@ async function phase() {
   // the Export status line: a slot of its own
   await openStage('review');
   await sleep(500);
-  const snapExport = () => evalJs(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return [b.left, b.top, b.width, b.height].map((n) => Math.round(n * 100) / 100).join(','); }; return [r('#simexport-panel'), r('#simexport-status'), r('#btn-generate-svg')]; })()`);
+  const snapExport = () => evalJs(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return [b.left, b.top, b.width, b.height].map((n) => Math.round(n * 100) / 100).join(','); }; return [r('#review-stage'), r('#review-toolbar'), r('#btn-generate-svg')]; })()`); // TASK 880: the status line is a card over the view: the view, its toolbar and the actions keep their boxes
   const e0 = await snapExport();
   await evalJs(`document.getElementById('simexport-status').textContent = 'Generated a file with a long name that goes on and on, then a second sentence about where it was saved and a third about what to do next, and more.'`);
   await sleep(150);
   const e1 = await snapExport();
-  assert.deepStrictEqual(e1, e0, `${device}: the Export status line: the card and its slot keep their boxes (${e0.join(' | ')})`);
+  assert.deepStrictEqual(e1, e0, `${device}: the Export status line: the view, its toolbar and the Generate action keep their boxes (${e0.join(' | ')})`);
   await evalJs(`document.getElementById('simexport-status').textContent = ''`);
   await openStage('prepare');
 }

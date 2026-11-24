@@ -14,6 +14,7 @@
 //     status   OPTIONAL () => { text, kind } the one-line state of the current design under its name ('error' | 'info'); read at every
 //              render and by refreshStatus().
 //     actions may carry `visible: () => bool` (hidden, not just disabled, when it returns false).
+//   stages   the host's stages ({ id, label, actions? }): shown as buttons at the top where the header hides; TASK 880: the shown stage's `actions` under them.
 //     notify(text, kind, link?) shows a message line in the drawer ('error' | 'info'), optionally ending in a link { href, label } that opens
 //              in a new tab — e.g. the reason a store refused something, or "Saved to Google Drive" + "Open in Drive".
 //   views    OPTIONAL extra VIEWS the drawer can show instead of the main list (e.g. a Projects browser that drills down from
@@ -30,6 +31,7 @@
 // The app's name comes from THE registry (#ui/app-registry.js): one source for the header button, the tab title and the favicon.
 import { appById } from './app-registry.js';
 import { SHORT_VIEWPORT_QUERY } from './short-viewport.js';
+import { buildStageAction } from './app-header.js'; // TASK 880: a stage's declared actions, built as the header builds them
 
 // THE gear artwork (Settings), drawn once: the drawer's style / gear items below and the footer's Settings button (app-footer.js) wrap it.
 export const GEAR_GLYPH = '<circle cx="9" cy="9" r="2.5"/><path d="M14.2 11a1.2 1.2 0 0 0 .2 1.3l.05.05a1.4 1.4 0 1 1-2 2l-.05-.05a1.2 1.2 0 0 0-1.3-.2 1.2 1.2 0 0 0-.7 1.1V15.5a1.4 1.4 0 1 1-2.8 0v-.1a1.2 1.2 0 0 0-.8-1.1 1.2 1.2 0 0 0-1.3.2l-.05.05a1.4 1.4 0 1 1-2-2l.05-.05a1.2 1.2 0 0 0 .2-1.3 1.2 1.2 0 0 0-1.1-.7H2.5a1.4 1.4 0 0 1 0-2.8h.1a1.2 1.2 0 0 0 1.1-.8 1.2 1.2 0 0 0-.2-1.3l-.05-.05a1.4 1.4 0 1 1 2-2l.05.05a1.2 1.2 0 0 0 1.3.2H7a1.2 1.2 0 0 0 .7-1.1V2.5a1.4 1.4 0 1 1 2.8 0v.1a1.2 1.2 0 0 0 .7 1.1 1.2 1.2 0 0 0 1.3-.2l.05-.05a1.4 1.4 0 1 1 2 2l-.05.05a1.2 1.2 0 0 0-.2 1.3v.1a1.2 1.2 0 0 0 1.1.7h.1a1.4 1.4 0 0 1 0 2.8h-.1a1.2 1.2 0 0 0-1.1.7z"/>';
@@ -84,6 +86,12 @@ function injectStyles() {
     cursor: pointer; font: 600 13px/1 system-ui, -apple-system, 'Segoe UI', sans-serif; }
   .sk-sidebar-stage:hover { background: var(--sk-sidebar-hover, rgba(127,127,127,0.14)); }
   .sk-sidebar-stage.active { background: var(--sk-selection, var(--sk-sidebar-accent, #2c65ff)); border-color: transparent; color: #fff; }
+  /* TASK 880: where the header hides, the shown stage's declared actions (app-header.js buildStageAction) are listed under the stage buttons */
+  .sk-sidebar-stage-actions { flex: 1 1 100%; display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+  .sk-sidebar-stage-actions[hidden] { display: none; }
+  .sk-sidebar-stage-action { min-height: 44px; text-decoration: none; box-sizing: border-box; }
+  .sk-sidebar-stage-action .sk-action-ic { width: 18px; height: 18px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
+  .sk-sidebar-stage-action .sk-action-ic svg { width: 18px; height: 18px; }
   /* TASK 819: the phone door of the drawer: a chevron at the start of the document tab strip (document-tabs.js mounts it as its first child; it stays at the strip's left edge while the tabs scroll) */
   .sk-sidebar-chevron { display: flex; align-items: center; justify-content: center; position: sticky; left: 0; z-index: 2; flex: 0 0 44px; width: 44px; height: var(--sk-doctabs-h, 30px);
     margin: 0; padding: 0; border: 0; border-radius: 0; background: var(--sk-doctab-strip, var(--sk-header-bg, #fff)); color: var(--sk-header-fg, #334155); cursor: pointer; }
@@ -190,6 +198,12 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
           else if (onStageChange) onStageChange(s.id);
         });
         sb.appendChild(b);
+      }
+      for (const s of stageList) { // TASK 880: each stage's declared actions; only the shown stage's are visible
+        if (!Array.isArray(s.actions) || !s.actions.length) continue;
+        const g = document.createElement('div'); g.className = 'sk-sidebar-stage-actions'; g.dataset.stage = s.id; g.hidden = s.id !== curStage;
+        for (const a of s.actions) g.appendChild(buildStageAction(a, { className: 'sk-sidebar-item sk-sidebar-stage-action', withId: false, before: close }));
+        sb.appendChild(g);
       }
       content.appendChild(sb);
     }
@@ -363,6 +377,7 @@ export function createAppSidebar({ current, docName = 'Untitled', actions = [], 
   function setActiveStage(id) {
     curStage = id;
     for (const b of content.querySelectorAll('.sk-sidebar-stage')) b.classList.toggle('active', b.dataset.tab === id);
+    for (const g of content.querySelectorAll('.sk-sidebar-stage-actions')) g.hidden = g.dataset.stage !== id;
   }
 
   return {

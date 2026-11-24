@@ -26,6 +26,8 @@ import { CREATE_NAMED_DESIGN } from './helpers/named-design.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js'; // a named design lives in the (fake, in-memory) Drive, as for a signed-in user
 import * as M from './helpers/stl-mesh.js';
 import { openOpLive } from './helpers/prepare-open-live.js'; // TASK S3: a click on the relief only selects it; its operation is opened to show its card
+import { reviewBuilt } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
+import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVIDENCE_DIR = path.resolve('.evidence/790');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -105,7 +107,7 @@ const openStl = async (stl, what) => {
 };
 const review = async (levels) => {
   await openStage('review');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent) && /${levels} level/.test(document.getElementById('review-info').textContent)`, `the Review with ${levels} levels`);
+  await waitFor(reviewBuilt({ levels: levels }), `the Review with ${levels ?? 'any number of'} levels`);
   await sleep(600);
 };
 const zoomReview = async (top) => {
@@ -152,7 +154,7 @@ try {
   await review(9);
   await zoomReview(false);
   await shot('2-review-drafted-stepped.png', '#review-canvas-host');
-  await clickEl('#btn-generate-svg');
+  await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg');
   let svgFile = null;
   for (let i = 0; i < 100 && !svgFile; i++) { const f = fs.readdirSync(dlDir).find((n) => n.endsWith('.svg')); if (f) svgFile = path.join(dlDir, f); else await sleep(100); }
   assert.ok(svgFile, '2: the export downloaded');
@@ -166,7 +168,7 @@ try {
   // 3. the dome as it opens (Roughing): the terraces
   await openStage('prepare');
   await openStl(DOME, '3');
-  await review('\\d+');
+  await review(null); // any level count (TASK 880: the wait reads lastBuild; the terraces are checked below from the plan)
   console.log('3: ' + await evalJs(`document.getElementById('review-info').textContent`));
   const levels = await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => [...new Set(m.planReliefItems(window.__designController.state).map((i) => i.cutDepth))].sort((a, b) => a - b))`);
   assert.deepStrictEqual(levels.filter((d) => d !== 29), [...Array.from({ length: 28 }, (_, i) => i + 1), 30], '3: terraces at every 1 mm, 1..30 (29: the 0.03 mm band at the dome\'s foot, kept only where wider than the drawing tolerance): ' + levels);

@@ -19,6 +19,8 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './cdp-browser.js';
 import { probe, tipProblems } from './tooltip-live.js';
 import { clickOpenLive, stepLive, typeLive, selectedLive } from './prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed; TASK S3: a new one from the toolbar
+import { REVIEW_BUILT } from './review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
+import { pressExportAction, openCutsCard } from './export-actions.js'; // TASK 880: the Export actions are the header's; the Cuts list a card over the view
 
 const fixture = (name) => fs.readFileSync(new URL(`../fixtures/sa7-slope/${name}.json`, import.meta.url), 'utf8');
 
@@ -139,7 +141,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
     const download = async () => {
       await openMode('review');
       for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
-      await clickEl('#btn-generate-svg');
+      await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg'); // TASK 880: the header's action (the drawer's on a phone)
       let file = null;
       for (let i = 0; i < 100 && !file; i++) { const f = fs.readdirSync(dlDir).find((n) => n.endsWith('.svg')); if (f) file = path.join(dlDir, f); else await sleep(100); }
       assert.ok(file, 'the export downloaded');
@@ -164,7 +166,7 @@ export async function openPocketPage({ tag, phone = false, fusion = false, evide
       await openMode('review');
       if (await evalJs(`document.getElementById('review-view-2d').getAttribute('aria-pressed')`) !== 'true') await clickEl('#review-view-2d');
       await waitFor(`document.querySelectorAll('#review-cuts-list .rv2d-op').length > 0`, label + ': the 2D list');
-      await evalJs(`document.getElementById('review-side').scrollTop = 0`);
+      await openCutsCard({ evalJs, waitFor }, clickEl); // TASK 880: the Cuts card over the view (folded on a phone)
       await sleep(300);
       return evalJs(`(() => {
         const rows = [...document.querySelectorAll('#review-cuts-list > *')].filter((e) => e.matches('.rv2d-op, .rv2d-row')).map((e) => (e.matches('.rv2d-op') ? '# ' : '') + e.firstChild.textContent.trim() + (e.matches('.rv2d-row') ? ' (' + e.lastChild.textContent + ')' : ''));
@@ -336,7 +338,7 @@ export async function exportPhase(t, label) {
     await clickEl('#review-cuts-list .rv2d-row');
     const lab = await evalJs(`document.getElementById('review-2d-info').textContent`);
     console.log(label + ' 2D label: ' + lab);
-    await shot(`${D}-export-2d.png`, phone ? null : ['#review-stage', '#review-side']);
+    await shot(`${D}-export-2d.png`, phone ? null : ['#review-stage']);
     const pv = await preview2dElements();
     const file = await download();
     fs.writeFileSync(path.join(EVIDENCE_DIR, `${D}-download.svg`), file);
@@ -348,7 +350,7 @@ export async function exportPhase(t, label) {
     assert.strictEqual(kinds.filter((k) => k[0] === 'online' && k[1]).length, 1 + islandLoops, label + `: and ${1 + islandLoops} closed on-line loops (the L, the island pocket)`);
     // Export 3D: built, the cleared pockets
     if (await evalJs(`document.getElementById('review-view-3d').getAttribute('aria-pressed')`) !== 'true') await clickEl('#review-view-3d');
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, label + ': the Review built');
+    await waitFor(REVIEW_BUILT, label + ': the Review built');
     await sleep(800);
     // the info's lines (TASK 757: on a phone the first line is the fold's header button and the others its body)
     const info = await evalJs(`[...document.querySelectorAll('#review-info > div:not(.review-info-body), #review-info .review-info-head > span, #review-info .review-info-body > div')].map((d) => d.textContent)`);

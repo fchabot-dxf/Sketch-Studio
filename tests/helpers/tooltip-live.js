@@ -12,7 +12,7 @@ const SNAP_SELECTORS = [
   '#prepare-panel', '#prepare-panel .cut-card', '#prepare-panel .cut-rows', '#prepare-panel .cut-row', '#prepare-panel .cut-field', '#prepare-panel .cut-field-label', '#prepare-panel .cut-box', '#prepare-panel .cut-note',
   '#prepare-panel .cut-pop:not([hidden])', '#prepare-panel .cut-pop:not([hidden]) .cut-type-opt', '#prepare-panel .cut-pop:not([hidden]) .cut-pop-grid > *',
   '#prepare-ops', '#prepare-ops .ops-head', '#prepare-ops .ops-body', '#prepare-ops .ops-row', '.stl-card', '.stl-row',
-  '#review-side', '#review-side .review-stock', '#review-side label', '#review-side .simexport-title', '#review-side .simexport-btn', '#review-side .simexport-hub-btn', '#prepare-dir-legend',
+  '#review-cards', '#review-settings', '#review-settings .review-setting', '.sk-header-stage-actions .sk-header-stage-action', '#prepare-dir-legend', // TASK 880: the Export view's cards, its footer settings and header actions
 ];
 
 export function probe(t) {

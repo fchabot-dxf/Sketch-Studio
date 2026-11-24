@@ -19,6 +19,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
+import { REVIEW_BUILT, reviewBuilt } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 const EVIDENCE_DIR = path.resolve('.evidence/754/live');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -174,7 +175,7 @@ try {
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(realSolid)})`);
   await waitFor(`/8 regions/.test(document.getElementById('prepare-notice').textContent)`, 'the real solid imported (8 regions)');
   await openStage('review');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'the 3D build', 15000);
+  await waitFor(REVIEW_BUILT, 'the 3D build', 15000);
   await waitFor(`${view}.then((v) => { const i = v.inspect(); return i.mapLoaded && i.edgeLoaded; })`, 'the plywood photos', 15000);
   await clickEl('#review-reset'); await sleep(300);
 
@@ -263,7 +264,7 @@ try {
   touchMode = true;
   await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?host=fusion`);
   await waitForApp('design-canvas');
-  await waitFor(`!document.getElementById('view-review').hidden && /triangles/.test(document.getElementById('review-info').textContent)`, 'phone: the Export step, 3D', 15000);
+  await waitFor(reviewBuilt({ when: "!document.getElementById('view-review').hidden" }), 'phone: the Export step, 3D', 15000);
   await evalJs(`window.fusionJavaScriptHandler.handle('selection_data', ${JSON.stringify(realSolid)})`);
   await sleep(500);
   await clickEl('#review-reset'); await sleep(400);
@@ -315,7 +316,7 @@ try {
     plan.V2_PLAN.set(plan.keyOf('loop', B.id), { cutType: 'pocket', cutDepth: 6, cutOffset: 0, toolDia: 6.35 });
   })()`);
   await openStage('review');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'app mode: the 3D build', 15000);
+  await waitFor(REVIEW_BUILT, 'app mode: the 3D build', 15000);
   await clickEl('#review-reset'); await sleep(300);
   const sa = await state();
   assert.strictEqual(sa.background, paper, 'app mode: the paper');

@@ -13,6 +13,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { REVIEW_BUILT, REVIEW_BUILD } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 const EVIDENCE_DIR = path.resolve('.evidence/810');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -131,8 +132,9 @@ async function phase() {
   const silX = await exportMinX();
   assert.strictEqual(silX, -12.7, `${device}: the Silhouette: the pocket reaches -12.7 (0 - 2 bits)`);
   await openStage('review');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, `${device}: the Review built`, 60000);
+  await waitFor(REVIEW_BUILT, `${device}: the Review built`, 60000);
   const info1 = await evalJs(`document.getElementById('review-info').textContent`);
+  const build1 = JSON.stringify(await evalJs(REVIEW_BUILD)); // TASK 880: a rebuild is told by the build itself (no build line on screen)
   await clickEl('#review-top'); await sleep(500);
   await shot('review-silhouette.png', '#review-canvas-host');
   await clickEl('#review-view-paths');
@@ -162,7 +164,7 @@ async function phase() {
   const winX = await exportMinX();
   assert.strictEqual(winX, 7.3, `${device}: the window: the pocket reaches 7.3 (20 - 2 bits)`);
   await openStage('review');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent) && document.getElementById('review-info').textContent !== ${JSON.stringify(info1)}`, `${device}: the Review rebuilt for the window`, 60000);
+  await waitFor(`(async () => (await ${REVIEW_BUILT}) && JSON.stringify(await ${REVIEW_BUILD}) !== ${JSON.stringify(build1)})()`, `${device}: the Review rebuilt for the window`, 60000);
   await clickEl('#review-top'); await sleep(500);
   await shot('review-shape.png', '#review-canvas-host');
   await clickEl('#review-view-paths');

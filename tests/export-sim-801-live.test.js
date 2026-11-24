@@ -96,7 +96,7 @@ try {
   // 1. the card
   await waitFor(`!document.getElementById('sim-preview-sel').disabled && document.getElementById('sim-op').options.length > 0`, 'the Simulate panel is ready', 60000);
   // the panel is over the view, closed at first (nothing of the Export side panel moves); its toggle at the view's top right opens it
-  ok(await evalJs(`document.getElementById('review-sim').hidden && document.getElementById('review-sim-toggle').getAttribute('aria-expanded') === 'false' && !document.getElementById('review-side').contains(document.getElementById('review-sim'))`), 'the panel is closed at first, over the view (not in the side panel)');
+  ok(await evalJs(`document.getElementById('review-sim').hidden && document.getElementById('review-sim-toggle').getAttribute('aria-expanded') === 'false' && document.getElementById('review-stage').contains(document.getElementById('review-sim'))`), 'the panel is closed at first, over the view (TASK 880: the Export view has no side panel)');
   await clickEl('#review-sim-toggle'); await waitFor(`!document.getElementById('review-sim').hidden`, 'the panel opens');
   // TASK 801c: the "more" fold (the Operation pick, Animate / Show passes, the note): open on a wide screen, folded on a phone, where the panel is a compact strip
   // docked at the bottom of the view (at most 30 % of it: the drawing stays in sight)

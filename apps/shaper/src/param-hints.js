@@ -99,9 +99,9 @@ const PARAMS = {
   vbitPocketNote: { label: 'V-bit pocket', hint: ({ passes, tip } = {}) => (passes != null && tip ? `V-bit pocket: ${passes} ${passes === 1 ? 'pass' : 'passes'} per depth with a ${tip} tip` : 'V-bit pocket: clearing passes per depth planned with the tip width.') },
   pocketScallopNote: { label: 'Pocket floor', hint: ({ flat, scallop } = {}) => (flat != null && scallop != null ? `Flat width ${flat} per pass; scallop ${scallop} between passes` : 'Flat width each pass leaves and scallop height between passes at the current stepover.') },
   // ── the Export step's side cards ──
-  stockThickness: { label: 'Thickness', hint: 'The thickness of your board, for the 3D preview only. It is not written to the file.' },
+  // TASK 880: + what the board is (stock-card.js boardOf), the note that was laid out under the field
+  stockThickness: { label: 'Thickness', hint: ({ board } = {}) => `The thickness of your board, for the 3D preview only. It is not written to the file. ${STOCK_BOARD_NOTES[board] || STOCK_BOARD_NOTES.bounds}` },
   material: { label: 'Material', hint: 'The look of the board in the 3D preview only.' },
-  export: { label: 'Export', hint: 'Three ways to get your cuts to the Origin:', items: ['generateSvg', 'syncShaperHub', 'openShaperHub'] },
   generateSvg: { label: 'Generate Shaper SVG', hint: 'Saves the Shaper SVG of your cuts to this computer, to put on the Origin by USB stick or ShaperHub.' },
   syncShaperHub: { label: 'Sync to ShaperHub', hint: 'Sends the file to your ShaperHub My Files with your Shaper login, so the Origin gets it over Wi-Fi.' },
   openShaperHub: { label: 'Open ShaperHub (My Files)', hint: 'Opens your ShaperHub files in a new browser tab.' },
@@ -215,6 +215,12 @@ const CHOICE_SOURCES = {
 /** The id of a choice's entry: `<parameter>:<choice id>`. */
 export const choiceId = (param, id) => `${param}:${id}`;
 
+// TASK 880: what the 3D board is (stock-card.js boardOf), said in the Thickness label's tooltip
+const STOCK_BOARD_NOTES = {
+  bounds: 'No Stock loop: the board is the design bounds + margin.',
+  'loop-set': 'The board is your Stock loop; set its thickness in Prepare.',
+  'loop-unset': 'The board is your Stock loop; no thickness set on it, so the default applies. Set it in Prepare.',
+};
 /** THE table: every parameter, then every choice of a parameter (label from its declaration, hint from CHOICE_HINTS). */
 export const PARAM_HINTS = Object.freeze(Object.fromEntries([
   ...Object.entries(PARAMS),

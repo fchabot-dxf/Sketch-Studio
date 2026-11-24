@@ -12,6 +12,7 @@ import { resetBufferLive } from './helpers/reset-buffer.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js'; // saving is Google Drive only: an in-memory fake Drive (no real Google call)
 import { findLoops } from '#core/loop-finder.js';
 import { terraceCount } from '#core/cutter-profile.js';
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 // the old design: a 60 x 40 rectangle whose loop was V-carved (a region picked in the removed Vcarve stage), and nothing in its cut plan
 const joints = [['j_origin', { x: 0, y: 0, fixed: true, sketchId: 'sketch-1' }]], shapes = [];
@@ -111,7 +112,7 @@ await (async () => {
     // 3. a V-bit On Line cut on that loop previews with V walls in Export 3D
     await evalJs(`import('/tests/helpers/plan-v2.js').then((m) => { m.V2_PLAN.set('loop:${loopId}', { cutType: 'online', cutDepth: 3, cutOffset: 0, toolDia: 6.35, cutterShape: 'vbit', cutterAngle: 60 }); })`);
     await openStage('review', label);
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, label + ': the 3D board is built', 20000);
+    await waitFor(REVIEW_BUILT, label + ': the 3D board is built', 20000);
     const build = await evalJs(`import('/apps/shaper/src/main.js').then((m) => { const b = m.currentReviewView().lastBuild; return { levels: b.levels, triangles: b.triangles }; })`);
     console.log(label + ' V-bit groove build: ' + JSON.stringify(build));
     assert.strictEqual(build.levels, terraceCount('vbit', 6.35, 60, 3), label + ': the V-bit groove is ' + terraceCount('vbit', 6.35, 60, 3) + ' terraces (its V walls), not one flat floor');

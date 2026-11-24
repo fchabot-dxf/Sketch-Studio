@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { pressExportAction, openCutsCard } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's; the Cuts list a card over the view
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/743');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -119,7 +120,7 @@ try {
   const download = async () => {
     await openMode('review'); // Generate Shaper SVG is on the Export step
     for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
-    await clickEl('#btn-generate-svg');
+    await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg'); // TASK 880: the header's action (the drawer's on a phone)
     let file = null;
     for (let i = 0; i < 100 && !file; i++) { const f = fs.readdirSync(dlDir).find((n) => n.endsWith('.svg')); if (f) file = path.join(dlDir, f); else await sleep(100); }
     assert.ok(file, 'the export downloaded');
@@ -129,7 +130,7 @@ try {
     await openMode('review');
     if (await evalJs(`document.getElementById('review-view-2d').getAttribute('aria-pressed')`) !== 'true') await clickEl('#review-view-2d');
     await waitFor(`document.querySelectorAll('#review-cuts-list .rv2d-op').length > 0`, label + ': the 2D list');
-    await evalJs(`document.getElementById('review-side').scrollTop = 0`); // the list at the top of the side card (a download scrolled it to the buttons)
+    await openCutsCard({ evalJs, waitFor }, clickEl); // TASK 880: the Cuts card over the view (folded on a phone), its list at the top
     await sleep(300);
     const l = await evalJs(`[...document.querySelectorAll('#review-cuts-list > *')].filter((e) => e.matches('.rv2d-tool, .rv2d-op')).map((e) => e.matches('.rv2d-tool') ? '# ' + e.textContent : e.firstChild.textContent)`);
     console.log(label + ' 2D list: ' + JSON.stringify(l));
@@ -251,7 +252,7 @@ try {
     const l2d = await export2d(label);
     assert.deepStrictEqual(l2d.filter((t) => t.startsWith('# ')), ['# Change to ⅛″ end mill', '# Change to ¼″ end mill'], label + ': 2D: the tool headings');
     assert.deepStrictEqual(l2d.filter((t) => !t.startsWith('# ')), l3.filter((t) => !t.startsWith('# ')).map((t) => t.replace(/^\d+\. /, '').replace(' | ', ' · ')), label + ': 2D: the operations in the Prepare order, in its words');
-    await shot(`${D}-export-2d-ops.png`, phone ? null : ['#review-stage', '#review-side']);
+    await shot(`${D}-export-2d-ops.png`, phone ? null : ['#review-stage']);
     if (!phone) await shot(`${D}-export-2d-list.png`, '#review-cuts', 2);
     // a tap on an operation's header picks every element of it (the two 1/8 in holes)
     await clickEl('#review-cuts-list .rv2d-op');

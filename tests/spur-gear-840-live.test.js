@@ -13,6 +13,7 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { clickOpenLive, stepLive, previewLive, okLive, selectedLive, typeLive } from './helpers/prepare-open-live.js'; // TASK S3: a click selects (no card); the toolbar's Outside opens the new operation
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/840');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -177,7 +178,7 @@ try {
   await okLive(s2);
   await openMode('review');
   if (await evalJs(`document.getElementById('review-view-3d').getAttribute('aria-pressed')`) !== 'true') await clickElRaw('#review-view-3d');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'B: the 3D preview built', 120000);
+  await waitFor(REVIEW_BUILT, 'B: the 3D preview built', 120000);
   await sleep(800);
   out.info3d = await evalJs(`document.getElementById('review-info').textContent`);
   await shotEl('shaper-3d-preview.png', '#review-canvas-host', 1);

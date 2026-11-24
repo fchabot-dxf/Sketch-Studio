@@ -12,6 +12,7 @@ import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { drawTray, selectWidths, PHONE } from './polish-757-tray.js';
 import { clickOpenLive, stepLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/757/live');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -101,7 +102,7 @@ try {
 
   // ── 5. Export 3D: the info folds to one line ──
   await openMode('review');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, 'the 3D part built (phone)', 60000);
+  await waitFor(REVIEW_BUILT, 'the 3D part built (phone)', 60000);
   await sleep(300);
   const folded = await evalJs(`import('/apps/shaper/src/main.js').then((m) => { const info = document.getElementById('review-info'), head = info.querySelector('.review-info-head'), body = info.querySelector('.review-info-body');
     const r = info.getBoundingClientRect(), v = m.currentReviewView(), b = v.inspect().box, host = document.getElementById('review-canvas-host').getBoundingClientRect();
@@ -113,7 +114,8 @@ try {
       coversPart: Math.round(ov / Math.max(1, (Math.min(part.right, host.right) - Math.max(part.left, host.left)) * (Math.min(part.bottom, host.bottom) - Math.max(part.top, host.top))) * 1000) / 1000,
       side: document.documentElement.scrollWidth - innerWidth }; })`);
   console.log('5 phone 3D info folded: ' + JSON.stringify(folded));
-  assert.ok(folded.head && /triangles/.test(folded.head) && folded.expanded === 'false' && folded.bodyHidden && folded.bodyLines >= 2, '5: phone: the info is folded to its first line by default');
+  // TASK 880: the build's numbers are not a line any more: the first line is the first note (the Stock loop board)
+  assert.ok(folded.head && /^Board: your Stock loop/.test(folded.head) && folded.expanded === 'false' && folded.bodyHidden && folded.bodyLines >= 1, '5: phone: the info is folded to its first line by default');
   assert.ok(folded.headLines === 1 && folded.infoHeight <= 60, `5: phone: ONE summary line (${folded.infoHeight} px)`);
   assert.ok(folded.coversPart <= 0.05, '5: phone: the folded info hides at most 5 % of the part on screen: ' + folded.coversPart);
   assert.ok(folded.side <= 0, '5: phone: no sideways scroll');

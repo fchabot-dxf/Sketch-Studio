@@ -15,6 +15,8 @@ import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
 import { clickOpenLive, stepLive, previewLive } from './helpers/prepare-open-live.js'; // TASK S2: an operation is opened, changed, confirmed; TASK 817: its paths drawn on its Preview
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
+import { pressExportAction, showExportSettings } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/742');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -108,7 +110,7 @@ try {
   const shownElements = () => evalJs(`import('/apps/shaper/src/export-preview.js').then((m) => m.previewItems(document.querySelector('#review-2d-canvas .rv2d-doc') || document.createElement('div')).map((e) => ({ key: e.tag + ' ' + e.cutType + ' ' + e.depth, d: e.el.getAttribute('d'), hold: e.el.getAttribute('data-hold') })))`);
   const download = async () => {
     for (const f of fs.readdirSync(dlDir)) fs.rmSync(path.join(dlDir, f));
-    await clickEl('#btn-generate-svg');
+    await pressExportAction({ evalJs, waitFor }, clickEl, 'btn-generate-svg');
     let file = null;
     for (let i = 0; i < 100 && !file; i++) { const f = fs.readdirSync(dlDir).find((n) => n.endsWith('.svg')); if (f) file = path.join(dlDir, f); else await sleep(100); }
     assert.ok(file, 'the export downloaded');
@@ -224,9 +226,10 @@ try {
     await shot(`${D}-export-2d-tabs.png`, phone ? null : '#review-stage');
     // 3D: the info lists the pass and the gaps; the tabs stand (the stock as thick as the cut is deep, so the gaps go through and the tabs bridge them)
     await clickEl('#review-view-3d');
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, label + ': the 3D board');
+    await waitFor(REVIEW_BUILT, label + ': the 3D board');
+    await showExportSettings({ evalJs, waitFor }, clickEl); // TASK 880: the thickness is the footer's (a fold card on a phone)
     await typeInto('#review-stock-thickness', unit === 'in' ? '0.75' : '18');
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, label + ': the 3D board, stock = the cut depth');
+    await waitFor(REVIEW_BUILT, label + ': the 3D board, stock = the cut depth');
     const info = await evalJs(`document.getElementById('review-info').textContent`);
     console.log(label + ' 3D info: ' + info);
     assert.ok(/5 tabs/.test(info) && /5 gaps/.test(info), label + ': the 3D info lists the tabs pass and the gaps');
@@ -246,7 +249,7 @@ try {
     await shot(`${D}-prepare-skin.png`, '#prepare-canvas');
     await export2d(`${D}-skin`, [`circle inside ${full}`, `path outside ${pass}`], [null, 'skin']);
     await clickEl('#review-view-3d');
-    await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, label + ': the 3D board (skin)');
+    await waitFor(REVIEW_BUILT, label + ': the 3D board (skin)');
     await sleep(500);
     await shot(`${D}-export-3d-skin.png`, phone ? null : '#review-stage');
     await clickEl('#review-top');

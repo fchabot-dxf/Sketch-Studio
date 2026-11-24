@@ -168,10 +168,11 @@ const toolTableJs = fs.readFileSync(new URL('../apps/shaper/src/tool-table-windo
 for (const m of toolTableJs.matchAll(/data-hint="([A-Za-z]+)"|hint: '([A-Za-z]+)'/g)) seen.add(m[1] || m[2]);
 if (toolTableJs.includes('b.dataset.hint = `cutterShape:${t.id}`')) for (const sh of CUTTER_SHAPES) seen.add(choiceId('cutterShape', sh.id)); // its Type buttons: every cutter shape (the tapered ones are offered only there)
 for (const m of stlCardJs.matchAll(/data-hint="([A-Za-z]+)"|hintLabel\('([A-Za-z]+)'\)/g)) seen.add(m[1] || m[2]);
-for (const id of ['stockThickness', 'material', 'export', 'generateSvg', 'syncShaperHub', 'openShaperHub', 'download']) ok(seen.has(id), `the Export step / drawer renders ${id}`);
-const side = html.slice(html.indexOf('<aside id="review-side">'), html.indexOf('</aside>')); // the Export step's side cards (the Sync dialog's own title is not a label of the table)
-ok(side.length > 100, 'the side cards markup');
-for (const label of ['Thickness', 'Material', 'Export', 'Generate Shaper SVG', 'Sync to ShaperHub', 'Open ShaperHub (My Files)']) ok(!side.includes(`>${label}<`) && !side.includes(`>${label} `) && !side.includes(`⚡ ${label}`), `no label text "${label}" left in the side cards' markup`);
+// TASK 880: the Export title (its 'export' entry) went with the side panel; the actions are the stage's header actions (main.js EXPORT_ACTIONS), the settings the footer's
+for (const id of ['stockThickness', 'material', 'generateSvg', 'syncShaperHub', 'openShaperHub', 'download']) ok(seen.has(id), `the Export step / drawer renders ${id}`);
+const settings = html.slice(html.indexOf('<div id="review-settings"'), html.indexOf('</div>', html.indexOf('<div id="review-settings"'))); // the Export step's footer settings
+ok(settings.length > 100, 'the footer settings markup');
+for (const label of ['Thickness', 'Material', 'Generate Shaper SVG', 'Sync to ShaperHub', 'Open ShaperHub (My Files)']) ok(!settings.includes(`>${label}<`) && !settings.includes(`>${label} `) && !mainJs.includes(`label: '${label}'`), `no label text "${label}" written out (the table's)`);
 const unseen = Object.keys(PARAM_HINTS).filter((id) => !seen.has(id));
 eq(unseen, [], 'every entry of the table is rendered somewhere');
 panel.destroy();

@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sleep, sendRealKey } from './helpers/cdp-browser.js';
 import { pressRibbonTool } from './helpers/ribbon-tool.js';
+import { REVIEW_BUILT } from './helpers/review-built.js'; // TASK 880: the 3D build is waited for through lastBuild (no build line on screen)
 
 process.env.EVIDENCE_DIR = path.resolve('.evidence/761');
 const { openPocketPage } = await import('./helpers/pocket-live.js');
@@ -97,7 +98,7 @@ try {
   assert.ok(out.controlsMatch, '3: each C carries a bezier\'s control points (to the file\'s 4 decimals)');
   await openMode('review');
   if (await evalJs(`document.getElementById('review-view-3d').getAttribute('aria-pressed')`) !== 'true') await clickEl('#review-view-3d');
-  await waitFor(`/triangles/.test(document.getElementById('review-info').textContent)`, '3: Export 3D built', 20000);
+  await waitFor(REVIEW_BUILT, '3: Export 3D built', 20000);
   out.relief = await evalJs(`import('/apps/shaper/src/cut-plan.js').then((m) => m.planReliefItems(${ST}).map((i) => [i.cutType, Math.max(...i.footprints.flatMap((f) => (f.rings || []).map((r) => r.length)))]))`);
   assert.ok(out.relief.some(([, n]) => n >= 30), '3: the 3D model\'s footprints follow the curve (a ring of many vertices): ' + JSON.stringify(out.relief));
   await shot('shaper-export-3d-bezier-pocket.png', '#review-canvas-host');

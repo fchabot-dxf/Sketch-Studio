@@ -86,7 +86,8 @@ await (async () => {
         assert.ok(m.scrollW <= m.vw + 0.5, tag + 'no sideways page scroll ' + JSON.stringify([m.scrollW, m.vw]));
         assert.deepStrictEqual([m.nSave, m.nAv, m.inHeader], [1, 1, 0], tag + 'ONE Save button, ONE account avatar, none in the header or the tab strip');
         assert.deepStrictEqual([m.endClass, m.last2, m.afterSettings, m.labelShown], ['sk-footer-end', [true, true], 'btn-settings', false], tag + 'the footer end ends ... Settings, Save, avatar, icon only ' + JSON.stringify(m));
-        assert.deepStrictEqual(m.headerKids, ['sk-sidebar-btn', m.headerKids[1]], tag + 'header = menu button + stage buttons ' + JSON.stringify(m.headerKids));
+        // TASK 880: Shaper's Export stage declares its actions (Generate, Sync, Open ShaperHub): one group at the header's right end, never the Save button or the avatar
+        assert.deepStrictEqual(m.headerKids, app.id === 'shaper' ? ['sk-sidebar-btn', 'sk-header-tabs', 'sk-header-actions'] : ['sk-sidebar-btn', m.headerKids[1]], tag + 'header = menu button + stage buttons (+ the declared stage actions) ' + JSON.stringify(m.headerKids));
         for (const k of ['save', 'av']) assert.ok(m[k].l >= -0.5 && m[k].r <= m.vw + 0.5 && m[k].t >= -0.5 && m[k].b <= m.vh + 0.5, tag + k + ' inside the screen ' + JSON.stringify(m[k]));
         assert.deepStrictEqual(m.onTop, [true, true], tag + 'nothing covers Save or the avatar');
         assert.ok(m.save.r <= m.av.l + 0.5, tag + 'Save is left of the avatar');
@@ -107,7 +108,7 @@ await (async () => {
     await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html?host=fusion`, 15000);
     await waitFor(`!!document.querySelector('.sk-header-tab')`, 'Shaper in Fusion mode', 15000); await sleep(600);
     assert.deepStrictEqual(await evalJs(`({ save: document.querySelectorAll('.sk-save').length, account: document.querySelectorAll('.sk-account').length, header: [...document.querySelector('header.sk-header').children].map((c) => c.className), overlay: document.querySelectorAll('.sk-loading').length })`),
-      { save: 0, account: 0, header: ['sk-sidebar-btn', 'sk-header-tabs'], overlay: 0 }, 'Fusion mode: no Save button, no account avatar, no loading overlay, the header = menu + stages');
+      { save: 0, account: 0, header: ['sk-sidebar-btn', 'sk-header-tabs', 'sk-header-actions'], overlay: 0 }, 'Fusion mode: no Save button, no account avatar, no loading overlay, the header = menu + stages + the Export stage actions (TASK 880)');
     await shot('layout-shaper-fusion-mode.png', { x: 0, y: 0, width: 1440, height: 60 });
     console.log('Shaper Fusion mode: no Save button');
 

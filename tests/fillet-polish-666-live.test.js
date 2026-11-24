@@ -49,11 +49,14 @@ await (async () => {
       await waitFor(`!!window.__designController && document.querySelector('#design-canvas').getBoundingClientRect().width > 0`, 'shaper design controller');
       await sleep(400);
 
-      // F10: icon sprite svg precedes #design-canvas; cursor changes must apply to #design-canvas only
-      const hasLeadingSprite = await evalJs(`(() => { const first = document.querySelector('svg'); const dc = document.getElementById('design-canvas'); return !!first && !!dc && first !== dc && first.getAttribute('aria-hidden') === 'true'; })()`);
-      assert.strictEqual(hasLeadingSprite, true, 'F10 precondition: hidden icon sprite <svg> exists before #design-canvas');
+      // F10: icon sprite svg precedes #design-canvas; cursor changes must apply to #design-canvas only. TASK 880: the header's Export action icons are <svg>s
+      // too, so the first <svg> of the page may be one of them: the sprite (#ui/cursor-manager.js ensureIconSymbols: the hidden svg holding the icon <defs>) is found
+      // by what it is, and BOTH it and the page's first <svg> (what a stray document.querySelector('svg') would hit) must keep an empty cursor
+      const SPRITE = `[...document.querySelectorAll('svg[aria-hidden="true"]')].find((s) => s.querySelector(':scope > defs'))`;
+      const hasLeadingSprite = await evalJs(`(() => { const sp = ${SPRITE}, first = document.querySelector('svg'), dc = document.getElementById('design-canvas'); return !!sp && !!dc && !!first && first !== dc && !!(sp.compareDocumentPosition(dc) & Node.DOCUMENT_POSITION_FOLLOWING); })()`);
+      assert.strictEqual(hasLeadingSprite, true, 'F10 precondition: hidden icon sprite <svg> exists before #design-canvas, and the first <svg> is not the canvas');
 
-      const cursors = () => evalJs(`({ firstSvg: document.querySelector('svg').style.cursor, canvas: document.getElementById('design-canvas').style.cursor })`);
+      const cursors = () => evalJs(`({ firstSvg: document.querySelector('svg').style.cursor + ${SPRITE}.style.cursor, canvas: document.getElementById('design-canvas').style.cursor })`);
       for (const toolId of ['tool-fillet', 'tool-trim', 'tool-break']) {
         await pressRibbonTool(evalJs, tapMouse, toolId);
         await sleep(150);

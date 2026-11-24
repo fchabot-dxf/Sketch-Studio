@@ -76,6 +76,9 @@ export function symmetricResidual(c, joints, shapes, radiusOf) {
   return worst;
 }
 
+// The one reason below that is a conflict with the sketch (the user sees the over-constrained notice); the others are an invalid pick.
+export const SYMMETRIC_FIXED_REASON = 'the points are fixed and not symmetric';
+
 // Why a symmetric constraint cannot exist at all, before any solve (ConstraintManager._mathPreCheck), or null. `fixed(id)` says whether a
 // joint cannot move, `tol` the distance under which two points count as one. The two entities must be two different things of one family,
 // and the symmetry line must not be one of them.
@@ -89,6 +92,6 @@ export function symmetricImpossible(c, joints, shapes, constraints, fixed, tol) 
   if (Array.isArray(c.shapes) && c.shapes.includes(c.line)) return 'the symmetry line cannot be one of the two entities';
   // everything fixed and not mirrored: nothing can move to satisfy it
   const all = [...o.line, ...o.pairs.flat(), ...o.onLine.flat()];
-  if (!o.sizes && all.every(fixed) && symmetricResidual(c, joints, shapes, () => 0) > tol) return 'the points are fixed and not symmetric';
+  if (!o.sizes && all.every(fixed) && symmetricResidual(c, joints, shapes, () => 0) > tol) return SYMMETRIC_FIXED_REASON;
   return null;
 }

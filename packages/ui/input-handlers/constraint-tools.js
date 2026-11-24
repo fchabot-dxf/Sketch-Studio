@@ -3,11 +3,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { TOOL_MODES, CONSTRAINT_TYPES, CONSTRAINT_TOOLS } from '#core/constants.js';
-import { ConstraintManager } from '#core/constraint-manager.js';
+import { ConstraintManager, announceOverConstrained } from '#core/constraint-manager.js';
 import { curveRefusal } from '#core/curve-kinds.js';
 import { dbg } from '#core/debug.js';
 import { findShapeById } from '#core/reference-lines.js';
-import { hasConstraint } from '#core/constraints.js';
 import { findCoincidentCluster } from '#ui/snap-detection.js';
 import { showNotification } from '#ui/notification-manager.js';
 
@@ -64,10 +63,9 @@ function dispatchConstraintPointerDown(e, svg, state, hitJoint, hitShape) {
     return false;
 }
 
-/** Make a horizontal / vertical on two joints; one already holding the same constraint is told, not silently dropped by the duplicate check. */
+/** Make a horizontal / vertical on two joints (a duplicate is told by ConstraintManager: the over-constrained notice). */
 function makeHorizontalVertical(state, type, joints) {
-    const made = ConstraintManager.createConstraint(state, type, { joints }, { source: 'toolbar' });
-    if (!made && hasConstraint(state.constraints, type, { joints })) refuse(`That is already ${type === CONSTRAINT_TYPES.HORIZONTAL ? 'horizontal' : 'vertical'}.`);
+    ConstraintManager.createConstraint(state, type, { joints }, { source: 'toolbar' });
 }
 
 function handleHorizontalVerticalPointerDown(e, svg, state, hitJoint, hitShape) {
@@ -152,11 +150,11 @@ function applyPointOnShape(state, jointId, shape) {
     if (why) { showNotification(why, 'warning'); return; }
     const cluster = findCoincidentCluster(jointId, state.constraints);
     if (shape.type === 'line' && Array.isArray(shape.joints) && shape.joints.some(j => cluster.has(j))) {
-        showNotification('That point is already on that line.', 'warning');
+        announceOverConstrained();
         return;
     }
     if ((state.constraints || []).some(c => c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.shape === shape.id && cluster.has(c.joint))) {
-        showNotification('Point is already constrained to that curve.', 'warning');
+        announceOverConstrained();
         return;
     }
     ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.POINT_ON_LINE, { joint: jointId, shape: shape.id }, { source: 'toolbar' });
@@ -187,7 +185,7 @@ function handleCoincidentPointerDown(e, svg, state, hitJoint, hitShape) {
         if (first.id === hitJoint.id) {
             showNotification('Pick two different points, or a point and a line/curve.', 'warning');
         } else if (findCoincidentCluster(first.id, state.constraints).has(hitJoint.id)) {
-            showNotification('Those points are already coincident.', 'warning');
+            announceOverConstrained();
         } else {
             ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [first.id, hitJoint.id] }, { source: 'toolbar' });
         }

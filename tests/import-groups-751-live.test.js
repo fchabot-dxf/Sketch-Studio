@@ -209,7 +209,7 @@ try {
     const lastC = await evalJs(`(() => { const c = ${ST}.constraints[${ST}.constraints.length - 1]; return { n: ${ST}.constraints.length, type: c && c.type, joints: c && c.joints }; })()`);
     const refusal = await evalJs(`(document.getElementById('notification-container') || {}).textContent || ''`);
     console.log('B. Coincident tool on two member points: ' + JSON.stringify(lastC) + ' notice: ' + JSON.stringify(refusal.slice(-160)));
-    assert.ok(lastC.n === nCons && /Coincident rejected/.test(refusal), 'B. the Coincident tool picked the two member points; the block would deform: refused');
+    assert.ok(lastC.n === nCons && /Sketch geometry over constrained/.test(refusal), 'B. the Coincident tool picked the two member points; the block would deform: refused');
     const fileJ1 = await jointsOf(file);
     assert.ok(Object.keys(fileJ0).every((k) => fileJ0[k][0] === fileJ1[k][0] && fileJ0[k][1] === fileJ1[k][1]), 'B. the refused coincident moved nothing');
     // Dimension: a member line of A

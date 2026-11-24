@@ -9,7 +9,7 @@ import { isPointLineDistance } from './geometry.js';
 import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
 import { placeForCreation as placeByTable } from './creation-placement.js';
 import { reverseLineInAngleSectors } from './angle-sector.js';
-import { symmetricImpossible } from './symmetric.js';
+import { symmetricImpossible, SYMMETRIC_FIXED_REASON } from './symmetric.js';
 import { curveRefusal } from './curve-kinds.js'; // TASK 762: a point held on a curve kind that cannot hold one
 import { textConstraintRefusal } from './text.js'; // TASK 845: only a text's anchor point takes a constraint
 
@@ -32,6 +32,12 @@ export function announceReference(c) {
     const msg = c && REFERENCE_NOTICES[c.drivenReason];
     if (msg) notify(msg, 'info', 2500);
 }
+
+// The ONE over-constrained notice (owner turns 3418-3420, Fusion's own wording and look): shown whenever a constraint the user asked for
+// would over-constrain the sketch: an exact duplicate, a contradiction, a conflict. The notifier draws it (type 'overconstrained': the
+// light panel, the red circle with the X, "1 error(s)"); the reason and the ERR code stay in the debug log, never in the toast.
+export const OVER_CONSTRAINED_TEXT = 'Sketch geometry over constrained';
+export function announceOverConstrained() { notify(OVER_CONSTRAINED_TEXT, 'overconstrained', 3000); }
 
 // Structural constraint types — cannot be driven, must be rejected on conflict
 const STRUCTURAL_TYPES = new Set([
@@ -190,7 +196,7 @@ export class ConstraintManager {
             const axA = this._lineAxis(state, normalized.shapes[0]);
             const axB = this._lineAxis(state, normalized.shapes[1]);
             if (axA && axB && axA !== axB) {
-                notify("Can't make a vertical and a horizontal line collinear — they're perpendicular.", 'error', 3500);
+                announceOverConstrained();
                 dbg.warn('constraints', `[ConstraintManager] collinear refused: perpendicular axis-aligned lines (${axA} vs ${axB})`);
                 return null;
             }
@@ -214,6 +220,7 @@ export class ConstraintManager {
         // Check duplicates
         if (constraints.hasConstraint(state.constraints, type, normalized)) {
             dbg.log('constraints', `[ConstraintManager] Duplicate ${type} constraint rejected`);
+            if (opts.source === 'toolbar') announceOverConstrained(); // a tool's request is told; a snap's or a tool-internal duplicate stays silent
             return null;
         }
 
@@ -256,7 +263,9 @@ export class ConstraintManager {
             if (mathConflict) {
                 const isStructural = STRUCTURAL_TYPES.has(type);
                 if (isStructural) {
-                    notify(`${this._friendlyName(type)} rejected — ${mathConflict} [ERR-CMATH-01]`, 'error', 3000);
+                    // a symmetric that is an invalid pick (the same point twice ...) says so; every other refusal is a conflict with the sketch
+                    if (type !== CONSTRAINT_TYPES.SYMMETRIC || mathConflict === SYMMETRIC_FIXED_REASON) announceOverConstrained();
+                    else notify(`${this._friendlyName(type)} rejected — ${mathConflict} [ERR-CMATH-01]`, 'error', 3000);
                     dbg.warn('constraints', `[ConstraintManager] ${type} math-rejected: ${mathConflict} [ERR-CMATH-01]`);
                     return null;
                 } else {
@@ -273,7 +282,7 @@ export class ConstraintManager {
             if (!mathConflict && type === CONSTRAINT_TYPES.SYMMETRIC && state.engine && typeof state.engine.isDistanceRedundant === 'function'
                 && state.engine.isDistanceRedundant({ ...normalized, type })) {
                 const satisfied = measureResidual({ ...normalized, type }, state.joints, state.shapes) <= (SolverConfig.VERIFIER_TOLERANCE || 0.001);
-                notify(`Symmetric rejected — ${satisfied ? 'the two entities are already symmetric (redundant)' : 'it contradicts the existing constraints'} [ERR-CMATH-01]`, 'error', 3000);
+                announceOverConstrained();
                 dbg.warn('constraints', `[ConstraintManager] symmetric refused: rank-redundant (${satisfied ? 'already satisfied' : 'unsatisfied'})`);
                 return null;
             }
@@ -289,8 +298,8 @@ export class ConstraintManager {
                     const diagMsg = diag && diag.residual !== undefined ? ` (res: ${Number(diag.residual).toFixed(4)}${diag.id ? `, id: ${diag.id}` : ''})` : '';
 
                     if (isStructural) {
-                        notify(`${this._friendlyName(type)} rejected — creates a conflict${diagMsg} [ERR-CSOLVE-01]`, 'error', 3000);
-                        dbg.warn('constraints', `[ConstraintManager] ${type} sandbox-rejected [ERR-CSOLVE-01]`, diag || 'no-diag');
+                        announceOverConstrained();
+                        dbg.warn('constraints', `[ConstraintManager] ${this._friendlyName(type)} rejected: creates a conflict${diagMsg} [ERR-CSOLVE-01]`, diag || 'no-diag');
                         return null;
                     } else {
                         normalized.isDriven = true;
@@ -421,8 +430,8 @@ export class ConstraintManager {
                     if (opts.autoSolve && state.engine && typeof state.engine.solve === 'function') {
                         try { state.engine.solve(opts.solveIterations); } catch (_) {}
                     }
-                    notify(`Can't add ${this._friendlyName(type)} — ${reason}. Reverted.`, 'warning', 3500);
-                    dbg.warn('constraints', `[ConstraintManager] infeasible ${type} ADD refused + reverted (${pinned ? 'fully pinned' : 'mangled ' + mangled.type})`);
+                    announceOverConstrained();
+                    dbg.warn('constraints', `[ConstraintManager] Can't add ${this._friendlyName(type)}: ${reason}. Reverted. infeasible ${type} ADD refused + reverted (${pinned ? 'fully pinned' : 'mangled ' + mangled.type})`);
                     return null;
                 }
                 // Unsatisfied but non-destructive (free DOF / solver can't assemble it) → keep, never silent.

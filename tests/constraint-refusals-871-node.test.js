@@ -58,7 +58,7 @@ try {
   const nH = made(CONSTRAINT_TYPES.HORIZONTAL);
   press(null, hs(slant));
   eq(made(CONSTRAINT_TYPES.HORIZONTAL), nH, 'I: no duplicate horizontal');
-  ok(toasts(doc).length >= 1, 'I: H/V on an already horizontal line is told');
+  eq(toasts(doc).join('|'), 'Sketch geometry over constrained', 'I: H/V on an already horizontal line is told (task 874: the over-constrained notice, no longer "That is already horizontal")');
 
   // I: H/V point then line -> notice
   const l2 = line(J(300, 0), J(340, 20));

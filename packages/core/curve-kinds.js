@@ -222,7 +222,7 @@ export const CURVE_REFUSALS = Object.freeze({
     [TOOL_MODES.COLLINEAR]: NO_BEZIER('Collinear') + ' (lines only)',
     [TOOL_MODES.TANGENT]: NO_BEZIER('Tangent') + ' (lines, circles and arcs only)',
     [TOOL_MODES.EQUAL]: NO_BEZIER('Equal') + ' (lines, circles and arcs only)',
-    [TOOL_MODES.MIDPOINT]: NO_BEZIER('Midpoint') + ' (a point and a line only)',
+    [TOOL_MODES.MIDPOINT]: NO_BEZIER('Midpoint') + ' (a point and a line or an arc only)',
     [TOOL_MODES.SYMMETRIC]: NO_BEZIER('Symmetric') + ' (points, lines, circles and arcs only)',
     [`${TOOL_MODES.MIRROR}:${MIRROR_STEPS.LINE}`]: NO_BEZIER('Mirror line') + ' (pick a line, a construction line or the X / Y axis)',
     pointOnCurve: 'Point on curve: a point cannot be held on a Bezier curve (it stays where it was placed, not held)',

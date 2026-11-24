@@ -3,7 +3,7 @@ import { Definitions, BODY_POINTS } from './definitions.js';
 import { InteractionSolver } from './interaction.js';
 import { SolverConfig } from '../solver-config.js';
 import { getCoincidentJoints } from '../joints.js';
-import { isPointLineDistance } from '../geometry.js';
+import { isPointLineDistance, arcSweepInfo } from '../geometry.js';
 import { symmetricOperands } from '../symmetric.js';
 import { offsetOperands } from '../offset.js';
 import { patternOperands, isPatternConstraint } from '../pattern.js';
@@ -734,6 +734,19 @@ export class NewtonSolver {
             const op = this._radiusOperand(shape, jointIndexMap);
             params.radiusAt = op.at; params.radius = op.radius; params.rimJoint = op.rim;
             params.onCircle = true;
+          }
+        }
+        // TASK 875: a midpoint on an ARC { joint, shape } (Fusion's addMidPoint(point, arc)): joints [centre, start, end, point] and the arc's
+        // direction (#core/geometry.js arcSweepInfo: its stored sweep, or the shortest way for an arc that stores none, at this assembly's
+        // positions). An operand that does not resolve leaves no joints: the Definition's explicit zero rows.
+        else if (c.type === 'midpoint' && c.joint && c.shape) {
+          const shape = shapeOf(c.shape);
+          params.onArc = true;
+          const ids = shape && shape.type === 'arc' && shape.joints && shape.joints.length >= 3 ? [shape.joints[0], shape.joints[1], shape.joints[2], c.joint].map(id => jointIndexMap.get(id)) : [];
+          if (ids.length === 4 && ids.every(i => typeof i === 'number')) {
+            const at = (i) => ({ x: densePositions[i*2], y: densePositions[i*2+1] });
+            params.joints = ids;
+            params.dir = arcSweepInfo(at(ids[0]), at(ids[1]), at(ids[2]), { sweep: shape.sweep }).dir;
           }
         }
         // Support tangent: circle-circle (via shapes), or line+circle (via {line, circle} or shapes [line, circle] / [circle, line])

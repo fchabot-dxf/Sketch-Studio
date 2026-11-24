@@ -296,7 +296,7 @@ function handleTangentPointerDown(e, svg, state, hitShape) {
 }
 
 /**
- * Handle midpoint constraint (3 Joints or 1 Line + 1 Joint)
+ * Handle midpoint constraint (3 Joints, 1 Line + 1 Joint, or 1 Arc + 1 Joint: task 875)
  */
 function handleMidpointPointerDown(e, svg, state, hitJoint, hitShape) {
     // Initialize pending
@@ -324,12 +324,9 @@ function handleMidpointPointerDown(e, svg, state, hitJoint, hitShape) {
             buffer.push({ type: 'joint', id: hitJoint.id });
             state.selectedJoints.add(hitJoint.id);
         }
-    } else if (hitShape && hitShape.shape.type === 'arc') {
-        refuse('Midpoint of an arc is not available yet: pick a point and a line.');
-        return false;
-    } else if (hitShape && hitShape.shape.type === 'line') {
+    } else if (hitShape && (hitShape.shape.type === 'line' || hitShape.shape.type === 'arc')) {
         if (buffer.some(x => x.type === 'shape' && x.id !== hitShape.shape.id)) {
-            refuse('Midpoint takes a point and a line (or three points), not two lines.');
+            refuse('Midpoint takes a point and a line or an arc (or three points), not two curves.');
             return false;
         }
         if (!buffer.some(x => x.type === 'shape' && x.id === hitShape.shape.id)) {
@@ -337,7 +334,7 @@ function handleMidpointPointerDown(e, svg, state, hitJoint, hitShape) {
             state.selectedShapes.add(hitShape.shape.id);
         }
     } else {
-        if (hitShape && hitShape.shape) refuse('Midpoint takes a point and a line (or three points).');
+        if (hitShape && hitShape.shape) refuse('Midpoint takes a point and a line or an arc (or three points).');
         return false;
     }
 
@@ -345,6 +342,22 @@ function handleMidpointPointerDown(e, svg, state, hitJoint, hitShape) {
     let endpoints = [], midpoint = null;
     const lineItem = buffer.find(x => x.type === 'shape');
     const jointItems = buffer.filter(x => x.type === 'joint');
+
+    // TASK 875: a point and an ARC, in either order: the point at the arc's sweep midpoint ({ joint, shape }, Fusion's addMidPoint(point, arc))
+    if (lineItem && lineItem.shape.type === 'arc') {
+        if (jointItems.length !== 1) return true;
+        const point = jointItems[0].id;
+        if (lineItem.shape.joints.includes(point)) {
+            refuse("Midpoint of an arc: pick a point that is not the arc's own centre or end.");
+            buffer.splice(buffer.indexOf(jointItems[0]), 1);
+            state.selectedJoints.delete(point);
+            return false;
+        }
+        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.MIDPOINT, { joint: point, shape: lineItem.id }, { source: 'toolbar' });
+        state.selectedJoints.clear(); state.selectedShapes.clear();
+        resetConstraintState(state);
+        return true;
+    }
 
     if (lineItem && jointItems.length === 1) {
         endpoints = lineItem.shape.joints;

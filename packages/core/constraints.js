@@ -98,6 +98,9 @@ export function getConstrainedGeometry(constraint, shapes) {
                     if (s.joints && s.joints.some(jid => constraintJoints.has(jid))) constraintShapes.add(s.id);
                 }
             }
+            // task 875: the arc form { joint, shape }, as point-on-line
+            if (constraint.joint) constraintJoints.add(constraint.joint);
+            if (constraint.shape) constraintShapes.add(constraint.shape);
             break;
 
         case CONSTRAINT_TYPES.EQUAL:
@@ -308,6 +311,8 @@ export function createConstraint(type, params) {
         }
 
         case CONSTRAINT_TYPES.MIDPOINT:
+            // task 875: a point on an ARC's sweep midpoint is { joint, shape } (Fusion's addMidPoint(point, arc)); a line's is joints [a, b, m]
+            if (params.joint && params.shape && !params.joints) return { type: CONSTRAINT_TYPES.MIDPOINT, joint: params.joint, shape: params.shape };
             if (!params.joints || params.joints.length !== 3) return null;
             return { type: CONSTRAINT_TYPES.MIDPOINT, joints: params.joints.slice() };
 
@@ -488,6 +493,8 @@ export function hasConstraint(constraints, type, params) {
                         return true;
                     }
                 }
+                // task 875: the arc form, the same point on the same arc
+                if (c.joint && c.shape && c.joint === params.joint && c.shape === params.shape) return true;
                 break;
         }
     }

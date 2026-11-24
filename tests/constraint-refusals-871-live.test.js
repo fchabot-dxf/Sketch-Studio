@@ -1,6 +1,7 @@
 // tests/constraint-refusals-871-live.test.js — TASK 871 (audit 869 cause G + I): the real SketchStudio page, desktop 1280x800 and phone 390x844.
 // The Horizontal / Vertical tool entered from the ribbon (nothing pre-selected), ONE click on a slanted line -> horizontal; a click on an
-// arc with the Midpoint tool is told (a notice), never a silent exit.
+// arc with the Midpoint tool was told (871); since task 875 an arc is a valid Midpoint pick (tests/midpoint-arc-875-live.test.js), so the
+// invalid pick checked here is an arc then a line ("not two curves"): told (a notice), never a silent exit.
 import assert from 'node:assert';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js';
@@ -73,7 +74,10 @@ async function run({ width, height, tag }) {
     await pressRibbonTool(evalJs, clickPt, 'tool-midpoint');
     await waitFor(`document.getElementById('tool-midpoint')?.classList.contains('active')`, 'Midpoint tool active');
     await clickPt(await onArc('ar'));
-    await waitFor(`document.querySelectorAll('#notification-container [data-level]').length >= 1`, 'midpoint on an arc is told');
+    await sleep(150);
+    assert.strictEqual(await evalJs(`document.querySelectorAll('#notification-container [data-level]').length`), 0, `[${label}] task 875: an arc is a valid first Midpoint pick (no notice)`);
+    await clickPt(await onLine('sl', 0.3));
+    await waitFor(`document.querySelectorAll('#notification-container [data-level]').length >= 1`, 'midpoint on an arc then a line is told');
     console.log(`[${label}] PASS`);
   } finally { await close(); }
 }

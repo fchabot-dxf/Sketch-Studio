@@ -265,3 +265,20 @@ export function angleInArcSweep(info, angle) {
     const TAU = Math.PI * 2;
     return ((((angle - info.a0) * info.dir) % TAU) + TAU) % TAU <= info.span + 1e-12;
 }
+
+// TASK 875: THE midpoint of an arc's SWEEP (Fusion's MidPointConstraint on an arc: on the arc, half way in angle from its start to its end),
+// written from the CHORD d = end - start: the point at the radius |start - centre| from the centre along the chord's normal on the arc's side,
+// dir * (dy, -dx) / |d| (dir = arcSweepInfo's: +1 = increasing angle). On the arc's own circle that is the angular midpoint for every sweep
+// in (0, 360): one formula, no branch at 180 and no mirror twin (the side of the normal is fixed by the direction, not by the chord midpoint,
+// so past 180 the point stays on the arc's far side). The solver row (definitions.js midpoint, onArc) is exactly this point, so the verifier
+// measures the solver's zero set. Undefined only for a chord of length 0 (a sweep of 0 or 360: a collapsed arc).
+export function arcMidpointFromChord(cx, cy, sx, sy, ex, ey, dir) {
+    const dx = ex - sx, dy = ey - sy, l = Math.hypot(dx, dy) || 1e-12;
+    const r = Math.hypot(sx - cx, sy - cy);
+    return { x: cx + r * dir * dy / l, y: cy - r * dir * dx / l };
+}
+// The same point from an arc's centre / start / end positions and its stored direction ({ sweep }, as arcSweepInfo reads it).
+export function arcSweepMidpoint(center, start, end, options = {}) {
+    const { dir } = arcSweepInfo(center, start, end, options);
+    return arcMidpointFromChord(center.x, center.y, start.x, start.y, end.x, end.y, dir);
+}

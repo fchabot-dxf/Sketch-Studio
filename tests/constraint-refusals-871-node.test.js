@@ -1,6 +1,6 @@
 // tests/constraint-refusals-871-node.test.js — TASK 871 (audit 869 causes G, H, I): a click on a line with Horizontal / Vertical works
 // the way the tool is really entered (pendingConstraint = { type, firstElement: null }); every refused / invalid pick of a constraint tool
-// tells the user why with a notice (never a console.warn or a silent end); Midpoint on an arc is refused WITH a notice.
+// tells the user why with a notice (never a console.warn or a silent end); Midpoint on an arc (871: refused with a notice) is made since task 875; what is still not a midpoint is told.
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
 import { TOOL_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
@@ -88,18 +88,29 @@ try {
     resetConstraintState(st);
   }
 
-  // H: midpoint with a point + an arc, both orders -> nothing made, told, never silent
+  // H: midpoint with a point + an arc. TASK 875 replaced 871's refusal: both orders MAKE the arc midpoint (tests/midpoint-arc-875-node.test.js);
+  // what is still not a midpoint is told, never silent: the arc's own centre as the point, an arc and a line.
   const A = arc(600, 0, 20);
-  const pm = J(700, 0);
+  const pm = J(700, 0), pm2 = J(720, 40);
   enter(TOOL_MODES.MIDPOINT);
   press(hj(pm), null);
   const n0 = made(CONSTRAINT_TYPES.MIDPOINT);
   press(null, hs(A.s));
-  eq(made(CONSTRAINT_TYPES.MIDPOINT), n0, 'H: point + arc makes no midpoint (the solver has no arc midpoint)');
-  ok(toasts(doc).length >= 1, 'H: point + arc is told: ' + JSON.stringify(toasts(doc)));
+  eq(made(CONSTRAINT_TYPES.MIDPOINT), n0 + 1, 'H (task 875): point + arc makes the arc midpoint');
   enter(TOOL_MODES.MIDPOINT);
   press(null, hs(A.s));
-  ok(toasts(doc).length >= 1, 'H: arc first is told');
+  eq(toasts(doc).length, 0, 'H (task 875): an arc first is a valid first pick (no notice)');
+  press(hj(pm2), null);
+  eq(made(CONSTRAINT_TYPES.MIDPOINT), n0 + 2, 'H (task 875): arc + point makes the arc midpoint');
+  enter(TOOL_MODES.MIDPOINT);
+  press(null, hs(A.s));
+  press(hj(A.c), null);
+  eq(made(CONSTRAINT_TYPES.MIDPOINT), n0 + 2, "H (task 875): the arc's own centre makes nothing");
+  ok(toasts(doc).length >= 1, "H (task 875): the arc's own centre is told: " + JSON.stringify(toasts(doc)));
+  enter(TOOL_MODES.MIDPOINT);
+  press(null, hs(A.s));
+  press(null, hs(slant));
+  ok(toasts(doc).length >= 1, 'H (task 875): an arc and a line is told: ' + JSON.stringify(toasts(doc)));
   // I: midpoint with two lines
   enter(TOOL_MODES.MIDPOINT);
   press(null, hs(slant));

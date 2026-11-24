@@ -2366,6 +2366,10 @@ switch(c.type){
             const midJ = joints.get(c.joints[2]);
             if (midJ) { mx = midJ.x; my = midJ.y; }
         }
+        if (mx === undefined && c.joint) {   // task 875: the arc form { joint, shape }: at the point
+            const midJ = joints.get(c.joint);
+            if (midJ) { mx = midJ.x; my = midJ.y; }
+        }
         if (mx === undefined && c.joints && c.joints.length >= 2) {
             const j1 = joints.get(c.joints[0]);
             const j2 = joints.get(c.joints[1]);

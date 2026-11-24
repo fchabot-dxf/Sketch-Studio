@@ -368,6 +368,14 @@ export function toPlanegcs(S) {
         break;
       }
       case 'midpoint': {
+        if (c.joint && c.shape) {
+          // task 875: a point at an ARC's sweep midpoint: on the arc's circle and equidistant from its two ends (2 equations, as the app's 2 rows;
+          // PlaneGCS has no arc-midpoint primitive and this pair also holds at the mirror point, which a solve from the app's pose does not reach)
+          const s = shape(S, c.shape);
+          add({ type: 'point_on_circle', p_id: c.joint, c_id: s.id });
+          add({ type: 'equal_length', l1_id: helperLine(s.joints[1], c.joint), l2_id: helperLine(c.joint, s.joints[2]) });
+          break;
+        }
         const [a, b, m] = c.joints;
         add({ type: 'point_on_line_ppp', p_id: m, lp1_id: a, lp2_id: b });
         add({ type: 'equal_length', l1_id: helperLine(a, m), l2_id: helperLine(m, b) });

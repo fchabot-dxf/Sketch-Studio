@@ -31,7 +31,7 @@ export const RIBBON_HINTS = Object.freeze({
   collinear: 'Keep two lines lying along the exact same infinite line.',
   tangent: 'Make a line or curve touch an arc or circle smoothly without a corner.',
   equal: 'Lock two lines to the same length or two arcs/circles to the same radius.',
-  midpoint: 'Constrain a point to sit exactly halfway along a line or between two points.',
+  midpoint: 'Constrain a point to sit exactly halfway along a line or an arc, or between two points.',
   symmetric: 'Constrain two points to mirror each other across a symmetry line.',
   lock: 'Pin or unpin selected points or shapes so solving and dragging cannot move them.',
 });

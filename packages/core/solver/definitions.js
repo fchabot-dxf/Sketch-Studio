@@ -2,6 +2,7 @@ import { angleSectorOf } from '../angle-sector.js';
 import { symmetricRowCount } from '../symmetric.js';
 import { offsetRowCount, offsetRowValues } from '../offset.js';
 import { patternRowCount, patternRowValues } from '../pattern.js';
+import { arcMidpointFromChord } from '../geometry.js';
 
 // Constraint definitions: computeError(params, positions) and computeJacobian(params, positions)
 // positions: Float64Array [x0,y0, x1,y1, ...] for joints referenced by indices in 'params.joints', followed by the circle radius
@@ -191,6 +192,23 @@ function patternJacobian(params, positions, outRows) {
   }
 }
 
+// TASK 875: the rows of the arc midpoint (the midpoint Definition's arc form), f = M - m with M = c + r n, r = |s - c| (the arc's live radius
+// through its first rim joint, as _radiusOperand), n = dir R d / |d|, d = e - s, R (x, y) = (y, -x):
+//   d f / d m = -I;  d f / d c = I - n u^T (u = (s - c) / r);  d f / d e = r N;  d f / d s = n u^T - r N,  N = d n / d d = (dir / |d|) (R - p dhat^T), p = R dhat
+function arcMidpointGrad(joints, dir, positions, outRows) {
+  const [c, s, e, m] = joints;
+  const cx = positions[c*2], cy = positions[c*2+1], sx = positions[s*2], sy = positions[s*2+1], ex = positions[e*2], ey = positions[e*2+1];
+  const r = Math.hypot(sx - cx, sy - cy) || 1e-12, ux = (sx - cx) / r, uy = (sy - cy) / r;
+  const dl = Math.hypot(ex - sx, ey - sy) || 1e-12, hx = (ex - sx) / dl, hy = (ey - sy) / dl;
+  const px = hy, py = -hx, nx = dir * px, ny = dir * py, k = dir / dl;
+  const N00 = k * (0 - px * hx), N01 = k * (1 - px * hy), N10 = k * (-1 - py * hx), N11 = k * (0 - py * hy);
+  const [rx, ry] = outRows;
+  addGrad(rx, c, 1 - nx * ux, -nx * uy);           addGrad(ry, c, -ny * ux, 1 - ny * uy);
+  addGrad(rx, s, nx * ux - r * N00, nx * uy - r * N01); addGrad(ry, s, ny * ux - r * N10, ny * uy - r * N11);
+  addGrad(rx, e, r * N00, r * N01);                 addGrad(ry, e, r * N10, r * N11);
+  addGrad(rx, m, -1, 0);                            addGrad(ry, m, 0, -1);
+}
+
 // TASK 789: the direction a distance between two joints ON each other is differentiated along (see distance computeJacobian): a 3-4-5 unit vector.
 const COLLAPSED_DIRECTION = { x: 0.6, y: 0.8 };
 
@@ -370,9 +388,21 @@ export const Definitions = {
     }
   },
   // Midpoint: ensure joint[2] is midpoint of joint[0]-joint[1]
+  // TASK 875, the ARC form (params.onArc; engine.js: joints [centre, start, end, point], params.dir = the arc's direction): the point IS the
+  // arc's sweep midpoint M = #core/geometry.js arcMidpointFromChord (the centre + |start - centre| along the chord's normal on the arc's side),
+  // residual M - point. Chosen over the pair |point - centre| = r + "on the bisector line": that pair is also zero at the MIRROR point (the
+  // other end of the bisector diameter, on the chord midpoint's side for a sweep past 180); this point has one zero only, for any sweep in
+  // (0, 360), and d/d(point) = -I like the line form (as well-conditioned as a coincident). Full derivative (arcMidpointGrad): the arc can
+  // move to meet the point. An arc that does not resolve (joints missing) has nothing to hold: explicit zero rows.
   midpoint: {
     rows: 2,
     computeError: (params, positions) => {
+      if (params.onArc) {
+        if (params.joints.length < 4) return [0, 0];
+        const [c, s, e, m] = params.joints;
+        const M = arcMidpointFromChord(positions[c*2], positions[c*2+1], positions[s*2], positions[s*2+1], positions[e*2], positions[e*2+1], params.dir);
+        return [M.x - positions[m*2], M.y - positions[m*2+1]];
+      }
       const a = params.joints[0], b = params.joints[1], m = params.joints[2];
       const ax = positions[a*2], ay = positions[a*2+1];
       const bx = positions[b*2], by = positions[b*2+1];
@@ -384,6 +414,7 @@ export const Definitions = {
       // midpoint (e.g. coincident -> origin to center a shape) now translates the endpoints too, not just
       // slaves m to a,b. Least-change keeps placing-a-marker behaviour: m free + endpoints held -> only m
       // moves; a pinned m -> the endpoints follow.
+      if (params.onArc) { if (params.joints.length >= 4) arcMidpointGrad(params.joints, params.dir, positions, outRows); return; }
       const a = params.joints[0], b = params.joints[1], m = params.joints[2];
       addGrad(outRows[0], a, 0.5, 0); addGrad(outRows[0], b, 0.5, 0); addGrad(outRows[0], m, -1, 0);
       addGrad(outRows[1], a, 0, 0.5); addGrad(outRows[1], b, 0, 0.5); addGrad(outRows[1], m, 0, -1);

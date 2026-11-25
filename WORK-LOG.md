@@ -18141,3 +18141,6 @@ Tests + the gate only (the causes task 892 diagnosed): no app code, FILE_LIMIT_M
   `all checks passed`; import-polish-fit-a 3x `570a: ok`; the other importViaMenu callers once each ok (import-polish-fit-b, import-polish-undo-node,
   penplotter-cosmetics, sketch-import, task-609-live, trace-projects); gate-shared-lock / gate-profile-sweep / gate-pid-match / gate-url-closure /
   gate-start-retry-893 ok. gate:quick `GATE tier=quick jobs=quick=22 files=586 pass=586 fail=0 deferred=11 elapsed=119s` (the advisor's merge gate held the main lane).
+
+## TURN 896
+Tests only. Added `// gate: exclusive` (line 1) to 8 tests whose pass/fail depends on wall time: op-paths-817-live (long task <=100 ms, input delay <100 ms), op-paths-817-node (no spinner at 90 ms, spinner at 200 ms), no-min-736-node (<2 s), fusion-toolpaths-799-node (decimation <500 ms), stl-slice-790-node (<5 s), template-recipes-680 (typing <200 ms), task-609-live (decode <5 s), cdp-teardown-860 (elapsed bounds 100..1000, <3000, <2000 ms). Not marked (printed only, no timing assert): bench-perf-702, joint-dof-truth, direction-777-live, review-grid-754-live, shaper-phone-import-705-live, store-open-left-713-live. No assertion, limit or app code changed.

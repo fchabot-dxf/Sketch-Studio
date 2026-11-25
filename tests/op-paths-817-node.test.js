@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/op-paths-817-node.test.js — TASK 817 (owner turns 2745-2748): TOOLPATHS GENERATE ON OK, IN THE BACKGROUND, on the Shaper node page (tests/helpers/node-app.js: the page's
 // own Prepare stage, card and Operations list) with a paths port whose worker the test drives by hand (the SAME server the page's worker runs, op-derive.js
 // createPathsServer, on structured copies: `run()` = the worker works through its queue, `answer()` = its answers reach the page). A drawn design of squares A, B, C:

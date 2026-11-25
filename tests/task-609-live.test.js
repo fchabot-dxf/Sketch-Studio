@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/task-609-live.test.js — TASK 609, in the REAL pages with the real pointer.
 //   (A. was Shaper's Vcarve tab in an Untitled: removed with V-carve, TASK 741.)
 //   B. Trace: a tab put aside keeps its photo as the compressed file (re-decoded when shown); switching back restores the photo, its mask, its trace and its scale. Prints the

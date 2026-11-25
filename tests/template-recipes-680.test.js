@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/template-recipes-680.test.js -- TASK 680: templates are built with the APP'S OWN TOOLS (owner turn 1734).
 //   1. the Dimension tool places horizontal / vertical dimensions like Fusion (#core/dim-label.js detectDimMode, advisor ruling): a level or plumb
 //      pair is a horizontal / vertical dimension wherever its label is dropped; a near-axis pair (within ~5 degrees) is horizontal / vertical with

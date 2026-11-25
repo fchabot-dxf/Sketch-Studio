@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/fusion-toolpaths-799-node.test.js — TASK 799 (SA-13): automatic Fusion toolpaths sync,
 // decimation, real Z depths, all cut types (walls, clearing lines, start mark cross, tabs, online,
 // roughing, contour), ticks only, debounce + spinner, older-addin tolerance, and 500k synthetic relief measure.

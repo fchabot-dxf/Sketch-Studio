@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/stl-slice-790-node.test.js — TASK 790: OPEN STL in Shaper. Every STL is BUILT IN THE TEST (tests/helpers/stl-mesh.js: closed lofted meshes,
 // written as binary and ASCII STL), never a stored binary.
 //  1. the slicer (#core/stl-slice.js), pure: a 120 x 80 x 19 block with a 60 x 40 x 8 vertical pocket and a d12 through hole (binary == ASCII; TASK 807:

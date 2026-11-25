@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/op-paths-817-live.test.js — TASK 817 (owner turns 2745-2748: "In fusion a toolpath generate is on ok and allow to work still, spin wheel on item only" / "i guess we
 // can adjust lead in only before and show path on ok" / the Preview button in the op edit panel) in the real Shaper page, desktop 1280 x 800 (mouse) and phone 390 x 844
 // (touch), on a synthetic relief the size of the owner's rose (a petal dome: 40 rings of 720 points, built in the test; the owner's STL is never used here):

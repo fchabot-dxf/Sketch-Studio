@@ -7,7 +7,8 @@
 // ShaperHub login's removal and, in Fusion mode, the one-time offer of the browser's pre-855 work. The Fusion PANEL build (fusion-main.js) passes none of them.
 
 import { startShaperApp } from './shaper-app.js';
-import { download } from './download.js';
+import { download, downloadZip } from './download.js'; // TASK 888: a split export's files as one zip
+import { namedFiles, zipFileName } from './export-payload.js'; // TASK 888: a split export's file names and its zip's
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry (on the page's shared store unless a store is passed)
 import { getProjectStore, createProjectStore, createMemoryAdapter } from '#ui/project-store.js'; // TASK 855: Fusion mode uses in-memory workspace store; legacy browser buffer offered once
 import { deserializeDocument } from '#core/document.js';
@@ -125,9 +126,12 @@ startShaperApp({
     { id: 'download', label: hintLabel('download'), icon: SIDEBAR_ICONS.download, tooltip: hintText('download'), onClick: async () => { // TASK 770: from the table (the shared drawer shows a tooltip)
       const payload = await app.generateShaperSvgPayload({ say: (t) => app.groupStatus(t) }); // TASK 817: waits for the paths being generated
       if (!payload) { app.groupStatus(app.emptyExportText()); return; }
-      download(app.designFileName(), payload.svg);
+      const name = app.designFileName(), files = namedFiles(payload.files, name); // TASK 888: a split Roughing / Contour: several files, one zip (as Generate)
+      const zip = files && files.length > 1 ? zipFileName(name) : null;
+      if (zip) downloadZip(zip, files); else if (files) download(files[0].name, files[0].svg); else download(name, payload.svg);
       const status = document.getElementById('simexport-status'); // TASK 803: the Origin-rules warning shows in the Export step's status line
-      if (payload.warning && status) status.textContent = payload.warning;
+      if (files && status) status.textContent = `${zip ? `Exported ${files.length} files → ${zip}: ${files.map((f) => f.name).join(', ')}` : `Exported 1 file → ${files[0].name}`}.${payload.warning ? ` ${payload.warning}` : ''}`; // TASK 888: how many files, no toast
+      else if (payload.warning && status) status.textContent = payload.warning;
     } },
     fusionAddinAction({ fusion: fusionMode, open: () => chrome.sidebar.showView(ADDIN_VIEW_ID) }),
     { divider: true },

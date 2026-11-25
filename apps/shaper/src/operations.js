@@ -25,6 +25,7 @@ import { storeOps, planKeyOf } from './operations-store.js'; // TASK S1: the sto
 import { ownedLoopIds } from '#core/profile-model.js';
 import { deriveCuts, terraceOptions, resolutionLevel, STEP_DEPTH, LEVELS, roughingAllowance, hasLevels, roughLayout, boundaryOf, ROUGH_BOUNDARY, wallsDefault } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary; a Contour's walls
 import { smoothingOf } from '#core/level-smooth.js'; // TASK 809
+import { splitOf } from './split-files.js'; // TASK 888: Split into files
 import { holdMode, tabsHaveThickness } from '#core/hold-part.js';
 import { POCKET_CLEARING, clearingPattern, clearingSettings } from '#core/pocket-clearing.js'; // TASK 745: a programmed pocket's clearing is one of its settings
 import { docUnit, lengthText, angleText } from '#core/settings-manager.js';
@@ -93,6 +94,10 @@ const SETTING_FIELDS = {
     if (rec.bottomDepth != null && Number(rec.bottomDepth) > 0) o.bottom = round6(rec.bottomDepth);
     if (Number(rec.floorAllowance) > 0) o.floor = round6(rec.floorAllowance);
     return Object.keys(o).length ? o : undefined;
+  },
+  split: (rec, eff) => { // TASK 888: Split into files (Off adds nothing): its mode and number (split-files.js splitOf; an unset number = its default, by the unit)
+    const sp = eff.levelsOp ? splitOf(rec, docUnit()) : null;
+    return sp ? { mode: sp.mode, every: sp.mode === 'depth' ? round6(sp.every) : sp.every } : undefined;
   },
   boundary: (rec, eff) => { // TASK 810: a Roughing's machining boundary (a part with levels), each part off its default (Silhouette, Outside, the calculated offset add nothing)
     if (eff.levelsOp !== 'roughing' || !hasLevels(eff)) return undefined;

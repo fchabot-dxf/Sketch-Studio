@@ -59,8 +59,9 @@ try {
   const main = read('apps/shaper/src/main.js') + read('apps/shaper/src/shaper-app.js'); // TASK 881: the page's wiring is shaper-app.js (shared by the website and the Fusion panel) + main.js (the website's own parts)
   const fixed = fs.readdirSync(path.join(ROOT, 'apps/shaper/src')).filter((f) => f.endsWith('.js') && read('apps/shaper/src/' + f).includes('shaper-export.svg'));
   eq(fixed, [], 'no "shaper-export.svg" literal in apps/shaper/src (the default lives in the one rule)');
-  eq([...main.matchAll(/download\(([^,]+),/g)].map((m) => m[1]), ['app.designFileName()', 'name'], 'the two downloads use the design file name (Download: main.js, through the page; Generate via name = designFileName())');
-  ok(/const name = designFileName\(\);\s*download\(name, payload\.svg\)/.test(main), 'Generate saves under designFileName()');
+  eq([...main.matchAll(/download(?:Zip)?\(([^,]+),/g)].map((m) => m[1]), ['zip', 'files[0].name', 'name', 'zip', 'files[0].name', 'name'], 'the two downloads use the design file name (Download: main.js, through the page; Generate via name = designFileName()); TASK 888: a split export: its zip (zipFileName(name)), or its one file (chunkFileName of name)');
+  ok(/const name = app\.designFileName\(\), files = namedFiles\(payload\.files, name\);/.test(main), 'Download saves under the page\'s designFileName()');
+  ok(/const name = designFileName\(\);\s*const files = namedFiles\(payload\.files, name\);[^\n]*\n\s*const zip = files && files\.length > 1 \? zipFileName\(name\) : null;\s*if \(zip\) downloadZip\(zip, files\); else if \(files\) download\(files\[0\]\.name, files\[0\]\.svg\); else download\(name, payload\.svg\)/.test(main), 'Generate saves under designFileName() (TASK 888: a split export as its zip)');
   ok(/syncFilename\.value = syncNameEdits\.has\(key\) \? syncNameEdits\.get\(key\) : designFileName\(\)/.test(main), 'the Sync dialog starts from designFileName() (or the edit for this design)');
   ok(!/innerHTML/.test(main), 'main.js writes no innerHTML (the success / export lines are built as text)');
 

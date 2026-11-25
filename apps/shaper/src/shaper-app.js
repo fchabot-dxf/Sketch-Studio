@@ -9,7 +9,7 @@
 //   apps/shaper/src/fusion-main.js  the Fusion PANEL build (scripts/build-site.cjs shaper-fusion, carried offline by the add-in): the plain drawer
 //                                   (#ui/app-shell.js) with Log only, an in-memory store, Fusion mode always; none of the website's own parts is loaded.
 
-import { download } from './download.js';
+import { download, downloadZip } from './download.js'; // TASK 888: a split export's files as one zip
 // Shared #core-backed sketcher (S1). Eager import so the page load exercises #ui/ + #core/ resolution;
 // the mount itself runs only when the Design tab is first opened.
 import { mountSketch } from '#ui/sketch-canvas.js';
@@ -37,7 +37,7 @@ import { createStockCard } from './stock-card.js'; // TASK 583: the Review card'
 import { mountDisclosure, CARET_SVG } from './disclosure.js'; // TASK 880: the Export view's Cuts card folds as the Operations sheet does
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { followDesign, planEntries, planReliefItems, planNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 839: planNotes = the Review's info lines (stepped, hold, clearing, levels)
-import { exportFileName, exportTickLine, exportWhenGenerated, whenGenerated, tickedSetKey } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name; TASK 817: made in the background
+import { exportFileName, exportTickLine, exportWhenGenerated, whenGenerated, tickedSetKey, namedFiles, zipFileName, chunkSetKey, splitPlan } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name; TASK 817: made in the background
 import { setPathsPort, workerPort } from './op-paths.js'; // TASK 817: the operations' paths are generated in the background (paths-worker.js)
 import { storeSignature } from './operations-store.js'; // TASK 743 / S1: the operations store (the 2D view and the 3D Review rebuild when it changes)
 import { describeOperations } from './operations.js'; // TASK 798: the Export step's line about unticked operations
@@ -170,7 +170,7 @@ export function startShaperApp({
     const p = await exportWhenGenerated(st, { preview, say, recalculate: (ids) => prepare.recalculate(ids) }); // TASK 798: the ticked operations on the whole design's frame (export-payload.js, declared once); TASK S3: an out-of-date operation waits for Recalculate
     if (!p) return null;
     // TASK 803: every file that leaves the app (Generate, Download, Send to ShaperHub) is checked against the Origin rules (#core/origin-rules.js); a broken rule is a short warning, the file is still allowed
-    const warning = preview ? '' : formatOriginRuleWarning(checkOriginRules(p.svg, { targets: ['origin', 'studio'], encoding: exportEncoding() }));
+    const warning = preview ? '' : [...new Set((p.files ? p.files.map((f) => f.svg) : [p.svg]).map((svg) => formatOriginRuleWarning(checkOriginRules(svg, { targets: ['origin', 'studio'], encoding: exportEncoding() }))).filter(Boolean))].join(' '); // TASK 888: every file of a split export
     return { ...p, state: st, warning };
   }
   // TASK 817: the plain waiting line in an element, after a turning ring (index.html .sk-wait-spin)
@@ -206,29 +206,42 @@ export function startShaperApp({
     if (call !== generateCall) return;
     if (!payload) { status.textContent = emptyExportText(); return; }
     const name = designFileName();
-    download(name, payload.svg);
+    const files = namedFiles(payload.files, name); // TASK 888: a split Roughing / Contour: its files (export-payload.js chunkFileName); several download as one zip
+    const zip = files && files.length > 1 ? zipFileName(name) : null;
+    if (zip) downloadZip(zip, files); else if (files) download(files[0].name, files[0].svg); else download(name, payload.svg);
+    const setKey = tickedSetKey(); // the ticked operations this file holds: only THEIR target is replaced (a set never sent stays local until a Send)
+    // each file written and its target: the ticked set's (TASK 884), a chunk file's = the set's key + its chunk (TASK 888, chunkSetKey: never another chunk's file)
+    const on = keepHub(), signed = signedIn();
+    const each = (files || [{ name, svg: payload.svg, chunk: null }]).map((f) => {
+      const key = f.chunk ? chunkSetKey(setKey, f.chunk) : setKey, target = getHubTarget(key);
+      return { f, key, target, decision: autoSendDecision({ on, target, signedIn: signed }) };
+    });
     const n = payload.entries.length;
     // built from nodes (TASK 767): the file name is the design's, text only
     const file = document.createElement('strong');
-    file.textContent = name;
-    const setKey = tickedSetKey(); // the ticked operations this file holds: only THEIR target is replaced (a set never sent stays local until a Send)
-    const target = getHubTarget(setKey);
-    const decision = autoSendDecision({ on: keepHub(), target, signedIn: signedIn() });
-    if (decision === 'send') {
+    file.textContent = zip || (files ? files[0].name : name);
+    status.replaceChildren(zip ? `Exported ${files.length} files → ` : files ? 'Exported 1 file → ' : `Exported ${n} cut${n === 1 ? '' : 's'} → `, file, zip ? `: ${files.map((f) => f.name).join(', ')}.` : '.'); // TASK 888: how many files, and their names
+    const sends = each.filter((d) => d.decision === 'send'), batch = { sent: [] }; // TASK 888: this Generate's replaces, ONE notice for them (autosendNotice)
+    for (const d of sends) {
       const line = document.createElement('span');
-      status.replaceChildren(`Exported ${n} cut${n === 1 ? '' : 's'} → `, file, '. ', line);
-      sayIn(line)(`Replacing ${target.filename} in ${folderPlace(target.remotePath)}...`);
-      hubQueue.push(setKey, { svg: payload.svg, target, line });
-    } else {
-      const hub = document.createElement('a');
-      Object.assign(hub, { href: SHAPERHUB_FILES_URL, target: '_blank', rel: 'noopener noreferrer', textContent: 'ShaperHub (My Files)' });
-      hub.style.cssText = 'color:var(--sk-selection,#4c9aff); text-decoration:underline;';
-      status.replaceChildren(`Exported ${n} cut${n === 1 ? '' : 's'} → `, file, '. Drop it into ', hub, ' to sync with Origin.');
-      if (decision === 'no-login') status.append(` ${hintText('keepHubSignIn')}`); // the switch is on but this session has no sign-in: the file there is not the new one
+      status.append(' ', line);
+      sayIn(line)(`Replacing ${d.target.filename} in ${folderPlace(d.target.remotePath)}...`);
+      hubQueue.push(d.key, { svg: d.f.svg, target: d.target, line, batch });
     }
+    if (sends.length) hubQueue.settled().then(() => autosendNotice(batch)); // when the queue is done (a replace a later Generate took over is that Generate's)
+    if (!sends.length) status.append(zip ? ' Unzip them and drop them into ' : ' Drop it into ', hubLink(), ' to sync with Origin.');
+    else if (each.some((d) => d.decision === 'no-target')) status.append(` Not sent before: ${each.filter((d) => d.decision === 'no-target').map((d) => d.f.name).join(', ')} (Sync to ShaperHub sends them).`); // TASK 888: a chunk never sent stays local
+    if (each.some((d) => d.decision === 'no-login')) status.append(` ${hintText('keepHubSignIn')}`); // the switch is on but this session has no sign-in: the file there is not the new one
     if (payload.warning) status.append(` ${payload.warning}`); // TASK 803
   }
 
+  // the link to ShaperHub's My Files in the Export view's status line
+  function hubLink() {
+    const hub = document.createElement('a');
+    Object.assign(hub, { href: SHAPERHUB_FILES_URL, target: '_blank', rel: 'noopener noreferrer', textContent: 'ShaperHub (My Files)' });
+    hub.style.cssText = 'color:var(--sk-selection,#4c9aff); text-decoration:underline;';
+    return hub;
+  }
   // Direct ShaperHub cloud sync (Wi-Fi sync to Origin) + in-memory session token & folder browser (TASK 772)
   const syncModal = document.getElementById('shaper-sync-modal');
   const syncForm = document.getElementById('sync-modal-form');
@@ -321,7 +334,7 @@ export function startShaperApp({
   const signedIn = () => hasSignIn({ session: !!sessionToken, remembered: rememberedInForm, email: syncEmail.value, password: syncPassword.value });
   function showKeepSwitch() {
     if (!syncKeep) return;
-    const v = keepSwitchView({ on: keepHub(), signedIn: signedIn(), target: getHubTarget(tickedSetKey()) }); // the target of the operations ticked now
+    const v = keepSwitchView({ on: keepHub(), signedIn: signedIn(), target: getHubTarget(tickedSetKey()), split: Boolean(splitPlan()) }); // the target of the operations ticked now; TASK 888: a split export's files each have their own
     syncKeep.checked = v.checked;
     syncKeep.disabled = v.disabled;
     syncKeepHint.textContent = v.hint;
@@ -345,11 +358,11 @@ export function startShaperApp({
     syncStatus.replaceChildren(...lines.map((t) => { const d = document.createElement('div'); d.textContent = t; return d; }));
   }
   // TASK 767: asking (the three choices shown, the dialog's Cancel / Send hidden) or not. TASK 774: `path` = the folder the question is about (the server's answer)
-  function showExistsQuestion(on, path = '/') {
+  function showExistsQuestion(on, path = '/', from = 0) {
     syncExists.hidden = !on;
     syncActions.hidden = on;
     for (const b of [syncReplaceBtn, syncKeepBothBtn, syncExistsCancelBtn]) b.disabled = false;
-    pendingQuestion = on ? { path } : null;
+    pendingQuestion = on ? { path, from } : null; // TASK 888: `from` = the file of a split export the question is about (its place in the files)
     applyNavLock();
   }
 
@@ -479,7 +492,7 @@ export function startShaperApp({
 
   // TASK 884: the replace of the design's target after a Generate (shaperhub-target.js), through the ONE request path; its result in its own part of the Export
   // view's status line (`line`): the dialog's own words ("Replaced <name> in <place>", sentLine), or its error lines. One at a time: hubQueue.
-  async function replaceHubTarget({ svg, target, line }) {
+  async function replaceHubTarget({ svg, target, line, batch }) {
     let res, data, sentPassword;
     try {
       ({ res, data, sentPassword } = await callShaperHub({ filename: target.filename, svg, mode: UPLOAD_MODES.REPLACE, remotePath: target.remotePath }));
@@ -496,9 +509,17 @@ export function startShaperApp({
     track('export:shaperhub'); // TASK 738: an upload to ShaperHub, as the dialog's
     line.className = '';
     line.textContent = `✓ ${sentLine(data)}.`;
-    // TASK 886, owner turn 3649 ("On generate, and little popup in corner notices success"): an owner-asked exception to "no toast for normal behaviour":
-    // ONE success notice per Autosend replace that succeeded (never for the dialog's own Send, which shows its result in the dialog; a failure keeps the line above)
-    showNotification(`Sent ${data.filename || target.filename} to ShaperHub (${folderPlace(data.remotePath || target.remotePath)})`, 'success');
+    batch.sent.push({ name: data.filename || target.filename, place: folderPlace(data.remotePath || target.remotePath) }); // its Generate's notice (autosendNotice)
+  }
+  // TASK 886, owner turn 3649 ("On generate, and little popup in corner notices success"): an owner-asked exception to "no toast for normal behaviour": ONE success
+  // notice per Generate whose Autosend replaced something, once the replaces are done (never for the dialog's own Send, which shows its result in the dialog; a
+  // failure keeps its line in the status). TASK 888 (advisor): a split export's chunk files make ONE notice too ("Sent 3 files to ShaperHub (My Files)"); one file:
+  // 886's words. `batch.sent` = the files of that Generate that were replaced ({ name, place }).
+  function autosendNotice(batch) {
+    const s = batch.sent;
+    if (!s.length) return;
+    const places = [...new Set(s.map((x) => x.place))];
+    showNotification(s.length === 1 ? `Sent ${s[0].name} to ShaperHub (${s[0].place})` : `Sent ${s.length} files to ShaperHub${places.length === 1 ? ` (${places[0]})` : ''}`, 'success');
   }
   const hubQueue = createReplaceQueue(replaceHubTarget);
 
@@ -637,17 +658,22 @@ export function startShaperApp({
 
   // ONE send, for every press (Send = mode 'new'; the question's Replace it / Keep both = 'replace' / 'keep-both').
   // TASK 774: Send goes to the folder shown; Replace it / Keep both go to the folder the question is about (pendingQuestion.path).
+  // TASK 888: a split export sends EVERY file, one after the other, each named by the chunk rule from the name typed (export-payload.js chunkFileName); a file already in
+  // My Files stops there with the question about THAT file; its answer (Replace it / Keep both) applies to it, and the files after it are sent as new again. Each file
+  // sent is the target of its own chunk (chunkSetKey), so Generate's replace reaches each chunk's own file.
   async function sendToShaperHub(mode) {
     if (sendBusy) return;
     const remotePath = mode === 'new' ? currentRemotePath : pendingQuestion ? pendingQuestion.path : null;
     if (remotePath == null) return;
+    const from = mode === 'new' || !pendingQuestion ? 0 : pendingQuestion.from || 0;
     const payload = await generateShaperSvgPayload({ say: (t) => showSyncStatus('is-loading', t) }); // TASK 817: waits for the paths being generated
     if (!payload) {
       showSyncStatus('is-error', 'No cuts assigned in Prepare.');
       return;
     }
-    const filename = syncFilename.value; // the function applies the name rule (shaper-cloud.js shaperFileName)
+    const typed = syncFilename.value; // the function applies the name rule (shaper-cloud.js shaperFileName)
     const setKey = tickedSetKey(); // TASK 884: the ticked operations this file holds (the target this send makes is theirs)
+    const files = namedFiles(payload.files, typed) || [{ name: typed, svg: payload.svg, chunk: null }]; // TASK 888
 
     if (!sessionToken) {
       const e = syncEmail ? syncEmail.value.trim() : '';
@@ -660,47 +686,55 @@ export function startShaperApp({
     }
 
     const targetPlace = folderPlace(remotePath);
-    showSyncStatus('is-loading', mode === 'replace' ? `Replacing the file in ${targetPlace}...` : mode === 'keep-both' ? 'Sending a copy under a new name...' : sessionToken ? `Uploading to ${targetPlace}...` : 'Authenticating with Shaper and uploading...');
     if (syncSubmitBtn) syncSubmitBtn.disabled = true;
     for (const b of [syncReplaceBtn, syncKeepBothBtn, syncExistsCancelBtn]) b.disabled = true;
 
-    let res, data, sentPassword;
+    const sent = []; // the success line of each file sent by this press
     sendBusy = true;
     applyNavLock();
     try {
-      ({ res, data, sentPassword } = await callShaperHub({ filename, svg: payload.svg, mode, remotePath }));
-    } catch (err) {
-      showExistsQuestion(false);
-      showSyncStatus('is-error', 'Could not reach the upload service. Check your connection and try again.', `(${err.message})`);
-      if (syncSubmitBtn) syncSubmitBtn.disabled = false;
-      return;
+      for (let i = from; i < files.length; i++) {
+        const f = files[i], m = i === from ? mode : 'new';
+        const of = files.length > 1 ? ` (file ${i + 1} of ${files.length})` : '';
+        showSyncStatus('is-loading', ...sent, (m === 'replace' ? `Replacing the file in ${targetPlace}...` : m === 'keep-both' ? 'Sending a copy under a new name...' : sessionToken ? `Uploading to ${targetPlace}...` : 'Authenticating with Shaper and uploading...') + of);
+        let res, data, sentPassword;
+        try {
+          ({ res, data, sentPassword } = await callShaperHub({ filename: f.name, svg: f.svg, mode: m, remotePath }));
+        } catch (err) {
+          showExistsQuestion(false);
+          showSyncStatus('is-error', ...sent, 'Could not reach the upload service. Check your connection and try again.', `(${err.message})`);
+          if (syncSubmitBtn) syncSubmitBtn.disabled = false;
+          return;
+        }
+        if (!res.ok || data.error) {
+          showExistsQuestion(false);
+          showSyncStatus('is-error', ...sent, ...uploadErrorLines(res, data, sentPassword));
+          if (syncSubmitBtn) syncSubmitBtn.disabled = false;
+          return;
+        }
+        if (data.status === 'exists') { // nothing was uploaded: ask (TASK 767)
+          const askedPath = data.remotePath || '/'; // TASK 774: the folder the server answered for (it names only a subfolder)
+          showSyncStatus('', ...sent, `${data.filename} is already in ${folderPlace(askedPath)}.`);
+          sendBusy = false; // the question's buttons send again (from this file)
+          showExistsQuestion(true, askedPath, i);
+          syncExistsCancelBtn.focus(); // TASK 774: never the destructive Replace it: a second Enter must not overwrite unread
+          return;
+        }
+        track('export:shaperhub'); // TASK 738
+        setHubTarget(f.chunk ? chunkSetKey(setKey, f.chunk) : setKey, targetOfSend(data, remotePath)); // TASK 884: this send is the target of these ticked operations now (Keep both: the name the server answered); TASK 888: of its chunk
+        sent.push(sentLine(data));
+      }
     } finally {
       sendBusy = false;
       applyNavLock();
     }
-    if (!res.ok || data.error) {
-      showExistsQuestion(false);
-      showSyncStatus('is-error', ...uploadErrorLines(res, data, sentPassword));
-      if (syncSubmitBtn) syncSubmitBtn.disabled = false;
-      return;
-    }
-    if (data.status === 'exists') { // nothing was uploaded: ask (TASK 767)
-      const askedPath = data.remotePath || '/'; // TASK 774: the folder the server answered for (it names only a subfolder)
-      showSyncStatus('', `${data.filename} is already in ${folderPlace(askedPath)}.`);
-      showExistsQuestion(true, askedPath);
-      syncExistsCancelBtn.focus(); // TASK 774: never the destructive Replace it: a second Enter must not overwrite unread
-      return;
-    }
 
-    track('export:shaperhub'); // TASK 738
     showExistsQuestion(false);
-    setHubTarget(setKey, targetOfSend(data, remotePath)); // TASK 884: this send is the target of these ticked operations now (Keep both: the name the server answered); saved with the design
     if (fusionUi) fusionUi.notifyProjectChanged(); // the Fusion design's project (the website's document is saved by its autosave)
     showKeepSwitch();
-    const line = sentLine(data);
-    showSyncStatus('is-success', line);
+    showSyncStatus('is-success', ...sent);
     const expStatus = document.getElementById('simexport-status');
-    if (expStatus) expStatus.textContent = `✓ ${line}. It will now appear on your Origin over Wi-Fi.${payload.warning ? ` ${payload.warning}` : ''}`;
+    if (expStatus) expStatus.textContent = `✓ ${sent.join('. ')}. ${sent.length > 1 ? 'They' : 'It'} will now appear on your Origin over Wi-Fi.${payload.warning ? ` ${payload.warning}` : ''}`;
     // TASK 758: the app keeps the login only when the box says so (TASK 886, callShaperHub). Closing the dialog hides the form after the successful fetch: that is what tells the browser's
     // password manager the sign-in succeeded (it then offers to save it). The fields keep their values until the page goes (not cleared).
     syncCloseTimer = setTimeout(closeSyncModal, 1200); // TASK 788: ended when the dialog closes (below), so it only ever closes the opening it was started for

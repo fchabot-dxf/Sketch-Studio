@@ -178,8 +178,8 @@ const app = read('apps/shaper/src/shaper-app.js');
 eq((app.match(/fetch\('\/api\/shaper-upload'/g) || []).length, 1, 'ONE request path: one fetch of /api/shaper-upload');
 eq((app.match(/hubQueue\.push\(/g) || []).length, 1, 'one place queues a replace');
 const gen = app.slice(app.indexOf('async function generateShaperSvg()'), app.indexOf('// Direct ShaperHub cloud sync'));
-ok(gen.includes('hubQueue.push(setKey,') && gen.includes('getHubTarget(setKey)'), 'that place is Generate (generateShaperSvg), for the ticked set\'s target: nothing else (autosave, edits, opening a design) triggers it');
-ok(/callShaperHub\(\{[^}]*mode: UPLOAD_MODES\.REPLACE/.test(app) && app.includes('setHubTarget(setKey, targetOfSend('), 'the replace goes through callShaperHub (the one request path), mode replace; a Send sets its set\'s target');
+ok(gen.includes('hubQueue.push(d.key,') && gen.includes('const key = f.chunk ? chunkSetKey(setKey, f.chunk) : setKey, target = getHubTarget(key);'), 'that place is Generate (generateShaperSvg), for the ticked set\'s target (TASK 888: a chunk file\'s own: the set\'s key + its chunk): nothing else (autosave, edits, opening a design) triggers it');
+ok(/callShaperHub\(\{[^}]*mode: UPLOAD_MODES\.REPLACE/.test(app) && app.includes('setHubTarget(f.chunk ? chunkSetKey(setKey, f.chunk) : setKey, targetOfSend('), 'the replace goes through callShaperHub (the one request path), mode replace; a Send sets its set\'s target');
 ok(read('apps/shaper/index.html').includes('id="sync-keep-updated"'), 'the switch is in Shaper\'s Sync dialog');
 for (const host of ['sketchstudio', 'penplotter', 'trace']) {
   const html = read(`apps/${host}/index.html`);

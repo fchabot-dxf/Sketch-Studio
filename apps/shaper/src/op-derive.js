@@ -14,6 +14,7 @@ import { deriveCuts, levelsWorkRecord, hasLevels, levelsBand, levelsRoughingFor,
 import { deriveProfileCuts, deriveCutFootprint, deriveCutTravel } from '../../../packages/core/profile-model.js';
 import { exportShaperSVG } from '../../../packages/core/shaper-export.js';
 import { withArcSamples } from '../../../packages/core/curve-kinds.js'; // the sketch's arc samples made by the page (a worker has no SVG DOM to sample them)
+import { fileSpecs, keepOf, elementDepth } from './split-files.js'; // TASK 888: Split into files (worker-safe)
 
 /** The loops of `state` with their host-side polygons (what Prepare and the exporter use) + the { id: polygon } map. (Moved here from cut-plan.js, which re-exports it.) */
 export function loopsWithPolygons(state) {
@@ -53,14 +54,27 @@ export const deriveItem = (target, rec, state, loops, loopPolys, owned) => ({ pa
 /** The Shaper SVG of `entries` on the solved sketch `state` (export-payload.js shaperSvgOf hands in the app's encoding and the document unit): the downloaded file,
  *  or with `preview: true` the same string plus the preview-only data-* attributes; `written` receives { cut, entry } of each element (TASK 793); `frame` = the
  *  whole plan's entries when `entries` are a part of it (TASK 798). */
-export function svgOf({ state, entries, encoding, docUnit, preview = false, written = null, frame = null }) {
+export function svgOf({ state, entries, encoding, docUnit, preview = false, written = null, frame = null, keep = null }) {
   const sById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const loopPolys = {};
   for (const l of findLoops(state)) loopPolys[l.id] = loopPolygon(l, state, sById);
   const options = preview ? { previewData: true } : {};
   if (written) options.written = written; // TASK 793: receives { cut, entry } of each element in the file's order (the Export step's Paths view)
+  if (keep) options.keep = keep; // TASK 888: one chunk file of a split operation (#core exportShaperSVG options.keep: the whole file's page)
   if (frame && frame.length > entries.length) options.frame = { entries: frame }; // TASK 798
   return exportShaperSVG({ state, entries, encoding, docUnit, options, loopPolys });
+}
+
+/** TASK 888: the FILES of an export (svgOf's arguments + `split`): { svg (svgOf: the one file of today), files }. `split` = split-files.js fileSpecs' plan ({ ops, stock });
+ *  `files` = null when no ticked operation is split, else [{ svg, chunk }] in file order (split-files.js THE FILES): each chunk file is the same export keeping that
+ *  file's elements, the depths of a split operation's levels read off the elements the whole file writes (`written`). */
+export function exportFilesOf({ split = null, ...args }) {
+  if (!split || args.preview) return { svg: svgOf(args), files: null };
+  const written = [];
+  const svg = svgOf({ ...args, written });
+  const specs = fileSpecs(split, (opId) => written.filter((w) => w.entry && String(w.entry.opId) === String(opId)).map((w) => elementDepth(w.cut)));
+  if (!specs) return { svg, files: null };
+  return { svg, files: specs.map((spec) => ({ svg: svgOf({ ...args, written: null, keep: keepOf(spec) }), chunk: spec.chunk })) };
 }
 
 /** TASK 793: the Export step's Paths view: the bit-centre travel of every element of the file. `written` = svgOf's list ({ cut, entry } of each element, in the
@@ -144,7 +158,7 @@ export function unpackResult(item, valueOf) {
  * localPort, runs the very same code on copies of its messages). Messages in:
  *   { refs: [[id, value]...] }   values a later job names (may ride on any message); { forget: [id...] } drops some
  *   { type: 'paths', id, target, rec, state, owned }   deriveItem of one plan item (`state` / `rec` fields by ref; `owned` = the owned loop ids)
- *   { type: 'export', id, args }   svgOf(args) (+ bitCentrePaths and TASK 801 simElements when args.preview) = { svg, bitPaths, simElements }
+ *   { type: 'export', id, args }   svgOf(args) (+ bitCentrePaths and TASK 801 simElements when args.preview) = { svg, bitPaths, simElements, files } (TASK 888: exportFilesOf's `files`, args.split)
  *   { type: 'drop', ids }   queued jobs no longer wanted (a job already running finishes; its answer is ignored by the caller)
  * Messages out: { type, id, result } or { type: 'error', id, message, stack }. Jobs run one at a time, in order, each in its own `schedule`d turn, so a 'drop'
  * that arrives while one runs reaches the queue before the next starts.
@@ -172,9 +186,9 @@ export function createPathsServer({ post, schedule }) {
     const frame = a.frame ? a.frame.map((e) => ({ ...e, rec: unpackRec(e.rec, valueOf) })) : null;
     return withArcSamples(state.arcSamples, () => {
       const written = a.preview ? [] : null;
-      const svg = svgOf({ state, entries, encoding, docUnit: a.docUnit, preview: a.preview, written, frame });
+      const { svg, files } = exportFilesOf({ state, entries, encoding, docUnit: a.docUnit, preview: a.preview, written, frame, split: a.split || null }); // TASK 888: + the chunk files of a split operation
       const bitPaths = written ? bitCentrePaths(state, written) : null;
-      return { svg, bitPaths, simElements: written ? simElements(state, written, bitPaths) : null };
+      return { svg, bitPaths, simElements: written ? simElements(state, written, bitPaths) : null, files };
     });
   }
   function next() {

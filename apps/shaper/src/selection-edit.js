@@ -71,11 +71,13 @@ export function priorRecords(entry) {
 /** Build the entry of a selection just imported: its shapes, its plan keys (cutInfo: key -> the payload's region / chain), what Fusion said of each. */
 export function buildEntry({ id: given = null, data, sourceName, regionCount, sketch, shapes, cutKeys, cutInfo, thicknessMm }) {
   const id = typeof data.selectionId === 'string' && data.selectionId ? data.selectionId : given || localSelectionId(); // TASK 841: `given` = the id the import adds it as (Insert STL)
-  const base = {}, sigs = {};
+  const base = {}, sigs = {}, frames = {};
   for (const key of cutKeys) {
     const rec = getCutRecord(key);
     base[key] = { cutType: rec.cutType, cutDepth: rec.cutDepth };
     sigs[key] = regionSig(cutInfo.get(key));
+    const reg = cutInfo.get(key);
+    if (reg && reg.frame && typeof reg.frame === 'object' && !Array.isArray(reg.frame)) frames[key] = reg.frame; // TASK 891 (add-in SA-36): the frame its body was read in
   }
   const items = data && data.summary && Array.isArray(data.summary.items) ? data.summary.items : [];
   const pSig = data ? payloadSig(data) : '';
@@ -88,6 +90,7 @@ export function buildEntry({ id: given = null, data, sourceName, regionCount, sk
     ...(pSig ? { payloadSig: pSig } : {}),
     ...(cSig ? { contentSig: cSig } : {}),
     ...(data && data.frame && typeof data.frame === 'object' && !Array.isArray(data.frame) ? { frame: data.frame } : {}),
+    ...(Object.keys(frames).length ? { frames } : {}),
   };
 }
 

@@ -7,6 +7,8 @@
 //   (so the add-in has an overlay for it: only those ids are sent to it); kind: the payload's source.kind; text: the row's words (summary.text, else
 //   "<source.name> · N regions"; an STL: its file name); cutKeys: the plan keys of its regions; base: key -> { cutType, cutDepth } as the payload gave them (what
 //   Fusion said, so an update can tell what the user changed); sigs: key -> the region's geometry signature (an update keeps a matching record's settings).
+//   frame: the payload's 3D frame (the Fusion toolpaths' frame); frames (TASK 891, add-in SA-36): key -> its region's own frame, when the payload gives one (each
+//   body of a several-body selection is read in its own frame: its own top = depth 0).
 //   • the UNDO snapshots (shaper-doc.js capturePrepare) and the DOCUMENT (captureShaperDoc: only when the list is not empty, so a design without selections
 //     writes the same bytes as before) carry the list as plain JSON.
 const LIST = [];
@@ -93,6 +95,7 @@ function sane(e) {
     ...(typeof e.payloadSig === 'string' && e.payloadSig ? { payloadSig: e.payloadSig } : {}),
     ...(typeof e.contentSig === 'string' && e.contentSig ? { contentSig: e.contentSig } : {}),
     ...(e.frame && typeof e.frame === 'object' && !Array.isArray(e.frame) ? { frame: clone(e.frame) } : {}),
+    ...(e.frames && typeof e.frames === 'object' && !Array.isArray(e.frames) && Object.keys(e.frames).length ? { frames: clone(e.frames) } : {}),
   };
 }
 

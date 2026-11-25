@@ -18225,7 +18225,7 @@ Tests only. Added `// gate: exclusive` (line 1) to 8 tests whose pass/fail depen
   refusals; the app: Open OBJ / Insert 3MF / several objects / unknown extension; saved: STL source keys as before, OBJ `format` round trip and re-slice).
   NEW tests/mesh-formats-897-live.test.js (desktop + phone 390: Insert relief.obj then cube.3mf through the real chooser; Roughing per part; card OBJ / 3MF;
   accept ".stl,.obj,.3mf,model/stl"; no loader script before the first OBJ). Fixtures tests/fixtures/mesh-897/ (cube + 1 x 1 x 0.5 in block, 500-1127 B) written
-  by tests/helpers/mesh-writers.js (committed: the tests write the relief with it in memory). Updated pins: stl-slice-790-node (the pick's extensions),
+  by tests/fixtures/mesh-writers-897.js (committed: the tests write the relief with it in memory). Updated pins: stl-slice-790-node (the pick's extensions),
   review-wiring (mesh-loaders.js loads three on demand), fusion-panel-881-node (UNUSED), insert-stl-841-live + stl-open-790-live (the entry / toolbar labels only).
   Fail-first (origin/main code, .evidence/897/failfirst.txt): OLD pick exts [".stl"]; OLD openFile cube.obj -> "This binary STL is damaged: its header says
   540,029,216 triangles ...".

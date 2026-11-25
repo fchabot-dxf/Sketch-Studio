@@ -1,6 +1,6 @@
 // tests/mesh-formats-897-node.test.js — TASK 897 (owner turn 3690: native mesh formats): Shaper's website opens and inserts OBJ and 3MF meshes exactly like an
 // STL (apps/shaper/src/mesh-formats.js readMesh: ONE reading step by the file's extension, then the STL path unchanged). The meshes: the cube and the 1 x 1 x 0.5 in
-// block of tests/fixtures/mesh-897/ (written by tests/helpers/mesh-writers.js from the SAME triangles as the fixture STLs), and the synthetic relief of task 889
+// block of tests/fixtures/mesh-897/ (written by tests/fixtures/mesh-writers-897.js from the SAME triangles as the fixture STLs), and the synthetic relief of task 889
 // (tests/fixtures/relief-terrain-889.js: 14 304 triangles, written here as STL, OBJ and 3MF in memory: too big to commit as three files).
 //  1. the reading step, pure: OBJ and 3MF give EXACTLY the STL's triangles (bit for bit: every coordinate is a float32 written as its shortest text), so they slice to
 //     EXACTLY the STL's levels, grid, work area and size (#core/stl-slice.js sliceStl, compared as JSON); several objects are merged into one mesh (counted);
@@ -23,7 +23,7 @@ register('data:text/javascript,' + encodeURIComponent(`export async function res
 const { sliceStl, parseStl } = await import('#core/stl-slice.js');
 const SettingsManager = (await import('#core/settings-manager.js')).default;
 const M = await import('./helpers/stl-mesh.js');
-const { objText, threeMfBytes } = await import('./helpers/mesh-writers.js');
+const { objText, threeMfBytes } = await import('./fixtures/mesh-writers-897.js');
 const { reliefTerrain } = await import('./fixtures/relief-terrain-889.js');
 const { open, createProfile, createNamedDesign } = await import('./helpers/node-app.js');
 const { readMesh, MESH_FILE_PICK, MESH_FORMATS } = await import('../apps/shaper/src/mesh-formats.js');

@@ -2,7 +2,7 @@
 // Page.setInterceptFileChooserDialog + DOM.setFileInputFiles) and real clicks / touches, like an STL (insert-stl-841-live):
 //  DESKTOP 1280 x 800 and PHONE 390 x 844 (touch), each from an empty design (resetBufferLive):
 //   Insert (desktop: the Prepare toolbar's INSERT > Mesh; phone: the drawer's Insert 3D mesh…) relief.obj (the synthetic relief of task 889, written as an OBJ
-//   by tests/helpers/mesh-writers.js): the notice "Inserted relief.obj: a relief, N levels · ... tall: the stock is ..."; ONE Roughing holding the part and its levels; the card shows relief.obj,
+//   by tests/fixtures/mesh-writers-897.js): the notice "Inserted relief.obj: a relief, N levels · ... tall: the stock is ..."; ONE Roughing holding the part and its levels; the card shows relief.obj,
 //   OBJ; the OBJ / 3MF readers load only then (no mesh loader script before the first OBJ). Then cube.3mf (tests/fixtures/mesh-897/): a second part, a second
 //   Roughing; the card shows cube.3mf, 3MF. The chooser offers .stl, .obj, .3mf.
 // No console error / page exception. Screenshots (.evidence/897/): <phase>-1-card-obj.png, <phase>-2-card-3mf.png (the card), <phase>-3-prepare.png.
@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
-import { objText } from './helpers/mesh-writers.js';
+import { objText } from './fixtures/mesh-writers-897.js';
 import { reliefTerrain } from './fixtures/relief-terrain-889.js';
 
 const EVIDENCE_DIR = path.resolve('.evidence/897');

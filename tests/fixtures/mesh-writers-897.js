@@ -1,4 +1,4 @@
-// tests/helpers/mesh-writers.js — TASK 897: write a flat triangle list (tests/helpers/stl-mesh.js: 9 numbers per triangle) as an OBJ text or a 3MF package, so
+// tests/fixtures/mesh-writers-897.js — TASK 897: write a flat triangle list (tests/helpers/stl-mesh.js: 9 numbers per triangle) as an OBJ text or a 3MF package, so
 // the SAME triangles reach Shaper as STL, OBJ and 3MF. Every coordinate is written as its float32 value (Math.fround), the shortest text that reads back to it:
 // the loaders' Float32 attributes then hold exactly the numbers a binary STL of the same triangles holds. One vertex per triangle corner (no sharing).
 // `objects`: the triangles split into that many objects (OBJ `o`, 3MF objects each a build item), in order.

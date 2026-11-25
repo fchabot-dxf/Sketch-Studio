@@ -4,6 +4,7 @@
 import assert from 'node:assert';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js';
+import { settledCentre } from './helpers/settled-centre.js';
 
 await (async () => {
   const cdp = await launchBrowser({ tag: '635', width: 1280, height: 820 });
@@ -15,8 +16,7 @@ await (async () => {
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 }); await sleep(200);
   };
   const clickSel = async (sel) => {
-    const c = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
-    assert(c, sel + ' missing');
+    const c = await settledCentre(cdp, sel, sel);
     await click(c.x, c.y);
   };
   const S = '(await import("/packages/ui/project-store.js")).getProjectStore()';
@@ -61,6 +61,7 @@ await (async () => {
     const saved = JSON.parse(live[0].content);
     assert.strictEqual(saved.name, 'bromont', 'the saved name is renamed');
     assert.strictEqual(saved.document.geometry.shapes.length, 1, 'the drawing made before the rename is kept');
+    await waitFor(`(document.querySelector('.sk-doctab.active .sk-doctab-name') || {}).textContent === 'bromont'`, 'tab label shows bromont', 20000);
     assert.strictEqual(await evalJs(`document.querySelector('.sk-doctab.active .sk-doctab-name').textContent`), 'bromont', 'tab label follows');
 
     await waitFor(`!!document.querySelector('[data-section="status"] a[data-action="open-in-drive"]')`, 'Open in Drive link in the status line');

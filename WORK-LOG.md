@@ -18116,3 +18116,8 @@ Relief region) and a box (its Outline outside): in Fusion the relief's contours 
   shaperhub-keep-884 (source shape: Generate's one hubQueue.push is per file key).
 - Evidence (.evidence/888/, local): {desktop,phone,fusion}-split-row.png / -split-every-row.png / -split-card.png / -export-status.png, desktop-autosend-status.png,
   the three zips.
+- TURN 888 review fix (advisor): a Generate whose Autosend replaces several chunk files shows ONE success notice ("Sent 3 files to ShaperHub (My Files)"; one
+  file: 886's exact words), from the one notice place (shaper-app.js autosendNotice, called when the replace queue is done; each replace records its file in its
+  Generate's batch); the per-file "✓ Replaced …" lines stay in the status. The Sync dialog's Autosend hint for a split export (export-payload.js splitPlan):
+  "The export is split into several files: each Generate replaces each of them on ShaperHub once it has been sent." (param-hints keepHubUpToDate `split`).
+  Live: toasts [{"level":"success","text":"✅Sent 3 files to ShaperHub (My Files)"}]; evidence .evidence/888/desktop-autosend-hint.png.

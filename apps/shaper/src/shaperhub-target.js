@@ -66,11 +66,11 @@ export function autoSendDecision({ on, target: t, signedIn }) {
 }
 
 /** The switch as the dialog shows it: { checked, disabled, hint }. It can be changed only while signed in (shaper-app.js signedIn: this session's sign-in, or TASK 886's login kept on this computer). */
-export function keepSwitchView({ on, signedIn, target: t }) {
+export function keepSwitchView({ on, signedIn, target: t, split = false }) { // TASK 888: `split` = the ticked operations hold a split one (several files, each its own target)
   return {
     checked: !!on,
     disabled: !signedIn,
-    hint: hintText('keepHubUpToDate', { signedIn: !!signedIn, name: t ? t.filename : '', place: t ? folderPlace(t.remotePath) : '' }),
+    hint: hintText('keepHubUpToDate', { signedIn: !!signedIn, split: !!split, name: t ? t.filename : '', place: t ? folderPlace(t.remotePath) : '' }),
   };
 }
 

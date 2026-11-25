@@ -28,14 +28,14 @@ import { reliefTerrain } from './fixtures/relief-terrain-889.js';
 import { chunksOf, fileSpecs, keepOf, inChunk, splitOf, SPLIT_FILES } from '../apps/shaper/src/split-files.js';
 import { storeOps } from '../apps/shaper/src/operations-store.js';
 import { getSelections } from '../apps/shaper/src/selection-list.js';
-import { exportFileOf, exportFileInBackground, exportFileName, namedFiles, chunkSetKey, zipFileName, tickedSetKey } from '../apps/shaper/src/export-payload.js';
+import { exportFileOf, exportFileInBackground, exportFileName, namedFiles, chunkSetKey, zipFileName, tickedSetKey, splitPlan } from '../apps/shaper/src/export-payload.js';
 import { exportEncoding } from '../apps/shaper/src/shaper.js';
 import { applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { planEntries } from '../apps/shaper/src/cut-plan.js';
 import { describeOperations } from '../apps/shaper/src/operations.js';
 import { createFakeShaperApi, FAKE_LOGIN } from './shaperhub-fake-api.js';
 import { handleShaperUpload } from '../packages/core/shaper-cloud.js';
-import { setHubTargets, setHubTarget, getHubTarget, targetOfSend, autoSendDecision, createReplaceQueue } from '../apps/shaper/src/shaperhub-target.js';
+import { setHubTargets, setHubTarget, getHubTarget, targetOfSend, autoSendDecision, createReplaceQueue, keepSwitchView } from '../apps/shaper/src/shaperhub-target.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let checks = 0;
@@ -225,6 +225,9 @@ try {
   const k10 = chunkSetKey(setKey, files[0].chunk), k5 = chunkSetKey(setKey, { ...files[0].chunk, to: 5 });
   ok(k10 !== k5 && getHubTarget(k5) === null, '4: a chunk whose range changed has another key: no target');
   ok(k10 !== chunkSetKey(setKey, files[1].chunk), '4: two chunks never share a key');
+  eq([keepSwitchView({ on: true, signedIn: true, target: null, split: true }).hint, keepSwitchView({ on: true, signedIn: false, target: null, split: true }).hint, keepSwitchView({ on: true, signedIn: true, target: null }).hint],
+    ['The export is split into several files: each Generate replaces each of them on ShaperHub once it has been sent.', 'Needs a sign-in for this session.', 'Each Generate replaces the file last sent with the operations ticked now: send it once first.'], '4: the Sync dialog\'s Autosend hint of a split export (signed in); a sign-in first; unsplit: as before');
+  eq(Boolean(splitPlan()), true, '4: the dialog knows the ticked operations hold a split one (export-payload.js splitPlan)');
 } finally {
   globalThis.fetch = realFetch;
   setHubTargets(null);

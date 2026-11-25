@@ -224,14 +224,24 @@ try {
     D.sentStatus = await evalJs(`[...document.querySelectorAll('#sync-modal-status div')].map((d) => d.textContent)`);
     D.targets = await evalJs(`import('/apps/shaper/src/shaperhub-target.js').then((m) => Object.values(m.getHubTargets()).map((t) => t.filename).sort())`);
     await waitFor(`!document.getElementById('shaper-sync-modal').open`, 'desktop: the dialog closes after the send');
+    await pressExportAction(cdp, clickEl, 'btn-sync-shaper'); // the dialog again: the Autosend hint of a split export
+    await waitFor(`document.getElementById('shaper-sync-modal').open && !document.getElementById('sync-keep-updated').disabled`, 'the Sync dialog again, signed in');
+    D.keepHint = await evalJs(`document.getElementById('sync-keep-hint').textContent`);
+    await shot('desktop-autosend-hint.png', '#shaper-sync-modal', 0, 1.5);
+    await clickEl('#sync-modal-close');
+    await waitFor(`!document.getElementById('shaper-sync-modal').open`, 'the dialog closes');
+    await evalJs(`(() => { window.__toasts888 = []; new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes)
+      if (n.nodeType === 1 && n.parentElement && n.parentElement.id === 'notification-container') window.__toasts888.push({ level: n.getAttribute('data-level'), text: n.textContent }); }).observe(document.body, { childList: true, subtree: true }); })()`);
     const n1 = uploads.length;
     await evalJs(`document.getElementById('simexport-status').replaceChildren()`);
     await pressExportAction(cdp, clickEl, 'btn-generate-svg');
     await waitFor(`(document.getElementById('simexport-status').textContent.match(/✓ Replaced /g) || []).length === ${D.entries.length}`, 'desktop: Generate replaced every chunk file', 60000);
     D.replaced = uploads.slice(n1).map((u) => [u.mode, u.filename, u.svg === (D.entries.find((e) => e.name === u.filename) || {}).text]);
     D.autoStatus = await evalJs(`document.getElementById('simexport-status').textContent`);
+    await sleep(1000);
+    D.toasts = await evalJs(`window.__toasts888.slice()`);
     await shot('desktop-autosend-status.png', '#simexport-status', 10, 2);
-    console.log(`ROW desktop sync | Send ${JSON.stringify(D.sent.map((s) => s.slice(0, 2)))} | dialog ${JSON.stringify(D.sentStatus)} | Generate ${JSON.stringify(D.replaced.map((s) => s.slice(0, 2)))} | status ${JSON.stringify(D.autoStatus)}`);
+    console.log(`ROW desktop sync | Send ${JSON.stringify(D.sent.map((s) => s.slice(0, 2)))} | dialog ${JSON.stringify(D.sentStatus)} | Generate ${JSON.stringify(D.replaced.map((s) => s.slice(0, 2)))} | status ${JSON.stringify(D.autoStatus)} | toasts ${JSON.stringify(D.toasts)} | hint ${JSON.stringify(D.keepHint)}`);
     await sleep(4000); // the Autosend success notices (TASK 886) go before the next phase
   }
 
@@ -289,6 +299,8 @@ try {
     assert.deepStrictEqual(R.targets, [...names].sort(), 'desktop: each chunk file is the target of its own chunk');
     assert.deepStrictEqual(R.replaced, names.map((n) => ['replace', n, true]), 'desktop: Generate replaced each chunk\'s own file with its own bytes, one each');
     assert.ok(names.every((n) => R.autoStatus.includes(`✓ Replaced ${n} in My Files.`)), 'desktop: the status line says each replace: ' + R.autoStatus);
+    assert.deepStrictEqual(R.toasts.map((x) => [x.level, x.text.endsWith(`Sent ${names.length} files to ShaperHub (My Files)`)]), [['success', true]], 'desktop: ONE success notice (its icon, then the words) for the Generate\'s replaces (advisor, task 888)');
+    assert.strictEqual(R.keepHint, 'The export is split into several files: each Generate replaces each of them on ShaperHub once it has been sent.', 'desktop: the Autosend hint of a split export');
   }
   assert.deepStrictEqual(problems, [], 'no console error / page exception');
   assert.deepStrictEqual([blocked, api.blocked], [[], []], 'no request left the machine: every Shaper call answered by the fake');

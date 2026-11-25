@@ -37,7 +37,7 @@ import { createStockCard } from './stock-card.js'; // TASK 583: the Review card'
 import { mountDisclosure, CARET_SVG } from './disclosure.js'; // TASK 880: the Export view's Cuts card folds as the Operations sheet does
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { followDesign, planEntries, planReliefItems, planNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 839: planNotes = the Review's info lines (stepped, hold, clearing, levels)
-import { exportFileName, exportTickLine, exportWhenGenerated, whenGenerated, tickedSetKey, namedFiles, zipFileName, chunkSetKey } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name; TASK 817: made in the background
+import { exportFileName, exportTickLine, exportWhenGenerated, whenGenerated, tickedSetKey, namedFiles, zipFileName, chunkSetKey, splitPlan } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name; TASK 817: made in the background
 import { setPathsPort, workerPort } from './op-paths.js'; // TASK 817: the operations' paths are generated in the background (paths-worker.js)
 import { storeSignature } from './operations-store.js'; // TASK 743 / S1: the operations store (the 2D view and the 3D Review rebuild when it changes)
 import { describeOperations } from './operations.js'; // TASK 798: the Export step's line about unticked operations
@@ -221,13 +221,14 @@ export function startShaperApp({
     const file = document.createElement('strong');
     file.textContent = zip || (files ? files[0].name : name);
     status.replaceChildren(zip ? `Exported ${files.length} files → ` : files ? 'Exported 1 file → ' : `Exported ${n} cut${n === 1 ? '' : 's'} → `, file, zip ? `: ${files.map((f) => f.name).join(', ')}.` : '.'); // TASK 888: how many files, and their names
-    const sends = each.filter((d) => d.decision === 'send');
+    const sends = each.filter((d) => d.decision === 'send'), batch = { sent: [] }; // TASK 888: this Generate's replaces, ONE notice for them (autosendNotice)
     for (const d of sends) {
       const line = document.createElement('span');
       status.append(' ', line);
       sayIn(line)(`Replacing ${d.target.filename} in ${folderPlace(d.target.remotePath)}...`);
-      hubQueue.push(d.key, { svg: d.f.svg, target: d.target, line });
+      hubQueue.push(d.key, { svg: d.f.svg, target: d.target, line, batch });
     }
+    if (sends.length) hubQueue.settled().then(() => autosendNotice(batch)); // when the queue is done (a replace a later Generate took over is that Generate's)
     if (!sends.length) status.append(zip ? ' Unzip them and drop them into ' : ' Drop it into ', hubLink(), ' to sync with Origin.');
     else if (each.some((d) => d.decision === 'no-target')) status.append(` Not sent before: ${each.filter((d) => d.decision === 'no-target').map((d) => d.f.name).join(', ')} (Sync to ShaperHub sends them).`); // TASK 888: a chunk never sent stays local
     if (each.some((d) => d.decision === 'no-login')) status.append(` ${hintText('keepHubSignIn')}`); // the switch is on but this session has no sign-in: the file there is not the new one
@@ -333,7 +334,7 @@ export function startShaperApp({
   const signedIn = () => hasSignIn({ session: !!sessionToken, remembered: rememberedInForm, email: syncEmail.value, password: syncPassword.value });
   function showKeepSwitch() {
     if (!syncKeep) return;
-    const v = keepSwitchView({ on: keepHub(), signedIn: signedIn(), target: getHubTarget(tickedSetKey()) }); // the target of the operations ticked now
+    const v = keepSwitchView({ on: keepHub(), signedIn: signedIn(), target: getHubTarget(tickedSetKey()), split: Boolean(splitPlan()) }); // the target of the operations ticked now; TASK 888: a split export's files each have their own
     syncKeep.checked = v.checked;
     syncKeep.disabled = v.disabled;
     syncKeepHint.textContent = v.hint;
@@ -491,7 +492,7 @@ export function startShaperApp({
 
   // TASK 884: the replace of the design's target after a Generate (shaperhub-target.js), through the ONE request path; its result in its own part of the Export
   // view's status line (`line`): the dialog's own words ("Replaced <name> in <place>", sentLine), or its error lines. One at a time: hubQueue.
-  async function replaceHubTarget({ svg, target, line }) {
+  async function replaceHubTarget({ svg, target, line, batch }) {
     let res, data, sentPassword;
     try {
       ({ res, data, sentPassword } = await callShaperHub({ filename: target.filename, svg, mode: UPLOAD_MODES.REPLACE, remotePath: target.remotePath }));
@@ -508,9 +509,17 @@ export function startShaperApp({
     track('export:shaperhub'); // TASK 738: an upload to ShaperHub, as the dialog's
     line.className = '';
     line.textContent = `✓ ${sentLine(data)}.`;
-    // TASK 886, owner turn 3649 ("On generate, and little popup in corner notices success"): an owner-asked exception to "no toast for normal behaviour":
-    // ONE success notice per Autosend replace that succeeded (never for the dialog's own Send, which shows its result in the dialog; a failure keeps the line above)
-    showNotification(`Sent ${data.filename || target.filename} to ShaperHub (${folderPlace(data.remotePath || target.remotePath)})`, 'success');
+    batch.sent.push({ name: data.filename || target.filename, place: folderPlace(data.remotePath || target.remotePath) }); // its Generate's notice (autosendNotice)
+  }
+  // TASK 886, owner turn 3649 ("On generate, and little popup in corner notices success"): an owner-asked exception to "no toast for normal behaviour": ONE success
+  // notice per Generate whose Autosend replaced something, once the replaces are done (never for the dialog's own Send, which shows its result in the dialog; a
+  // failure keeps its line in the status). TASK 888 (advisor): a split export's chunk files make ONE notice too ("Sent 3 files to ShaperHub (My Files)"); one file:
+  // 886's words. `batch.sent` = the files of that Generate that were replaced ({ name, place }).
+  function autosendNotice(batch) {
+    const s = batch.sent;
+    if (!s.length) return;
+    const places = [...new Set(s.map((x) => x.place))];
+    showNotification(s.length === 1 ? `Sent ${s[0].name} to ShaperHub (${s[0].place})` : `Sent ${s.length} files to ShaperHub${places.length === 1 ? ` (${places[0]})` : ''}`, 'success');
   }
   const hubQueue = createReplaceQueue(replaceHubTarget);
 

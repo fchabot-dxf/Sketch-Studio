@@ -3,9 +3,10 @@
 // packages/core/shaper-cloud.js handleShaperUpload over tests/shaperhub-fake-api.js (the add-in relays the panel's upload to that same function). The fake
 // Fusion bridge is the Fusion-mode tests' (a window.adsk stub; the add-in's answers through window.fusionJavaScriptHandler). Nothing leaves the machine.
 //   pong + design_context (design A) -> selection_data -> an Outside on the rectangle -> Export -> Sync: sign in, Send ("Sketch1.svg" to My Files)
-//   -> the panel's save_project for design A carries hubTargets.all = that file; the switch turned on;
+//   -> the panel's save_project for design A carries hubTargets.all = that file; the switch is on (its default since TASK 886, no stored choice);
 //   the Outside one step deeper (its card's + stepper, OK) -> Generate -> the fake receives ONE upload: mode 'replace', "Sketch1.svg" in "/", the NEW svg, with the
-//   login; the status line ends "✓ Replaced Sketch1.svg in My Files.";
+//   login; the status line ends "✓ Replaced Sketch1.svg in My Files." and, TASK 886 (owner turn 3649), ONE success toast "Sent Sketch1.svg to ShaperHub (My Files)"
+//   (the dialog's own Send shows none);
 //   design B opened (no project) -> no target; design A again (its saved project) -> the target is back.
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -104,6 +105,10 @@ const shot = async (name, sel) => {
   fs.writeFileSync(path.join(EVID, name), Buffer.from(data, 'base64'));
   console.log('screenshot ' + path.join(EVID, name));
 };
+// TASK 886: every toast the page's notification manager shows (#notification-container's children), recorded by an observer the TEST installs after the load
+const watchToasts = () => evalJs(`(() => { if (window.__test886Toasts) return; window.__test886Toasts = []; new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes)
+  if (n.nodeType === 1 && n.parentElement && n.parentElement.id === 'notification-container') window.__test886Toasts.push({ level: n.getAttribute('data-level'), text: n.textContent }); }).observe(document.body, { childList: true, subtree: true }); })()`);
+const toasts = () => evalJs(`window.__test886Toasts.slice()`);
 const svgDepths = (svg) => [...svg.matchAll(/shaper:cutDepth="([^"]+)"/g)].map((x) => x[1]);
 const showExport = async () => {
   await press('.sk-header-tab[data-tab="review"]');
@@ -124,6 +129,7 @@ try {
   })();` });
   await navigate(`http://127.0.0.1:${panel.port}/index.html`);
   await waitForApp('design-canvas');
+  await watchToasts();
   await waitFor(`!!document.getElementById('btn-fusion-add-selection')`, 'the Fusion bar');
   await handle('pong', { action: 'pong', fusionVersion: '2.0.20256', documentName: 'Plate v2', lengthUnits: 'mm', projectBridge: true });
   await designA(null, false);
@@ -151,17 +157,17 @@ try {
   const firstSvg = uploads[uploads.length - 1].svg;
   assert.deepStrictEqual(await hubTarget(), TARGET, 'the target: that file in My Files');
   await waitFor(`!document.getElementById('shaper-sync-modal').open`, 'the dialog closes after the send');
+  assert.deepStrictEqual(await toasts(), [], 'the Send of the dialog shows no toast (TASK 886)');
   await waitFor(`window.adsk._sent.some((m) => m.action === 'save_project' && JSON.parse(m.data).project.hubTargets)`, 'the design\'s project saved with the target (debounced)', 15000);
   const saved = (await sentOf('save_project')).filter((m) => m.project.hubTargets).pop();
   assert.strictEqual(saved.docToken, 'tok-A', 'saved into design A');
   assert.deepStrictEqual(saved.project.hubTargets, { all: TARGET }, 'the project carries hubTargets.all');
 
-  // the switch on
+  // the switch: on by default (TASK 886, owner turn 3645), enabled once signed in
   await pressExportAction(cdp, press, 'btn-sync-shaper');
-  await waitFor(`document.getElementById('shaper-sync-modal').open && !document.getElementById('sync-keep-updated').disabled`, 'signed in: the switch can be turned on');
+  await waitFor(`document.getElementById('shaper-sync-modal').open && !document.getElementById('sync-keep-updated').disabled`, 'signed in: the switch can be changed');
   assert.strictEqual(await evalJs(`document.getElementById('sync-keep-hint').textContent`), `Each Generate replaces ${NAME} in My Files on ShaperHub.`, 'its hint names the file and the folder');
-  await press('#sync-keep-updated');
-  await waitFor(`document.getElementById('sync-keep-updated').checked`, 'the switch on');
+  assert.deepStrictEqual(await evalJs(`[document.getElementById('sync-keep-updated').checked, localStorage.getItem('shaper-keep-hub-up-to-date')]`), [true, null], 'on: its default (no stored choice)');
   await shot('fusion-panel-dialog-switch-on.png', '#shaper-sync-modal');
   await press('#sync-modal-close');
   await waitFor(`!document.getElementById('shaper-sync-modal').open`, 'the dialog closes');
@@ -183,6 +189,12 @@ try {
   assert.deepStrictEqual([u.mode, u.filename, u.remotePath, u.login], ['replace', NAME, '/', true], 'mode replace, the same name and folder, the login carried');
   assert.notDeepStrictEqual(svgDepths(u.svg), svgDepths(firstSvg), 'the NEW svg (the new depth)');
   console.log('panel status line: ' + await evalJs(`document.getElementById('simexport-status').textContent`));
+  await waitFor(`window.__test886Toasts.length > 0`, 'the Autosend success toast');
+  await sleep(500);
+  const tw = await toasts();
+  console.log('panel toasts: ' + JSON.stringify(tw));
+  assert.ok(tw.length === 1 && tw[0].level === 'success' && tw[0].text.includes(`Sent ${NAME} to ShaperHub (My Files)`), 'ONE success toast (TASK 886, owner turn 3649): ' + JSON.stringify(tw));
+  await shot('fusion-panel-autosend-toast.png', '#notification-container');
   await shot('fusion-panel-status-replaced.png', '#simexport-status');
 
   // design B, then design A again from its saved project: the target follows the design (the project the panel saved for A)

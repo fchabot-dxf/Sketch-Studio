@@ -18051,3 +18051,23 @@ Owner turns 3591-3597 ("Ok"), advisor heads-up (targets per ticked set), owner r
   reach nearly every test's import graph); run one at a time: the 3 new ones + the 41 of the plan that touch Generate / Sync / the export / ticks / sidecars / Fusion
   projects / saving: all exit 0 (save-as-local-759-live failed once, "it shows the file's one line 2 !== 1" in SketchStudio, then passed on its rerun). The rest is
   left to the advisor's merge gate.
+
+## TURN 886 — Remember login on this computer; Autosend on by default; label "Autosend"; Autosend success toast (Claude Opus subagent, branch agents/remember-886)
+Owner turns 3612-3614 (reverses TASK 758's "the app keeps no login", turn 2260 superseded), 3645, 3647-3648, 3649.
+- NEW the Sync dialog's sign-in has "Remember login on this computer" (apps/shaper/index.html #sync-remember-login, inside #sync-creds), OFF by default, hint line
+  "Saved as plain text in this app's storage on this computer. Untick to delete it." (param-hints.js rememberLogin). ONE code path in shaper-app.js (website + Fusion panel).
+- apps/shaper/src/shaperhub-login.js: REMEMBER_LOGIN_KEY 'shaper-hub-remembered-login' (a NEW key; 758's OLD_LOGIN_KEY 'shaper_hub_creds' is still deleted at start by
+  forgetOldLogin, KEPT: that copy was stored under the promise 758 ended, it is never read or moved to the new key, and forgetOldLogin never touches the new key);
+  readRememberedLogin (an unreadable copy throws ONE fixed message, never its content), rememberLogin(storage, remember, login), hasSignIn.
+- shaper-app.js: at start the kept login fills the form and counts as signed in (signedIn() = hasSignIn: a session token OR the form filled from the kept login, and
+  the form holds an email + password) -> autoSendDecision 'send' right after a reload. callShaperHub: every successful answer -> keepRememberedLogin (ticked: kept,
+  unticked: deleted); a refused login ('login' kind) ends the sign-in but the copy stays; Switch account (the existing sign-out) deletes it; unticking deletes it at once;
+  editing the fields ends the remembered sign-in. Storage errors -> dbg.warn (message only).
+- TASK 884's switch: ON by default (owner turn 3645): KEEP_HUB_KEY no entry = on; setKeepHub stores '1' / '0' (an explicit off is now stored). Its label is
+  "Autosend" (owner turns 3647-3648; hints unchanged). An Autosend replace that succeeds shows ONE success toast "Sent <name> to ShaperHub (<place>)" through
+  #ui/notification-manager.js (owner turn 3649, an owner-asked exception to "no toast for normal behaviour"); the dialog's own Send shows none.
+- Tests: NEW tests/shaperhub-remember-886-node.test.js (50 checks), tests/shaperhub-remember-886-live.test.js (desktop + phone 390), tests/shaperhub-remember-886-fusion-live.test.js
+  (the panel build, reopen via request_selection), tests/shaperhub-login-scan.js (the 758 page scan, shared). UPDATED 758 node + live (the one allowed storage line / key,
+  the new box present and unticked, nothing anywhere while unticked), 884 node + live + fusion-live (ON default, '0' stored for off, label Autosend, the toast).
+- The Fusion panel now loads shaperhub-login.js (one path for both pages): tests/fusion-panel-881-node.test.js moves it from UNUSED to USED; docs/FUSION-PANEL-881.md says so.
+- Evidence (local) .evidence/886/: desktop/phone remember-unticked / remember-ticked / remember-ticked-after-reload, desktop-wrong-password-line, fusion-panel-*.

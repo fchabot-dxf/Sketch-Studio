@@ -133,8 +133,10 @@ const PARAMS = {
   syncNewFolder: { label: 'New folder', hint: 'Create a subfolder inside the ShaperHub folder currently open.' },
   syncFilename: { label: 'File Name (on Origin)', hint: 'Name shown on your Origin screen: defaults to your design name and ends with .svg.' },
   // TASK 884: the Sync dialog's switch; its hint is the line under it (what it does now: the file and folder it replaces, or what it needs)
-  keepHubUpToDate: { label: 'Keep ShaperHub up to date', hint: ({ signedIn = true, name = '', place = '' } = {}) => (!signedIn ? 'Needs a sign-in for this session.'
+  // TASK 886 (owner turns 3647-3648): the switch's label is "Autosend" (was "Keep ShaperHub up to date")
+  keepHubUpToDate: { label: 'Autosend', hint: ({ signedIn = true, name = '', place = '' } = {}) => (!signedIn ? 'Needs a sign-in for this session.'
     : name ? `Each Generate replaces ${name} in ${place} on ShaperHub.` : 'Each Generate replaces the file last sent with the operations ticked now: send it once first.') },
+  rememberLogin: { label: 'Remember login on this computer', hint: 'Saved as plain text in this app’s storage on this computer. Untick to delete it.' }, // TASK 886: the sign-in's checkbox; its hint is the line under it
   keepHubSignIn: { label: 'ShaperHub not updated', hint: 'ShaperHub not updated: sign in with Sync to ShaperHub to keep it up to date.' }, // TASK 884: a Generate with the switch on and no sign-in this session
   // ── TASK 790: Open STL (the drawer) and the STL card (Prepare) ──
   insertStlTool: { label: 'STL', hint: 'Insert STL: adds a 3D part (an STL file) as one more relief, its own Roughing, placed clear of the other shapes. Nothing else changes.' }, // TASK 841: the Prepare toolbar's INSERT section

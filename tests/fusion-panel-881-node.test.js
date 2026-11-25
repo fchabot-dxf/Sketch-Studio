@@ -25,7 +25,6 @@ const UNUSED = [
   'src/main.js',                      // the website's boot
   'src/addin-download.js',            // the Fusion add-in download (the panel IS the add-in)
   'src/cut-import.js',                // the SVG / DXF import (the drawer's entry, the drop on the page)
-  'src/shaperhub-login.js',           // the old ShaperHub login's removal (a fresh origin has none)
   'src/shaper-browser.js',            // the SKETCHES browser over the Design view
   'packages/ui/design-browser.js',
   'packages/ui/app-chrome.js',        // the project drawer and its services
@@ -56,6 +55,7 @@ const UNUSED = [
 // USED: the panel's own boot, the shared wiring, the Fusion parts, Prepare (without Insert STL: TASK 885), Export, the Log, the vendored three.js
 const USED = [
   'index.html', 'src/fusion-main.js', 'src/shaper-app.js', 'src/fusion-bridge.js', 'src/fusion-import.js', 'src/fusion-toolpaths.js', 'src/selection-edit.js',
+  'src/shaperhub-login.js', // TASK 886: the remembered ShaperHub login (shaper-app.js, the panel's too); the old login's removal stays the website's (main.js)
   'src/selection-list.js', 'src/prepare-stage.js', 'src/export-payload.js', 'src/export-preview.js', 'src/export-sim.js', 'src/review-view.js',
   'src/paths-worker.js', 'src/op-derive.js', 'styles/main.css', 'packages/ui/app-shell.js', 'packages/ui/app-header.js', 'packages/ui/app-sidebar.js',
   'packages/ui/app-footer.js', 'packages/ui/diagnostic-log.js', 'packages/ui/document-buffer-core.js', 'packages/ui/project-store-core.js',

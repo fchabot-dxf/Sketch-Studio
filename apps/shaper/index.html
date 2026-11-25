@@ -869,7 +869,8 @@
           <span>Signed in for this session</span>
           <button type="button" id="sync-btn-switch" class="sync-link-btn">Switch account</button>
         </div>
-        <!-- TASK 758: a password form the BROWSER's password manager saves and fills (the app keeps no login): name + autocomplete tokens, a label per field -->
+        <!-- TASK 758: a password form the BROWSER's password manager saves and fills: name + autocomplete tokens, a label per field.
+             TASK 886: the app keeps the login too only while "Remember login on this computer" is ticked (shaperhub-login.js REMEMBER_LOGIN_KEY); off by default -->
         <div id="sync-creds" class="sync-creds">
           <div class="sync-field">
             <label for="sync-email">Shaper Account Email</label>
@@ -878,6 +879,10 @@
           <div class="sync-field">
             <label for="sync-password">Password</label>
             <input id="sync-password" name="password" type="password" required autocomplete="current-password" placeholder="••••••••">
+          </div>
+          <div class="sync-keep">
+            <label class="sync-keep-row" for="sync-remember-login"><input id="sync-remember-login" type="checkbox" aria-describedby="sync-remember-hint"> <span data-label="rememberLogin"></span></label>
+            <div id="sync-remember-hint" class="sync-keep-hint"></div>
           </div>
           <div class="sync-browse-row">
             <button type="button" id="sync-btn-browse" class="sync-link-btn">Browse folders</button>

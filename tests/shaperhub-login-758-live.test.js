@@ -12,12 +12,15 @@
 //  - Fusion mode (?host=fusion, window.adsk stubbed): the form still works by typing;
 //  - after each Sync: no localStorage / sessionStorage key or value, cookie, IndexedDB record, page markup, console line or other request holds the
 //    fake email or password; after a reload the fields are empty and opening the sign-in fills nothing in.
+//  - TASK 886: the sign-in has "Remember login on this computer", unticked by default; this test never ticks it, so all of the above still holds (ticked:
+//    tests/shaperhub-remember-886-live.test.js allows exactly its one key).
 // Screenshots of the sign-in (empty, and holding only the fake login) to .evidence/758/ (EVIDENCE_DIR overrides).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { pageLoginPlaces } from './shaperhub-login-scan.js'; // TASK 886: the page scan, shared with shaperhub-remember-886-live
 import { pressExportAction } from './helpers/export-actions.js'; // TASK 880: the Export actions are the header's (the drawer's on a phone)
 
 const EVIDENCE_DIR = process.env.EVIDENCE_DIR || path.resolve('.evidence/758');
@@ -141,7 +144,8 @@ const checkFormSemantics = async (label) => {
       email: { type: em.type, name: em.name, ac: em.getAttribute('autocomplete'), inputmode: em.getAttribute('inputmode'), label: lab(em) },
       password: { type: pw.type, name: pw.name, ac: pw.getAttribute('autocomplete'), label: lab(pw) },
       submit: submit.map((b) => b.id), acOff: !!document.querySelector('#shaper-sync-modal [autocomplete="off"]'),
-      remember: !!document.getElementById('sync-remember') || /Remember login/i.test(document.getElementById('shaper-sync-modal').textContent) }; })()`);
+      oldRemember: !!document.getElementById('sync-remember') || /Remember login in this browser/i.test(document.getElementById('shaper-sync-modal').textContent),
+      remember: (() => { const b = document.getElementById('sync-remember-login'); return b ? { checked: b.checked, inForm: b.form === form, label: b.labels[0].textContent.trim() } : null; })() }; })()`);
   console.log(label + ': form ' + JSON.stringify(f));
   assert.strictEqual(f.form, 'form', label + ': the fields are in a <form>');
   assert.ok(f.sameForm, label + ': email and password are in the SAME form');
@@ -149,7 +153,8 @@ const checkFormSemantics = async (label) => {
   assert.deepStrictEqual(f.password, { type: 'password', name: 'password', ac: 'current-password', label: 'Password' }, label + ': the password field');
   assert.deepStrictEqual(f.submit, ['sync-btn-submit'], label + ': one submit button in the form (Send)');
   assert.strictEqual(f.acOff, false, label + ': no autocomplete="off" in the sign-in');
-  assert.strictEqual(f.remember, false, label + ': no "Remember login" checkbox');
+  assert.strictEqual(f.oldRemember, false, label + ': no OLD "Remember login in this browser" checkbox');
+  assert.deepStrictEqual(f.remember, { checked: false, inForm: true, label: 'Remember login on this computer' }, label + ': TASK 886: the new box, in the sign-in form, unticked by default');
   // paste is not blocked: no paste / copy / cut listener on either field or the form
   const doc = await send('DOM.getDocument', { depth: 0 });
   for (const sel of ['#sync-email', '#sync-password', '#sync-modal-form']) {
@@ -161,26 +166,14 @@ const checkFormSemantics = async (label) => {
   }
 };
 const typeInto = async (sel, text) => { await clickEl(sel); await send('Input.insertText', { text }); await sleep(100); };
-// every place the page could keep the login: storage keys + values, cookies, every IndexedDB record, the markup, the console, the other requests
+// every place the page could keep the login: storage keys + values, cookies, every IndexedDB record, the markup (shaperhub-login-scan.js), the console, the
+// other requests. TASK 886: "Remember login on this computer" is NEVER ticked in this test, so NOTHING anywhere holds it (shaperhub-remember-886-live: ticked)
 const scanForLogin = async (label) => {
-  const found = await evalJs(`(async () => { const secrets = ${JSON.stringify(SECRETS)}; const hits = [];
-    const has = (where, s) => { for (const x of secrets) if (String(s).includes(x)) hits.push(where); };
-    for (const [n, st] of [['localStorage', localStorage], ['sessionStorage', sessionStorage]]) for (let i = 0; i < st.length; i++) { const k = st.key(i); has(n + ' key', k); has(n + ' value of ' + k, st.getItem(k)); }
-    has('cookie', document.cookie);
-    has('markup', document.documentElement.outerHTML);
-    for (const d of await indexedDB.databases()) {
-      const db = await new Promise((ok, no) => { const r = indexedDB.open(d.name); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
-      for (const s of db.objectStoreNames) {
-        const all = await new Promise((ok, no) => { const r = db.transaction(s).objectStore(s).getAll(); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
-        has('IndexedDB ' + d.name + '/' + s, JSON.stringify(all));
-      }
-      db.close();
-    }
-    return { hits, keys: localStorage.length + sessionStorage.length }; })()`);
+  const hits = await pageLoginPlaces(evalJs, SECRETS);
   const elsewhere = sent.filter((r) => SECRETS.some((x) => (r.url + r.body).includes(x))).map((r) => r.url);
   const logged = consoleLines.filter((l) => SECRETS.some((x) => l.includes(x)));
-  console.log(label + `: login scan: page ${JSON.stringify(found)}, other requests carrying it ${elsewhere.length}, console lines carrying it ${logged.length}`);
-  assert.deepStrictEqual(found.hits, [], label + ': the login is in no storage, cookie, IndexedDB record or markup');
+  console.log(label + `: login scan: page ${JSON.stringify(hits)}, other requests carrying it ${elsewhere.length}, console lines carrying it ${logged.length}`);
+  assert.deepStrictEqual(hits, [], label + ': the login is in no storage, cookie, IndexedDB record or markup (the box unticked)');
   assert.deepStrictEqual(elsewhere, [], label + ': no request but the upload carries the login');
   assert.deepStrictEqual(logged, [], label + ': no console line carries the login');
 };

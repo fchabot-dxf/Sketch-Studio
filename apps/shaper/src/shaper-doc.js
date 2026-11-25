@@ -4,6 +4,7 @@
 //     the REGIONS (per geometry key: slope, levels, source) and nextSeq (operations-store.js); a version 2 document (the per-geometry cut plan records
 //     `cutPlan` + the operation order `opOrder`) is MIGRATED here, the one read of a stored Shaper document (migrateV2, section 3);
 //   • the STOCK the 3D Review reads (apps/shaper/src/stock.js, the one declaration; defaults 3/4 in thick, 6 in margin (TASK 879));
+//   • TASK 884: the ShaperHub TARGETS (shaperhub-target.js: per ticked-operation set, the file + folder of its last successful send), only once the design was sent;
 // Plain JSON-safe data. An old document has no sidecar: the defaults below apply.
 
 import { reconcileCutPlan, reconcileStore, keepHolesFromOtherSketches, v2PlanEntries, isContourKey, partKeyOf, settingsPart, recordOf } from './cut-plan.js'; // TASK 761: the stored plan reconciled with the document's regions, here, once; TASK 774; TASK S1
@@ -14,6 +15,7 @@ import { getStock, setStock } from './stock.js'; // THE stock declaration (TASK 
 import { captureStl, applyStl, captureStlDoc, applyStlDoc } from './stl-source.js'; // TASK 790: the STL the design came from (or none)
 import { captureSelections, applySelections, getSelections, getClearToken } from './selection-list.js'; // TASK 795: the selection list
 import { forget as forgetPaths } from './op-paths.js'; // TASK S3: a document read is not out of date (op-paths.js OUT OF DATE)
+import { getHubTargets, setHubTargets } from './shaperhub-target.js'; // TASK 884: the files this design was last sent as on ShaperHub, per ticked-operation set (Keep ShaperHub up to date)
 
 // TASK 774: 2 = written under the SAME-SKETCH hole rule of derived faces (commit 27c00a4); a document below 2 (or a sidecar without a version) was
 // saved under the old rule: applyShaperDoc keeps its cuts' holes from other sketches (cut-plan.js keepHolesFromOtherSketches).
@@ -45,7 +47,8 @@ export function captureShaperDoc() {
   const stl = captureStlDoc();
   const selections = getSelections(); // TASK 795: only when there are some (a design without selections writes the same bytes as before)
   const { operations, regions, nextSeq, listOrder } = captureStore();
-  return { version: DOC_VERSION, operations, regions, nextSeq, listOrder, stock: getStock(), ...(stl ? { stl } : {}), ...(selections.length ? { selections } : {}) };
+  const hubTargets = getHubTargets(); // TASK 884: only once the design was sent (a design never sent writes the same bytes as before)
+  return { version: DOC_VERSION, operations, regions, nextSeq, listOrder, stock: getStock(), ...(stl ? { stl } : {}), ...(selections.length ? { selections } : {}), ...(Object.keys(hubTargets).length ? { hubTargets } : {}) };
 }
 
 // TASK 749: a programmed pocket's `clearing` before 749 -> today's value: 'concentric' (the separate rings, replaced by the rings joined) -> 'linked' (Spiral),
@@ -256,6 +259,7 @@ export function applyShaperDoc(stored, state = null) {
   forgetPaths(); // TASK S3: a document read: nothing of it is out of date (its operations are generated as they are read, as before)
   const d = dropLeadIn(stored); // TASK 836
   setStock(d && d.stock);
+  setHubTargets(d && d.hubTargets); // TASK 884: the design's ShaperHub targets (none for a design never sent, a new design included)
   applyStlDoc(d && d.stl, d && d.selections); // TASK 790: the STL card's source (none for a design that did not come from an STL); TASK 841: a list, one per relief part
   if (d && Number(d.version) >= OPERATIONS_VERSION) {
     applyStore(d);

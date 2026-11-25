@@ -132,6 +132,10 @@ const PARAMS = {
   syncFolder: { label: 'Destination Folder', hint: 'Sign in once to browse My Files folders, pick where the file uploads, or add a subfolder. Session stays in tab memory only.' },
   syncNewFolder: { label: 'New folder', hint: 'Create a subfolder inside the ShaperHub folder currently open.' },
   syncFilename: { label: 'File Name (on Origin)', hint: 'Name shown on your Origin screen: defaults to your design name and ends with .svg.' },
+  // TASK 884: the Sync dialog's switch; its hint is the line under it (what it does now: the file and folder it replaces, or what it needs)
+  keepHubUpToDate: { label: 'Keep ShaperHub up to date', hint: ({ signedIn = true, name = '', place = '' } = {}) => (!signedIn ? 'Needs a sign-in for this session.'
+    : name ? `Each Generate replaces ${name} in ${place} on ShaperHub.` : 'Each Generate replaces the file last sent with the operations ticked now: send it once first.') },
+  keepHubSignIn: { label: 'ShaperHub not updated', hint: 'ShaperHub not updated: sign in with Sync to ShaperHub to keep it up to date.' }, // TASK 884: a Generate with the switch on and no sign-in this session
   // ── TASK 790: Open STL (the drawer) and the STL card (Prepare) ──
   insertStlTool: { label: 'STL', hint: 'Insert STL: adds a 3D part (an STL file) as one more relief, its own Roughing, placed clear of the other shapes. Nothing else changes.' }, // TASK 841: the Prepare toolbar's INSERT section
   openStl: { label: 'Open STL…', hint: 'Opens a 3D part (an STL file) as a relief to carve from the top: one part, roughed level by level, and the board thickness. It replaces the design.' }, // TASK 807

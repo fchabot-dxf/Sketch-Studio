@@ -17960,3 +17960,26 @@ Shaper's Export view has no side panel (owner turn 3484: "remove this sidebar an
   ecdd79f5290987e0122237e69aaeaccc, panel-drawer-zoom.png d0885df7d9ea4b7aa25a94034f9471ae, panel-export-1280x800.png
   d32faf185257b7a80cf81e140c9d9e20, panel-export.svg, panel-requests.txt, panel-build.txt, fusion-panel.json.
 - Open: R1 Send to ShaperHub offline (/api/shaper-upload is the website's route: 404 on the add-in's server), follow-up task.
+
+## TURN 885 (no Insert STL in the Fusion panel; Claude Opus subagent)
+- Owner turn 3604 ("Yes remove it"; "I dont need to add stl in the fusion addin"). The STL part is now DECLARED by the entry, like createImporter /
+  mountDesignBrowser: startShaperApp takes `createStlImporter(ctx)` (default: null) and `prepareLeadGroups(app)` (default: none). main.js (the website,
+  plain and ?host=fusion) passes stl-import.js's createStlImporter and the Prepare toolbar's INSERT section (insertStlGroup, moved unchanged from
+  shaper-app.js); fusion-main.js passes neither. shaper-app.js no longer imports stl-import.js; no branch on Fusion mode.
+- Without the part: Prepare's toolbar starts with OPERATIONS (no INSERT section / label); no STL card; the restore's reimportOld() runs only with
+  the part (`if (stlImporter)`, like `if (shaperImporter)`); app.stlImporter() is null and nothing in the panel calls it; nameAfterSelection's
+  comment says an opened STL names the design on the website only.
+- Panel folder: src/stl-import.js, src/stl-card.js, src/orient-view.js out (240 files reached, 243 before; 245 files + manifest, 7,655,751 bytes).
+  Kept (shared): stl-source.js, core/stl-slice.js, relief-frame.js. docs/FUSION-PANEL-881.md: rows 78-79, ruling line 152, counts, new section 14.
+- Behaviour change, panel only: a workspace saved by the website-in-Fusion with an inserted STL keeps its relief operations but has no STL card
+  (re-slice / orient) in the panel; a pre-807 STL design is not re-sliced there. The website: none.
+- Tests (fail-first): fusion-panel-881-node: stl-import.js, stl-card.js, orient-view.js UNUSED (reached by the website, not by the panel, not in
+  its folder); failed before the change ("the Fusion panel's graph does not reach src/stl-import.js"), ok after (383 checks).
+  fusion-panel-881-live: the panel's Prepare toolbar = Operations / Recalculate / Tools, no #prepare-insert-stl, no .stl-card; the website
+  (?host=fusion and plain) keeps Insert / Operations / Recalculate / Tools, the button and the card. Failed before (actual 'insert:Insert',
+  insertStl true, stlCard 1), ok after.
+- gate:quick 591/591. Live, one at a time: all 249 the merge plan lists: 245 ok first pass; 4 failed under another project's gate on the
+  shared CPU (drive-folder-browser, op-paths-817 long task 139 ms, opfirst-relief, opfirst-ui-s2) and passed alone on re-run. shell-smoke 13/13.
+- Evidence (.evidence/885/, local): prepare-toolbar-panel-BEFORE.png md5 81bac6f5910ab7b7a5c039353b85f4e3 (INSERT > STL first),
+  prepare-toolbar-panel.png 3c7403252c493d366678335f43b2390a (starts with OPERATIONS), panel-closure-before/after.txt, node-failfirst.txt,
+  live-failfirst.txt, live-after.txt, live-plan-results.txt.

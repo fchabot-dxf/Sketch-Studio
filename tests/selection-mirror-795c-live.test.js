@@ -5,6 +5,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { makeGoStage } from './helpers/go-stage.js';
 
 const EVIDENCE_DIR = path.resolve('.evidence/795c');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -153,16 +154,7 @@ async function run({ width, height }) {
     assert.deepStrictEqual(await evalJs(`window.__sent.filter((s) => s.action === 'restore_selection')`), [{ action: 'restore_selection', selectionId: 'sel-sa15-live' }]);
 
     // 6. Stock-card edit in Export (Review) has its own undo step.
-    const goStage = async (tab) => {
-      if (width <= 640) {
-        if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await click('.sk-sidebar-chevron');
-        await waitFor(`(() => { const e = document.querySelector('.sk-sidebar-stage[data-tab="${tab}"]'); return !!e && e.getBoundingClientRect().left >= 0; })()`, 'sidebar drawer settled');
-        await click(`.sk-sidebar-stage[data-tab="${tab}"]`);
-      } else {
-        await click(`.sk-header-tab[data-tab="${tab}"]`);
-      }
-      await waitFor(`!document.getElementById('view-${tab}').hidden`, `${tab} stage visible`);
-    };
+    const goStage = makeGoStage({ cdp, width, click });
     await goStage('review');
     await evalJs(`(() => { const el = document.getElementById('review-stock-thickness'); el.value = '25 mm'; el.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     assert.strictEqual(await stockVal(), 25, `[${label}] stock changed to 25 mm`);

@@ -18199,3 +18199,8 @@ Tests only. Added `// gate: exclusive` (line 1) to 8 tests whose pass/fail depen
   Generate's batch); the per-file "✓ Replaced …" lines stay in the status. The Sync dialog's Autosend hint for a split export (export-payload.js splitPlan):
   "The export is split into several files: each Generate replaces each of them on ShaperHub once it has been sent." (param-hints keepHubUpToDate `split`).
   Live: toasts [{"level":"success","text":"✅Sent 3 files to ShaperHub (My Files)"}]; evidence .evidence/888/desktop-autosend-hint.png.
+## TURN 895 — opselect-806-live waits for its click targets to settle (Claude Sonnet subagent, branch agents/opselectflake-895)
+Test only. Cause: goStage's phone path waited only for the drawer entry's left >= 0 (the slide-in is still running then) and clicked the chevron / header tab with no settle at all; a click on a rect measured mid-slide misses under load, the stage never switches, `review stage visible` times out. Fix: goStage aims every click (chevron, drawer entry, header tab) at settledCentre (tests/helpers/settled-centre.js, task 893); assertions untouched.
+Same pattern (copy of this goStage, same cause, NOT fixed here): tests/selection-mirror-795c-live.test.js:156, tests/stockkeep-864-live.test.js:56.
+Runs: 5x alone ok; 3x beside gate:quick ok; gate:quick `GATE tier=quick jobs=quick=22 files=610 pass=610 fail=0 deferred=11 elapsed=110s`.
+TURN 895 (advisor follow-up): goStage moved to ONE helper, tests/helpers/go-stage.js (makeGoStage({cdp,width,click}), settledCentre clicks); opselect-806-live, selection-mirror-795c-live, stockkeep-864-live import it, their local copies deleted. 3x alone each ok, once beside gate:quick each ok, gate:quick pass=610 fail=0.

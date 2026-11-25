@@ -18087,3 +18087,30 @@ Relief region) and a box (its Outline outside): in Fusion the relief's contours 
   Roughing its work area roughingWorkGrow; along the normal: exactly); a one-body payload: no frames anywhere (as before).
   Fail-first (origin/main's three files): "AssertionError [ERR_ASSERTION]: 1. the entry keeps each region's frame by plan key / actual: []"; with checks 1-2 off
   (scratch copy): "3. every path lies on its own body (12 off)", first { name: 'Freeform', op: 'op-1', z: 6, w: [ 12.433, 26.017, -1 ] } (7 mm low).
+
+## TURN 892 — the slow / load-dependent quick tests made fast and deterministic, the same checks (Claude Opus subagent, branch agents/slowtests-892)
+Test timing only: no app code, FILE_LIMIT_MS / QUICK_JOBS untouched, ~/.shared-cpu untouched.
+- Paths corpus (tests/helpers/paths-817-corpus.js): `runPathsCorpus(part, parts, slice, slices)`: each of the 9 parts cut in 3 CONTIGUOUS slices of its cases (in
+  order) -> tests/op-paths-817-corpus-1..27-node (file 3p+s+1 = part p+1, slice s+1). Exactly the part's checks: a later slice first replays the earlier slices'
+  cases (load + pathsSig only, ~15 ms a case) into `seen` (what the part had compared is skipped as before); the first 12 files compared with the main thread's
+  directly are in slice 1 (asserted there: each part's slice 1 holds 33-34 files), the later slices compare none, as the whole part did. Verified by recording every
+  counted check's message (scratch wrapper of assert.deepStrictEqual): 9 files before = 4768 messages, 27 files after = 4768, the SAME list in the SAME order
+  (md5 0ca21324959e13e2dc764e39cacf2b05 both).
+- Operation-first corpus: tests/opfirst-corpus-1..12-node = runCorpus(k, 12) (every 12th case refines every 6th: per-case checks; the version guard stays in part 0).
+  11826 checks before (6 files: 1981+1977+1977+1962+1968+1961) and after (12 files).
+- tests/number-stepper-730-node: the press-and-hold ran on real time (sleep 760 ms, 4..8 steps accepted; a loaded PC ran 3). Now on node:test mock.timers
+  (setTimeout / setInterval, the stepper's own): the press steps at once, nothing at the end of the delay, then exactly one step per repeat period (4), 5 steps,
+  one undo step, release stops the repeat. 39 -> 44 checks. (A timer set in a callback runs on a LATER tick: one tick per period.)
+- tests/gate-shared-lock: it already used its own CPU_LOCK_ROOT; it never read the real lock. Cause of its time: case D's waiting gate is a Git Bash in the
+  library's `sleep 30` poll; that sleep is an MSYS child no Windows tree links to, taskkill /T leaves it, and it holds the gate's output pipe: the test waited 30 s
+  for 'close' (37.8 s alone, 52 s in a quiet gate:quick, 90+ s loaded). Now the waiting take's MSYS process group (its command line names this test's root) is
+  killed by a builtin-only bash scan (53 ms) before the taskkill, asserted (one group): 7.1 s alone. Case B's "quick did not wait" (elapsed < 30 s, failed under
+  load) is shown by the library's own side-lane line + no "waiting" line + the main lane still held after.
+- Per-file times in gate:quick, before (origin/main) -> after (27 + 12 files): op-paths max 48.3 s (part 4), 44.4 (part 9) -> 21-23 s quiet run, 37.2 s max with the
+  advisor's merge gate running beside; opfirst max 49.8 -> 31.7 (quiet) / 40.1 (loaded); gate-shared-lock 52.3 -> 22.4 (quiet) / 46.9 (loaded); number-stepper 3.6 -> 2.9.
+  Alone: every new file 3x green (op-paths 4.2-17.9 s, opfirst 4.2-14.0 s, gate-shared-lock 7-25 s, stepper 3.1-3.5 s).
+- Reported, not changed: gate-shared-lock's other two load failures are the GATE's (gate.cjs): a Git Bash that fails to start under load (cpu_lock_release exited
+  3221225794 = 0xC0000142, the read-only-timings EPERM then replaced by that error), and "gate: pid N is also an MSYS pid" (exit 3, a pid collision); and the
+  live flakes first-click-771 (toast action clicked mid slide-in), import-polish-fit-a (fixed 350 ms after opening the sidebar), sidebar-drive (fixed 800 ms
+  after Check Drive), site-identity-829 (first box snapshot before the web font loaded): all timing under load (REPORT 892 has the fixes proposed).
+- Evidence (local) .evidence/892/: before-/after-*.log (check counts), msgs-before.txt / msgs-after-3.txt, alone-*.txt, gate-quick-after-*.txt, timings-after.json.

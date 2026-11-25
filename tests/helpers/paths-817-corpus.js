@@ -7,7 +7,10 @@
 //   2. the file made in the background (export-payload.js exportFileInBackground: svgOf in the worker) = the BASELINE frozen before S1 (its md5 `a`), which the main
 //      thread's file equals (tests/opfirst-corpus-<n>-node); its preview copy too (without data-op: `b`) and the Paths view's bit-centre travel computed in the worker
 //      (`c`); the first cases of each part also against the main thread's own files directly.
-// Split in parts like the corpus test (every parts-th case) so each file stays within the gate's per-file time.
+// Split in parts like the corpus test (every parts-th case) so each file stays within the gate's per-file time. TASK 892: each part is run in `slices` files (the part's
+// cases cut in contiguous runs, in their order), with the SAME checks as the whole part in one file: a later slice first replays the earlier slices' cases' signatures
+// (load + pathsSig only: what the part had compared before that case is skipped as before), and the first 12 files (compared with the main thread's directly) are all
+// in slice 1 (asserted there), so the later slices compare none directly, as the whole part did.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
@@ -34,20 +37,29 @@ const expand = (c) => { // as tests/helpers/opfirst-corpus.js expands a case (it
 };
 const noOpIds = (svg) => svg.replace(/ data-op="[^"]*"/g, '');
 
-export async function runPathsCorpus(part, parts) {
+const DIRECT_FILES = 12; // the first files of each part also compared with the main thread's own directly
+export async function runPathsCorpus(part, parts, slice = 0, slices = 1) {
   let checks = 0, items = 0, files = 0;
   const seen = new Set(); // the signatures already compared
   const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
+  const mine = cases.filter((x, n) => n % parts === part);
+  const size = Math.ceil(mine.length / slices), from = slice * size;
+  const loaded = (c) => { // a case loaded through applyShaperDoc, with its paths context and its plan memberships' inputs
+    const x = expand(c);
+    const state = loadCase(x);
+    applyShaperDoc(x.sidecar, state);
+    const { loops, loopPolys } = loopsWithPolygons(state);
+    const owned = planOwnedLoops(state, loops, loopPolys);
+    const ctx = pathsCtx(state, { loops, loopPolys, owned });
+    const inputs = planMemberItems().map((it) => ({ it, input: pathsInputOf(it.planKey, it.rec) })).filter((q) => q.input);
+    return { state, loops, loopPolys, owned, ctx, inputs };
+  };
+  const direct = slice === 0; // the part's first DIRECT_FILES files are in its first slice (asserted below)
   setPathsPort(nodeWorkerPort());
   try {
-    for (const c of cases.filter((x, n) => n % parts === part)) {
-      const x = expand(c);
-      const state = loadCase(x);
-      applyShaperDoc(x.sidecar, state);
-      const { loops, loopPolys } = loopsWithPolygons(state);
-      const owned = planOwnedLoops(state, loops, loopPolys);
-      const ctx = pathsCtx(state, { loops, loopPolys, owned });
-      const inputs = planMemberItems().map((it) => ({ it, input: pathsInputOf(it.planKey, it.rec) })).filter((q) => q.input);
+    for (const c of mine.slice(0, from)) { const { ctx, inputs } = loaded(c); for (const { input } of inputs) seen.add(pathsSig(ctx, input.target, input.rec)); } // the earlier slices' signatures (compared there)
+    for (const c of mine.slice(from, from + size)) {
+      const { state, loops, loopPolys, owned, ctx, inputs } = loaded(c);
       for (const { input } of inputs) lookup(ctx, input.target, input.rec); // asked for: the worker thread generates them
       await idle();
       for (const { it, input } of inputs) {
@@ -75,7 +87,7 @@ export async function runPathsCorpus(part, parts) {
       const pb = await exportFileInBackground(state, { preview: true });
       eq(md5(pageBefore879(noOpIds(pb.svg), state)), base.b, `${c.name}: the preview copy made in the worker = the baseline (b)`);
       eq(md5(pb.bitPaths), base.c, `${c.name}: the Paths view's travel made in the worker = the baseline (c)`);
-      if (files < 12) { // and, for the first cases of the part, against the main thread's own files directly
+      if (direct && files < DIRECT_FILES) { // and, for the first cases of the part, against the main thread's own files directly
         eq(bg.svg, exportFileOf(state).svg, `${c.name}: the file made in the worker = the main thread's`);
         const pm = exportFileOf(state, { preview: true });
         eq([pb.svg, canonical(pb.bitPaths)], [pm.svg, canonical(bitCentrePaths(state, pm.written))], `${c.name}: the preview copy and the Paths view made in the worker = the main thread's`);
@@ -83,5 +95,6 @@ export async function runPathsCorpus(part, parts) {
       files++;
     }
   } finally { setPathsPort(localPort()); } // the worker thread is terminated
+  if (direct && slices > 1) assert.ok(files >= DIRECT_FILES, `part ${part + 1}/${parts} slice 1/${slices}: it holds the part's first ${DIRECT_FILES} files (${files}): the later slices compare none directly`);
   return { checks, items, files };
 }

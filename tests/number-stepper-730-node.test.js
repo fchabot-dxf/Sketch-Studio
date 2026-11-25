@@ -5,6 +5,7 @@
 //     typing still works, and a press steps the record's exact value (not the rounded text).
 import assert from 'node:assert';
 import fs from 'node:fs';
+import { mock } from 'node:test';
 import { open } from './helpers/node-app.js';
 import { worldToScreen } from '#ui/coords.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -17,7 +18,6 @@ import { clickOpen, editStep } from './helpers/prepare-open.js'; // TASK S2: a c
 let checks = 0;
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
 const near = (a, b, m) => { assert.ok(Math.abs(a - b) < 1e-6, `${m}: ${a} vs ${b}`); checks++; };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── 1. the rule ──
 eq(nextValue(6.3, 1, 0.5), 6.5, '6.3 + 0.5 lands on 6.5 (the next multiple)');
@@ -92,20 +92,27 @@ try {
   step('stepDeviation', 1); near(rec().stepDeviation, 0.3, 'resolution 0.25 + -> 0.3');
   typed('.cut-step-deviation', '0.02'); step('stepDeviation', -1); near(rec().stepDeviation, 0.02, 'resolution 0.02 - 0.05 would be 0: stays (no minimum)');
 
-  // press-and-hold: pointerdown (no pointerup) steps once, then repeats after the delay, one step each
+  // press-and-hold: pointerdown (no pointerup) steps once, then repeats after the delay, one step each. TASK 892: on a FAKE clock (node:test mock.timers: the
+  // setTimeout / setInterval the stepper reads), so the count of repeats is exact whatever the machine's load (on real time a loaded machine ran 3 steps)
   typed('.cut-depth', '1');
   const down = q(`${row('cutDepth')} .cut-step[data-d="1"]`);
   const before = rec().cutDepth; h0 = hist();
-  down.dispatchEvent(new app.window.PointerEvent('pointerdown', { bubbles: true, button: 0, isPrimary: true, pointerType: 'mouse' }));
-  near(rec().cutDepth, before + 0.5, 'hold: the press steps at once');
-  await sleep(HOLD_DELAY_MS + 4 * HOLD_REPEAT_MS + 40);
-  doc.dispatchEvent(new app.window.PointerEvent('pointerup', { bubbles: true, button: 0 }));
-  const after = rec().cutDepth, n = Math.round((after - before) / 0.5);
-  assert.ok(n >= 4 && n <= 8, 'hold repeated: ' + n + ' steps'); checks++;
-  near(after, before + 0.5 * n, 'each repeat is one step of 0.5');
-  eq(hist() - h0, 1, 'TASK S2: the whole hold, in the open operation: ONE undo step (its edit session)');
-  await sleep(3 * HOLD_REPEAT_MS);
-  eq(rec().cutDepth, after, 'releasing stops the repeat');
+  mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  try {
+    down.dispatchEvent(new app.window.PointerEvent('pointerdown', { bubbles: true, button: 0, isPrimary: true, pointerType: 'mouse' }));
+    near(rec().cutDepth, before + 0.5, 'hold: the press steps at once');
+    mock.timers.tick(HOLD_DELAY_MS); // the delay: the repeat starts (a timer a callback sets is run by a LATER tick: one tick per period)
+    near(rec().cutDepth, before + 0.5, 'hold: no repeat yet at the end of the delay');
+    for (let k = 1; k <= 4; k++) { mock.timers.tick(HOLD_REPEAT_MS); near(rec().cutDepth, before + 0.5 * (1 + k), `hold: repeat ${k}, one step`); }
+    mock.timers.tick(40); // less than a 5th period
+    doc.dispatchEvent(new app.window.PointerEvent('pointerup', { bubbles: true, button: 0 }));
+    const after = rec().cutDepth, n = Math.round((after - before) / 0.5);
+    eq(n, 5, 'hold repeated: the press, then one step per repeat period after the delay (4): ' + n + ' steps');
+    near(after, before + 0.5 * n, 'each repeat is one step of 0.5');
+    eq(hist() - h0, 1, 'TASK S2: the whole hold, in the open operation: ONE undo step (its edit session)');
+    mock.timers.tick(3 * HOLD_REPEAT_MS);
+    eq(rec().cutDepth, after, 'releasing stops the repeat');
+  } finally { mock.timers.reset(); }
 
   // inches: depth 1/32, offset 1/64, bit 1/32, resolution 0.002 (the display follows the document unit)
   SettingsManager.set('DOC_UNIT', 'in');

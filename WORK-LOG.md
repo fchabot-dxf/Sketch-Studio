@@ -17970,7 +17970,7 @@ Shaper's Export view has no side panel (owner turn 3484: "remove this sidebar an
   (thin 1 px / 0.35 lines; a dense wall reads as a lighter band, as in Export Paths). No reduction needed.
   Rule reported (not changed): Prepare draws a membership's paths only while it is hovered / selected (TASK 455 state model, prepare-view.js computeLook
   "the idle state is ONLY the svg line, so a look exists only to be drawn in the hover / selected states"), and while an operation is open its shapes show
-  only that operation's paths (TASK S2, drawnItems: "while an operation is active, its shapes show only its own"). Declared, see TURN 838's ITEM 1 note.
+  only that operation's paths (TASK S2, drawnItems: "while an operation is active, its shapes show only its own"). Declared, see TURN 839's ITEM 1 note.
 - 2 ROUGHING "Layout" ROW CLIPPED. Cause: the row (data-row="roughLayout") had no declaration in apps/shaper/index.html, so it fell on the 4-column bit-preset
   grid (40 px columns at 14 px: "Terraces" 50 px wide centred in 40 px, cut at the card's left). Fix: declared with the other choice rows (wallSide's 2 columns,
   12 px, field background, 44 px on a phone). Every choice row checked live, desktop + phone 390, on every tab: Roughing tool:toolDia, geometry:boundary,

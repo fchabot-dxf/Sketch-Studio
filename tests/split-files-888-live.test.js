@@ -5,7 +5,8 @@
 // Depth per file typed 5 then 10 (Enter) -> OK -> the Export stage's Generate Shaper SVG: ONE zip downloads holding N files, N = the page's own chunk files
 // (export-payload.js exportFileOf), each named "<design> - Contour 2 (a-b mm).svg" (bands of 10 mm, top down) with the page's bytes; the Export status line says
 // "Exported N files → <zip>: <names>." (no toast). Screenshots (legible): .evidence/888/<phase>-split-row.png (the card's row) and <phase>-export-status.png.
-// No console error / page exception.
+// Desktop also: Sync to ShaperHub's Send sends EVERY chunk file by its own name (FAKE ShaperHub only: tests/shaperhub-fake-api.js), each the target of its own chunk; then
+// Generate (Autosend on, its default) replaces each chunk's own file with its own bytes. No console error / page exception.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -19,6 +20,8 @@ import { binaryStl } from './helpers/stl-mesh.js';
 import { openOpLive, typeLive } from './helpers/prepare-open-live.js';
 import { pressExportAction } from './helpers/export-actions.js';
 import { reliefTerrain } from './fixtures/relief-terrain-889.js';
+import { createFakeShaperApi, FAKE_LOGIN } from './shaperhub-fake-api.js';
+import { handleShaperUpload } from '../packages/core/shaper-cloud.js';
 
 const require = createRequire(import.meta.url);
 const { buildFusionPanel, PANEL_MIME } = require('../scripts/build-site.cjs');
@@ -69,6 +72,28 @@ ws.addEventListener('message', (e) => {
   if (m.method === 'Runtime.exceptionThrown') problems.push('exception: ' + JSON.stringify(m.params.exceptionDetails).slice(0, 400));
   if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') problems.push('console.error: ' + JSON.stringify(m.params.args.map((a) => a.value ?? a.description)).slice(0, 400));
 });
+// FAKE ShaperHub only (as tests/shaperhub-keep-884-live.test.js): /api/shaper-upload is answered node-side by #core/shaper-cloud.js handleShaperUpload over
+// tests/shaperhub-fake-api.js; every non-local request is blocked and counted. The login is the fake's (never printed).
+const realFetch = globalThis.fetch;
+const api = createFakeShaperApi({ folders: [], passLocal: realFetch });
+globalThis.fetch = api.fetch;
+const blocked = [], uploads = [];
+ws.addEventListener('message', (e) => {
+  const m = JSON.parse(e.data);
+  if (m.method !== 'Fetch.requestPaused') return;
+  const { requestId, request } = m.params;
+  if (!request.url.startsWith('http://127.0.0.1:')) { blocked.push(request.url); send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }); return; }
+  if (new URL(request.url).pathname === '/api/shaper-upload') {
+    const body = request.postData !== undefined ? request.postData : (request.postDataEntries || []).map((x) => Buffer.from(x.bytes || '', 'base64').toString('utf8')).join('');
+    const p = JSON.parse(body);
+    if (typeof p.svg === 'string') uploads.push({ mode: p.mode, filename: p.filename, remotePath: p.remotePath, svg: p.svg });
+    handleShaperUpload(body).then(({ status, body: answer }) => send('Fetch.fulfillRequest', { requestId, responseCode: status, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(JSON.stringify(answer)).toString('base64') }));
+    return;
+  }
+  send('Fetch.continueRequest', { requestId });
+});
+await send('Fetch.enable', { patterns: [{ urlPattern: '*' }] });
+const typeVal = (sel, val) => evalJs(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el.focus(); el.value = ${JSON.stringify(val)}; el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
 let touch = false, SRC = '/apps/shaper/src'; // the page's modules (the Fusion panel serves them at ./src)
 const shot = async (name, sel, pad = 8, scale = 2) => {
   const clip = await evalJs(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); const x = Math.max(0, r.left - ${pad}), y = Math.max(0, r.top - ${pad});
@@ -186,6 +211,29 @@ try {
   await openStage('prepare');
   await chooseStl(() => clickEl('#prepare-insert-stl'), 'desktop insert');
   await phase('desktop', MM);
+  { // desktop: Sync to ShaperHub's Send sends EVERY chunk file (each by its own name); then Generate (Autosend on, the default) REPLACES each chunk's own file
+    const D = results.desktop, n0 = uploads.length;
+    await pressExportAction(cdp, clickEl, 'btn-sync-shaper');
+    await waitFor(`document.getElementById('shaper-sync-modal').open`, 'the Sync dialog opens');
+    await sleep(250);
+    await typeVal('#sync-email', FAKE_LOGIN.email);
+    await typeVal('#sync-password', FAKE_LOGIN.password);
+    await clickEl('#sync-btn-submit');
+    await waitFor(`document.getElementById('sync-modal-status').classList.contains('is-success')`, 'desktop: the Send of every chunk file', 60000);
+    D.sent = uploads.slice(n0).map((u) => [u.mode, u.filename, u.remotePath, u.svg === (D.entries.find((e) => e.name === u.filename) || {}).text]);
+    D.sentStatus = await evalJs(`[...document.querySelectorAll('#sync-modal-status div')].map((d) => d.textContent)`);
+    D.targets = await evalJs(`import('/apps/shaper/src/shaperhub-target.js').then((m) => Object.values(m.getHubTargets()).map((t) => t.filename).sort())`);
+    await waitFor(`!document.getElementById('shaper-sync-modal').open`, 'desktop: the dialog closes after the send');
+    const n1 = uploads.length;
+    await evalJs(`document.getElementById('simexport-status').replaceChildren()`);
+    await pressExportAction(cdp, clickEl, 'btn-generate-svg');
+    await waitFor(`(document.getElementById('simexport-status').textContent.match(/✓ Replaced /g) || []).length === ${D.entries.length}`, 'desktop: Generate replaced every chunk file', 60000);
+    D.replaced = uploads.slice(n1).map((u) => [u.mode, u.filename, u.svg === (D.entries.find((e) => e.name === u.filename) || {}).text]);
+    D.autoStatus = await evalJs(`document.getElementById('simexport-status').textContent`);
+    await shot('desktop-autosend-status.png', '#simexport-status', 10, 2);
+    console.log(`ROW desktop sync | Send ${JSON.stringify(D.sent.map((s) => s.slice(0, 2)))} | dialog ${JSON.stringify(D.sentStatus)} | Generate ${JSON.stringify(D.replaced.map((s) => s.slice(0, 2)))} | status ${JSON.stringify(D.autoStatus)}`);
+    await sleep(4000); // the Autosend success notices (TASK 886) go before the next phase
+  }
 
   // ── phone 390 (web, touch): the drawer's Open STL
   await resetBufferLive(cdp);
@@ -235,10 +283,18 @@ try {
     assert.strictEqual(R.zip, names[0].replace(` - Contour 2 (${U.top}).svg`, '.zip'), `${what}: the zip is named after the export`);
     assert.strictEqual(R.status.startsWith(`Exported ${names.length} files → ${R.zip}: ${names.join(', ')}.`), true, `${what}: the status line says how many files and their names: ${R.status}`);
     assert.strictEqual(R.toast, 0, `${what}: no toast`);
+    if (what !== 'desktop') continue;
+    assert.deepStrictEqual(R.sent, names.map((n) => ['new', n, '/', true]), 'desktop: Send sent every chunk file, by its own name, its own bytes');
+    assert.deepStrictEqual(R.sentStatus, names.map((n) => `Sent ${n} to My Files`), 'desktop: the dialog says each file it sent');
+    assert.deepStrictEqual(R.targets, [...names].sort(), 'desktop: each chunk file is the target of its own chunk');
+    assert.deepStrictEqual(R.replaced, names.map((n) => ['replace', n, true]), 'desktop: Generate replaced each chunk\'s own file with its own bytes, one each');
+    assert.ok(names.every((n) => R.autoStatus.includes(`✓ Replaced ${n} in My Files.`)), 'desktop: the status line says each replace: ' + R.autoStatus);
   }
   assert.deepStrictEqual(problems, [], 'no console error / page exception');
+  assert.deepStrictEqual([blocked, api.blocked], [[], []], 'no request left the machine: every Shaper call answered by the fake');
   console.log('split-files-888-live.test.js: ok');
 } finally {
+  globalThis.fetch = realFetch;
   await close();
   await new Promise((r) => panel.server.close(r));
   fs.rmSync(panelDir, { recursive: true, force: true });

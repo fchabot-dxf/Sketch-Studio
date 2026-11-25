@@ -172,7 +172,7 @@ async function phase(what) {
   await openOpLive(t, await opOf('roughing'));
   await waitFor(`document.querySelector('.cut-type-cur').textContent === 'Roughing'`, what + ': the Roughing card', 60000);
   timings[what].roughing = Date.now() - t0;
-  assert.deepStrictEqual(await rows(), ['cutDepth', 'topDepth', 'floorAllowance', 'finishAllowance', 'roughLayout', 'boundary', 'boundaryTool', 'boundaryOffset', 'minTerraceWidth', 'smoothing', 'stepDepth', 'cutOffset', 'bit', 'toolDia', 'cutterShape'] /* TASK 842: the Bit row */, what + ': the Roughing card of a part with levels (Layout Terraces: its Boundary, the narrowest terrace, the smoothing; TASK 810: its Heights; TASK S2: one Depth, no Contour row)');
+  assert.deepStrictEqual(await rows(), ['cutDepth', 'topDepth', 'floorAllowance', 'finishAllowance', 'roughLayout', 'boundary', 'boundaryTool', 'boundaryOffset', 'minTerraceWidth', 'smoothing', 'stepDepth', 'splitFiles', 'cutOffset', 'bit', 'toolDia', 'cutterShape'] /* TASK 842: the Bit row; TASK 888: Split into files */, what + ': the Roughing card of a part with levels (Layout Terraces: its Boundary, the narrowest terrace, the smoothing; TASK 810: its Heights; TASK S2: one Depth, no Contour row)');
   await tab('tool');
   assert.strictEqual(await evalJs(`document.querySelector('.cut-finish-allowance').value`), '0', what + ': allowance 0');
   await clickEl('.cut-row[data-param="toolDia"] .cut-preset[data-value="6.35"]');
@@ -197,7 +197,7 @@ async function phase(what) {
   const crows = await rows();
   console.log(`${what}: the Contour card ${JSON.stringify(crows)}`);
   assert.deepStrictEqual([crows, await evalJs(`[document.querySelector('.cut-step-depth').value, document.querySelector('.cut-bit').value, document.querySelector('.cut-shape-cur').textContent]`)],
-    [['cutDepth', 'topDepth', 'floorAllowance', 'walls', 'smoothing', 'stepDepth', 'bit', 'toolDia', 'cutterShape'] /* TASK 842: the Bit row */, ['0.25', '3.175', 'ball nose']], what + ': the Contour card: its Depth, Heights and Walls (TASK 810), its Smoothing (TASK 809), step 0.25, 1/8 in, ball nose');
+    [['cutDepth', 'topDepth', 'floorAllowance', 'walls', 'smoothing', 'stepDepth', 'splitFiles', 'bit', 'toolDia', 'cutterShape'] /* TASK 842: the Bit row; TASK 888: Split into files */, ['0.25', '3.175', 'ball nose']], what + ': the Contour card: its Depth, Heights and Walls (TASK 810), its Smoothing (TASK 809), step 0.25, 1/8 in, ball nose');
   await shot(`${what}-contour-card.png`, '#prepare-panel .cut-card');
   t0 = Date.now();
   await okLive(t); // OK: the new Contour confirmed, its passes derived

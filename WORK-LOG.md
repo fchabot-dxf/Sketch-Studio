@@ -18087,3 +18087,32 @@ Relief region) and a box (its Outline outside): in Fusion the relief's contours 
   Roughing its work area roughingWorkGrow; along the normal: exactly); a one-body payload: no frames anywhere (as before).
   Fail-first (origin/main's three files): "AssertionError [ERR_ASSERTION]: 1. the entry keeps each region's frame by plan key / actual: []"; with checks 1-2 off
   (scratch copy): "3. every path lies on its own body (12 off)", first { name: 'Freeform', op: 'op-1', z: 6, w: [ 12.433, 26.017, -1 ] } (7 mm low).
+
+## TURN 888 — "Split into files" on a Roughing / Contour (By depth / By levels) (Claude Opus subagent, branch agents/splitfiles-888)
+- What (owner turns 3627-3628): a per-operation setting on the Roughing and Contour cards' Passes tab, last row: "Split into files" Off (default) | By depth | By levels,
+  and its number row ("Depth per file" in the document unit / "Levels per file"), greyed while Off. Declared ONCE in apps/shaper/src/split-files.js (SPLIT_FILES:
+  modes + defaults 10 mm / 1/2 in / 20 levels; chunksOf; fileSpecs; keepOf; worker-safe), CUT_TYPES fields `split` + params splitFiles / splitDepth / splitLevels
+  (shaper.js), operations.js SETTING_FIELDS.split (Off adds nothing to the operation key), param-hints.js labels / hints, cut-panel.js rows (preset widget).
+- The rules (split-files.js header): a LEVEL = one depth the file writes for an element (cut.rec.cutDepth); By depth N: band ((k-1)N, kN], a level ON a boundary in
+  the band above it, an empty band makes no file, the last band partial; By levels N: N levels per file top down, the last what is left; no depth -> first chunk.
+  THE FILES: per split operation (list order), one file per chunk top down; the Stock in EVERY file (the board guide, never cut); the unsplit ticked operations in
+  the FIRST file only; every file on the whole plan's page.
+- #core change (advisor ruling (B), mid-task): packages/core/shaper-export.js `options.keep(meta)` — the elements kept are written, the page / frame-guide box stay
+  every element's, a file that dropped an element is PARTIAL (a plan with no Stock gets the 798 frame guide). Without it: byte-identical (the 909-case corpus).
+- Names (export-payload.js, next to exportFileName): chunkFileName = "<884 name stem> - <Type n> (<range>).svg", range "0-10 mm" / "0-0.25 in" / "levels 1-30" /
+  "level 31"; chunkSetKey = 884's ticked-set key + "|<op id>:<mode>:<range>" (Autosend never replaces another chunk's file, nor a changed range's); zipFileName.
+- Export: op-derive.js exportFilesOf (the worker's export job too: op-paths.js exportJob passes `split`): the whole file as today + the chunk files (each the same
+  export with keepOf). Generate / the drawer's Download: several files = ONE zip (#core/plot/zip buildZip, the repo's zip writer) via download.js downloadZip; one
+  chunk = that file alone. Status line: "Exported 3 files → <zip>: <names>." (no toast). Origin rules checked on every chunk file. Sync dialog Send: every chunk file
+  in turn (an "already in My Files" stops at that file; Replace it / Keep both apply to it, the rest go as new); each send = its chunk's target. Autosend: per chunk
+  (one hubQueue.push place, Generate). The Prepare / Export views show the whole operation (a preview is never split). effectiveCutRecord drops the split params:
+  changing the split never makes the paths out of date.
+- Tests: NEW tests/split-files-888-node.test.js (969 checks: chunk rules; fileSpecs; keep-all byte identity + no chunk files on all 909 corpus cases; on the page:
+  relief Contour By depth 10 -> 3 files, names, same page + frame guide, chunks ⊂ whole and union = whole, Roughing in file 1 only, Origin rules 0 errors each,
+  By levels 30, background = in-process, Off again byte-identical; Autosend per chunk on the fake API). Fail-first (origin/main's core exporter): "AssertionError:
+  3: no Stock: every chunk file starts with the same frame guide". NEW tests/split-files-888-live.test.js (desktop + phone 390 + built Fusion panel in inches:
+  card row, typed depth, Generate -> zip of N files with the page's bytes, status line; desktop Send of every chunk + Autosend replace of each). Updated row /
+  declaration pins: cut-offset-types, settings-table-812, param-hints-770, roughing-contour-792 (node + live), stepped-adaptive-717, shaperhub-name-767,
+  shaperhub-keep-884 (source shape: Generate's one hubQueue.push is per file key).
+- Evidence (.evidence/888/, local): {desktop,phone,fusion}-split-row.png / -split-every-row.png / -split-card.png / -export-status.png, desktop-autosend-status.png,
+  the three zips.

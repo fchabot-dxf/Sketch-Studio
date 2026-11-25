@@ -18141,3 +18141,26 @@ Tests + the gate only (the causes task 892 diagnosed): no app code, FILE_LIMIT_M
   `all checks passed`; import-polish-fit-a 3x `570a: ok`; the other importViaMenu callers once each ok (import-polish-fit-b, import-polish-undo-node,
   penplotter-cosmetics, sketch-import, task-609-live, trace-projects); gate-shared-lock / gate-profile-sweep / gate-pid-match / gate-url-closure /
   gate-start-retry-893 ok. gate:quick `GATE tier=quick jobs=quick=22 files=586 pass=586 fail=0 deferred=11 elapsed=119s` (the advisor's merge gate held the main lane).
+
+## TURN 894
+STOCK step T1 (docs/STOCK-MODEL-890.md 2.1, 2.3, 2.4, section 5 row T1). apps/shaper only; packages/core untouched.
+- stock.js `resolveStock(state)` -> `{ stock, board }`: `board = { kind: 'profile' | 'bounds', key, thickness, thicknessFrom: 'typed' | 'model' | 'default' }`
+  replaces `fromLoop`. It reads the Stock OPERATION through the new cut-plan.js `planStock(state)`: a Stock with a shape = its profile (as before); an EMPTY Stock
+  = the bounds form with ITS thickness (F1); no Stock = the declared record (the returned `stock` is the record itself, as before). A Stock whose shape no longer
+  derives to a loop stays "none" (the record), as since 472. New `stockSig(state)`: the resolved stock as a signature (profile by its sig).
+- cut-plan.js: ONE definition of what 'model' reads, `modelDepth(op, key)`: a Stock's = the parts' thickness (`partsThickness`: the largest `thicknessMm` of the
+  selection entries; SA-37's several-body payload already gives its entry the thickest body), any other type's = the shape's imported depth (unchanged).
+  `recordOf(op, ref = null)` uses it (ref null = an EMPTY Stock's own record). The writers agree with it: `normalizeDepth` (a Stock typed equal to the parts'
+  thickness is stored 'model'), the cleared-depth rule `hasModelDepth`, and `changeOpType` across the Stock keeps the VALUE 'model' read (a Pocket's 'model' 8 ->
+  Stock 8 typed, not the parts'; a Stock's 'model' 25 -> Pocket 25 typed). `stockKeyOf` / `planStockProfile` same results (a shared `stockMember` /
+  `stockThicknessOf`).
+- stock-card.js: reads `board` (readout = board.thickness; `boardOf(board)` gives the same three notes); the field is disabled with a Stock loop (as before) and
+  also while an EMPTY Stock's own thickness is the board's (the field edits the record: T3 changes that).
+- shaper-app.js `reviewSig` carries `stockSig(st)` instead of `getStock()` (F2): a part's new thickness rebuilds the 3D board.
+- Tests: new tests/stock-model-890-node.test.js (45 checks: every 2.1 row x typed / model / unset, parts 12 / 25 / none -> 25, the writers, the card, a Fusion
+  selection sent again 12 -> 30 = new board + new stock signature, an SA-37 two-body payload -> 25, reviewSig built from stockSig); tests/stock-loop.test.js:137-140
+  `fromLoop` -> `board`.
+- Evidence (.evidence/894/probe-before.txt md5 f510c4233b6dc415f1ffa4e4332aaae7 at 1759a39d, probe-after.txt md5 1a3f2391f714285b0ace757404f670f8): EMPTY Stock
+  typed 38.1 -> board 22 / 38.1; Stock loop 'model' with parts 12 + 25 -> 22 / 25; part 25 -> 30 -> 22 / 30; reviewSig term getStock() / stockSig(st).
+- Runs: gate:quick `GATE tier=quick jobs=quick=22 files=611 pass=611 fail=0 deferred=11 elapsed=113s`; live, one at a time: stock-loop-live, board-extent-879-live,
+  perdesign-855-live, fusion-import-664-live, export-header-880-live, stockkeep-864-live, stl-open-790-live, insert-stl-841-live all ok.

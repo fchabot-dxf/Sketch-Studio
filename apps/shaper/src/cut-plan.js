@@ -15,6 +15,7 @@ import { loopPolygon, pointInPolygon, loopSuccessors } from '#core/loop-geometry
 import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs / onion skin on an Outside / Inside cut
 import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker, finishInLoop, autoRasterAngle, pocketRings } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket; TASK 853: autoRasterAngle
 import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder, opById } from './operations-store.js'; // TASK S1: the operations + regions store
+import { getSelections } from './selection-list.js'; // TASK 894: the parts' thickness (a Stock's 'model')
 import { opKeyOf, newOpPlace, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 import { isTaperedCutter } from '#core/cutter-profile.js'; // TASK 842: a tapered bit's cone goes to the 3D Review with its shape
 import { BIT_RECORD_FIELDS, DEFAULT_VBIT_TIP_WIDTH_MM, vbitTipWidth } from './tool-table.js'; // TASK 842: the fields a bit sets in an operation (a Contour remembers them whole); TASK 852d: V-bit tipWidth
@@ -34,13 +35,22 @@ const SHAPE_FIELDS = new Set(['cutType', 'slope', 'levels', 'tabsAt']);
 /** The settings part of a record (everything but the cut type, the region data and the dragged tabs). */
 export const settingsPart = (rec) => Object.fromEntries(Object.entries(rec || {}).filter(([k]) => !SHAPE_FIELDS.has(k)));
 const sourceDepth = (key) => { const s = (regionOf(key) || {}).source; return s && s.cutDepth != null ? s.cutDepth : undefined; };
-/** The record of a membership (see above). */
-export function recordOf(op, ref) {
+// TASK 894 (docs/STOCK-MODEL-890.md 2.3): the PARTS' thickness = the largest thicknessMm of the selection entries (each selection's part: an STL's height, a Fusion
+// body's; add-in SA-37: a several-body selection's is its thickest body's), undefined when no part has one (sketch-only parts, a drawn design). Re-read, never copied.
+const partsThickness = () => { let t; for (const e of getSelections()) if (Number.isFinite(e.thicknessMm) && e.thicknessMm > 0 && !(t >= e.thicknessMm)) t = e.thicknessMm; return t; };
+/** TASK 894: what a Depth of 'model' reads, per operation type (THE one place): a Stock's = the parts' thickness; any other type's = the shape's (`key`) imported
+ *  depth. undefined = nothing to read ('model' then reads as 'unset'). */
+const modelDepth = (op, key) => (op.type === STOCK_TYPE_ID ? partsThickness() : sourceDepth(key));
+/** TASK 894: whether 'model' reads a value for the WHOLE operation: a Stock's, when the parts have a thickness (an EMPTY Stock too); any other's, when every shape has an
+ *  imported depth. */
+const hasModelDepth = (op) => (op.type === STOCK_TYPE_ID ? partsThickness() !== undefined : op.geometry.length > 0 && op.geometry.every((r) => sourceDepth(r.key) !== undefined));
+/** The record of a membership (see above). TASK 894: `ref` null = an operation's own record with no shape (an EMPTY Stock: its thickness is the board's). */
+export function recordOf(op, ref = null) {
   const r = { cutType: op.type, ...op.settings };
-  if (r.cutDepth === 'model') r.cutDepth = sourceDepth(ref.key) ?? 'unset';
+  if (r.cutDepth === 'model') r.cutDepth = modelDepth(op, ref && ref.key) ?? 'unset';
   if (r.cutterShape === 'vbit' && (r.tipWidth == null || r.tipWidth === '')) r.tipWidth = DEFAULT_VBIT_TIP_WIDTH_MM; // TASK 852d: read-time default for old documents without tipWidth
-  if (op.type !== CONTOUR_TYPE) { const reg = regionOf(ref.key); if (reg) { if (reg.slope) r.slope = reg.slope; if (reg.levels) r.levels = reg.levels; } }
-  if (Array.isArray(ref.tabsAt)) r.tabsAt = [...ref.tabsAt]; // TASK 822: the shape's dragged tabs (#core/hold-part tabsAtOf)
+  if (ref && op.type !== CONTOUR_TYPE) { const reg = regionOf(ref.key); if (reg) { if (reg.slope) r.slope = reg.slope; if (reg.levels) r.levels = reg.levels; } }
+  if (ref && Array.isArray(ref.tabsAt)) r.tabsAt = [...ref.tabsAt]; // TASK 822: the shape's dragged tabs (#core/hold-part tabsAtOf)
   return r;
 }
 /** The record of a plan key (a geometry key: its operation's; `contour:<key>`: its Contour's), or null when it is in no operation. */
@@ -161,9 +171,10 @@ export function renamePlanKeys(rename, remove, plan) {
 // (a new operation's place reads the derived cuts' ranks).
 const memberKey = (planKey, rec) => { const e = isContourKey(planKey) ? resolveEntry(planKey, rec) : null; return opKeyOf(e ? e.rec : withBoundaryTarget(rec)); };
 function normalizeDepth(op) {
-  if (!op.geometry.length || op.settings.cutDepth === undefined) return;
-  const d = recordOf(op, op.geometry[0]).cutDepth;
-  const model = d !== 'unset' && Number.isFinite(Number(d)) && op.geometry.every((r) => { const s = sourceDepth(r.key); return s !== undefined && Number(s) === Number(d); });
+  const refs = op.type === STOCK_TYPE_ID ? [null] : op.geometry; // TASK 894: a Stock's 'model' is the parts' thickness, one value for the operation (an EMPTY one too)
+  if (!refs.length || op.settings.cutDepth === undefined) return;
+  const d = recordOf(op, refs[0]).cutDepth;
+  const model = d !== 'unset' && Number.isFinite(Number(d)) && refs.every((r) => { const s = modelDepth(op, r && r.key); return s !== undefined && Number(s) === Number(d); });
   const next = model ? 'model' : d;
   if (op.settings.cutDepth !== next) setOpSettings(op, { ...op.settings, cutDepth: next });
 }
@@ -327,8 +338,13 @@ export function changeOpType(op, type, state = null) {
   if (op.type === type) return op;
   if (type === STOCK_TYPE_ID) for (const o of storeOps().filter((x) => x !== op && x.type === STOCK_TYPE_ID)) deleteOp(o);
   const rec = startRecord(type, { cutType: op.type, ...op.settings });
+  // TASK 894: 'model' reads the parts' thickness on a Stock and the shape's imported depth on any other type (modelDepth): a change across the Stock keeps the VALUE
+  // it read, then the new type's 'model' where they are equal (normalizeDepth)
+  const across = rec.cutDepth === 'model' && (op.type === STOCK_TYPE_ID) !== (type === STOCK_TYPE_ID);
+  if (across) rec.cutDepth = recordOf(op, op.geometry[0] || null).cutDepth;
   setOpType(op, type);
   setOpSettings(op, settingsPart(rec));
+  if (across) normalizeDepth(op);
   settleOrder(state);
   return op;
 }
@@ -338,7 +354,7 @@ export function setOpFields(op, patch, state = null) {
   const rest = { ...patch };
   // TASK S2 (owner turns 2730-2731): a Depth set back to the model (null: a Roughing's / Contour's Bottom emptied or Reset) = 'model' where every shape has an imported
   // depth, else unset (a part's own levels / slope depth)
-  if (Object.hasOwn(rest, 'cutDepth') && rest.cutDepth === null) rest.cutDepth = op.geometry.length && op.geometry.every((r) => sourceDepth(r.key) !== undefined) ? 'model' : 'unset';
+  if (Object.hasOwn(rest, 'cutDepth') && rest.cutDepth === null) rest.cutDepth = hasModelDepth(op) ? 'model' : 'unset';
   if (Object.keys(rest).length) setOpSettings(op, Object.fromEntries(Object.entries({ ...op.settings, ...rest }).filter(([, v]) => v !== undefined))); // TASK 842: a field set to undefined is removed (a bit's fields the next bit does not have)
   if (Object.hasOwn(rest, 'tabCount')) for (const ref of op.geometry) if (Object.hasOwn(ref, 'tabsAt')) setRefTabsAt(ref, undefined); // TASK 822
   if (Object.hasOwn(rest, 'cutDepth')) normalizeDepth(op);
@@ -1070,9 +1086,13 @@ export function planReliefItems(state, opts) {
 /** The key of the Stock loop in the plan ('loop:<id>' | 'profile:<id>'), or null. ONE stock per document: Prepare moves the role, and if a
  *  loaded document somehow holds two, the first in the plan wins. */
 export function stockKeyOf() {
-  for (const { op, ref } of membersInFileOrder()) if (op.type === STOCK_TYPE_ID) return ref.key;
-  return null;
+  const m = stockMember();
+  return m ? m.ref.key : null;
 }
+/** TASK 894: the Stock's membership (the first in the plan, as stockKeyOf), or null. */
+const stockMember = () => membersInFileOrder().find(({ op }) => op.type === STOCK_TYPE_ID) || null;
+/** TASK 894: a Stock record's thickness: base mm, or null when unset (the declared record's applies). */
+const stockThicknessOf = (rec) => { const t = Number(rec.cutDepth); return rec.cutDepth !== 'unset' && Number.isFinite(t) && t > 0 ? t : null; };
 
 /**
  * planStockProfile(state) — TASK 472: the board profile of the Stock loop, or null when there is none (or it no longer
@@ -1092,9 +1112,26 @@ export function planStockProfile(state) {
   // Holes only from an EXPLICIT combined profile ('profile:<id>', made with Combine): the loops merely DRAWN inside a plain Stock loop
   // (the parts to be cut out of the board) are NOT holes of the board; deriveProfileCuts would call them holes of a derived profile.
   const holes = parseKey(key).kind === 'profile' ? cuts.filter((c) => c.isHole && c.polygon && c.polygon.length >= 3).map((c) => ring(c.polygon)) : [];
-  const t = Number(rec.cutDepth);
   const outer = ring(outerCut.polygon);
-  return { key, thickness: rec.cutDepth !== 'unset' && Number.isFinite(t) && t > 0 ? t : null, outer, holes, sig: sigHash([outer, holes]) };
+  return { key, thickness: stockThicknessOf(rec), outer, holes, sig: sigHash([outer, holes]) };
+}
+
+/**
+ * planStock(state) — TASK 894 (docs/STOCK-MODEL-890.md 2.1): the Stock OPERATION as the board reads it, or null when there is none: { key (its shape; null for an
+ * EMPTY Stock), thickness (base mm; null = unset: the declared record's applies), model (that thickness is 'model': the parts', recordOf), profile (planStockProfile;
+ * null for an EMPTY Stock) }. One Stock per document: the one holding a shape (stockKeyOf), else an EMPTY one (F1: its thickness is read). A Stock whose shape no
+ * longer derives to a loop is none (the declared record, as since task 472).
+ */
+export function planStock(state) {
+  const m = stockMember();
+  if (m) {
+    const profile = planStockProfile(state);
+    return profile ? { key: m.ref.key, thickness: profile.thickness, model: profile.thickness != null && m.op.settings.cutDepth === 'model', profile } : null;
+  }
+  const op = storeOps().find((o) => o.type === STOCK_TYPE_ID && !o.geometry.length);
+  if (!op) return null;
+  const thickness = stockThicknessOf(recordOf(op));
+  return { key: null, thickness, model: thickness != null && op.settings.cutDepth === 'model', profile: null };
 }
 
 

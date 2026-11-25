@@ -83,6 +83,10 @@ await (async () => {
     const text = (sel) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return e ? e.textContent.trim() : null; })()`);
     const openAccount = () => ev(`(() => { const m = document.querySelector('.sk-account-menu'); if (m && m.hidden) document.querySelector('.sk-account').click(); return true; })()`);
     const has = (sel) => ev(`!!document.querySelector(${JSON.stringify(sel)})`);
+    // TASK 893: the connection check runs its 5 steps one after another (each a fake-Drive fetch); its rows are read once it has FINISHED: the
+    // button is enabled again and no row is running / pending (a fixed 800 ms read them mid-check on a loaded PC). The same values are asserted.
+    const checkFinished = (what) => cdp.waitFor(`(() => { const b = document.querySelector('[data-account=check-drive]'); const rows = [...document.querySelectorAll('[data-account=check-result] li')];
+      return !!b && !b.disabled && rows.length === 5 && rows.every((li) => li.dataset.state !== 'running' && li.dataset.state !== 'pending'); })()`, what, 30000);
 
     // 1. signed out on legacy local design: status shows "Saved on this device · Move to Google Drive", NO connection check, ONE sign-in door
     await ev(`T.mount(false)`);
@@ -122,14 +126,14 @@ await (async () => {
 
     // 5. Check Google Drive connection: the REAL adapter over a fake Drive, every step listed with its result
     await ev(`T.mount(true)`); await sleep(300); await openAccount();
-    await ev(`document.querySelector('[data-account=check-drive]').click()`); await sleep(800);
+    await ev(`document.querySelector('[data-account=check-drive]').click()`); await checkFinished('the connection check to finish');
     const steps = await ev(`[...document.querySelectorAll('[data-account=check-result] li')].map((li) => [li.dataset.step, li.dataset.state, li.textContent])`);
     assert.deepStrictEqual(steps.map((s) => s[1]), ['ok', 'ok', 'ok', 'ok', 'ok'], JSON.stringify(steps));
     assert(/Sign-in token is valid.*OK/.test(steps[0][2]) && /Test file deleted/.test(steps[4][2]), JSON.stringify(steps));
     await shot('6-check-ok');
     // a failing step (the test-file write answers 500): its HTTP status is shown and the later steps are marked not run
     await ev(`T.drive.failWrites = 1`);
-    await ev(`document.querySelector('[data-account=check-drive]').click()`); await sleep(800);
+    await ev(`document.querySelector('[data-account=check-drive]').click()`); await checkFinished('the failing connection check to finish');
     const failed = await ev(`[...document.querySelectorAll('[data-account=check-result] li')].map((li) => [li.dataset.state, li.textContent])`);
     assert.deepStrictEqual(failed.map((s) => s[0]), ['ok', 'ok', 'failed', 'skipped', 'skipped'], JSON.stringify(failed));
     assert(/failed, HTTP 500/.test(failed[2][1]), failed[2][1]); assert(/not run/.test(failed[3][1]));

@@ -464,6 +464,9 @@ export function mountPrepareView(state, svgEl, opts = {}) {
       }
       const travel = deriveCutTravel([fp]);
       for (const t of travel) { addTravel(fp, t); hasTravel = true; }
+      // TASK 889: a stepped cut's pass (a Contour level, a terrace) is drawn as a line of its own, the thin continuous guide of the many-pass paths (.sk-clear-path):
+      // its travel marks are thinned on screen (renderStepTravel), so they alone left the crowded passes undrawn (a relief's Contour: 4 of 218)
+      if (fp.terrace && fp.kind === 'band') for (const tp of fp.toolPaths || []) path += `<path class="sk-clear-path" d="${toolPathD(tp)}"/>`;
       if (fp.kind === 'pocket') {
         if (rings.length && !chip) chip = pocketLabelPoint(rings[0], rings.slice(1));
       } else if (fp.chain) {

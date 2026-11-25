@@ -1,7 +1,7 @@
 // apps/shaper/src/shaperhub-target.js — TASK 884 (owner turns 3591-3597): "Keep ShaperHub up to date". After a design was sent to ShaperHub once, the Sync
 // dialog's switch makes every Generate REPLACE that same file there, without opening the dialog. What is declared here, once:
 //   the SETTING: a device setting, kept in this browser's localStorage like Shaper's other device settings (modes.js MODE_KEY 'shaper-mode', shaper-app.js
-//     'shaper-review-view' / 'shaper-review-look'); off by default;
+//     'shaper-review-view' / 'shaper-review-look'); ON by default (TASK 886, owner turn 3645: "Autoresend on by default"); a stored choice is kept;
 //   the TARGETS: per TICKED-OPERATION SET of the design shown (advisor, task 884: the exported file holds the ticked operations only, task 798, while its name is
 //     the design's; so a Generate with other ticks must never replace the file of another set), the file + folder of that set's LAST successful send: a record
 //     { <set key>: { filename, remotePath } } (export-payload.js tickedSetKey: 'all' when every operation is ticked, else the ticked operations' ids); {} = never sent. Kept with
@@ -13,12 +13,12 @@
 import { normalizeRemotePath } from '#core/shaper-cloud.js';
 import { hintText } from './param-hints.js';
 
-export const KEEP_HUB_KEY = 'shaper-keep-hub-up-to-date'; // '1' = on; no entry = off (the default)
+export const KEEP_HUB_KEY = 'shaper-keep-hub-up-to-date'; // '1' = on, '0' = off; no entry = on (the default, TASK 886)
 /** Whether the switch is on, in `storage` (the page's localStorage). */
-export const keepHubOn = (storage) => storage.getItem(KEEP_HUB_KEY) === '1';
+export const keepHubOn = (storage) => storage.getItem(KEEP_HUB_KEY) !== '0';
 /** Turns the switch on / off in `storage`. */
 export function setKeepHub(storage, on) {
-  if (on) storage.setItem(KEEP_HUB_KEY, '1'); else storage.removeItem(KEEP_HUB_KEY);
+  storage.setItem(KEEP_HUB_KEY, on ? '1' : '0');
 }
 
 /** A folder as the dialog names it: My Files, or My Files/<sub>/<folder>. */
@@ -65,7 +65,7 @@ export function autoSendDecision({ on, target: t, signedIn }) {
   return 'send';
 }
 
-/** The switch as the dialog shows it: { checked, disabled, hint }. It can be changed only while signed in this session (the app keeps no login, TASK 758). */
+/** The switch as the dialog shows it: { checked, disabled, hint }. It can be changed only while signed in (shaper-app.js signedIn: this session's sign-in, or TASK 886's login kept on this computer). */
 export function keepSwitchView({ on, signedIn, target: t }) {
   return {
     checked: !!on,

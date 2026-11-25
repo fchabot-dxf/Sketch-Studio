@@ -43,9 +43,11 @@ import { describeOperations } from './operations.js'; // TASK 798: the Export st
 import { mountExportPreview } from './export-preview.js'; // TASK 718: the Export step's 2D view of that file
 import { mountExportSim } from './export-sim.js'; // TASK 801: the Export step's simulation (the Simulate panel over the view), one timeline for the three views
 import { SIM } from './cut-timeline.js'; // TASK 801: its one line under the controls
+import { showNotification } from '#ui/notification-manager.js'; // TASK 886 (owner turn 3649): the corner notice of an Autosend that succeeded
 import { track } from '#ui/analytics.js'; // TASK 738: the ShaperHub upload, a Fusion selection received
 import { UPLOAD_MODES } from '#core/shaper-cloud.js'; // TASK 884: the replace's mode (the request contract)
 import { keepHubOn, setKeepHub, getHubTarget, setHubTarget, targetOfSend, autoSendDecision, keepSwitchView, createReplaceQueue, folderPlace } from './shaperhub-target.js'; // TASK 884: Keep ShaperHub up to date
+import { readRememberedLogin, rememberLogin, hasSignIn } from './shaperhub-login.js'; // TASK 886: Remember login on this computer
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 import { createStlImporter, STL_INSERT_MARKUP } from './stl-import.js'; // TASK 790: the STL card in Prepare; TASK 841: Insert STL (the Prepare toolbar's; the website's drawer adds Open / Insert STL)
@@ -254,12 +256,32 @@ export function startShaperApp({
   // TASK 884: "Keep ShaperHub up to date" (index.html #sync-keep-updated) and the line under it
   const syncKeep = document.getElementById('sync-keep-updated');
   const syncKeepHint = document.getElementById('sync-keep-hint');
-
+  // TASK 886: "Remember login on this computer" (index.html #sync-remember-login) and the line under it (what it keeps, and where)
+  const syncRemember = document.getElementById('sync-remember-login');
+  document.getElementById('sync-remember-hint').textContent = hintText('rememberLogin');
 
   const LOGIN_HINT = 'Check the password: your browser may have filled in a saved one.'; // TASK 767: under Shaper's own words when it refuses the sign-in
 
   // TASK 772: auth JWT held strictly in page RAM for this tab only (never storage/cookies/DOM/logs; Task 758 stays intact).
   let sessionToken = null;
+  // TASK 886: the form was filled at start from the login kept on this computer (shaperhub-login.js), and not changed or refused since: it counts as signed in
+  // (signedIn below) though this page has no session token yet; the next request (any Sync action, or a Generate's replace) carries it and gets one.
+  let rememberedInForm = false;
+  try {
+    const kept = readRememberedLogin(localStorage);
+    if (kept) {
+      syncEmail.value = kept.email;
+      syncPassword.value = kept.password;
+      rememberedInForm = true;
+    }
+  } catch (err) { dbg.warn('shaper', 'reading the remembered ShaperHub login failed', err && err.message); } // its message only (shaperhub-login.js: never the content)
+  syncRemember.checked = rememberedInForm; // off by default: on only while a login is kept
+  // ticked + a sign-in that just succeeded with the form's login: kept; unticked (or `signOut`, Switch account): deleted. ONE place, for every page that runs this.
+  function keepRememberedLogin({ signOut = false } = {}) {
+    const remember = syncRemember.checked && !signOut;
+    const login = remember && signedIn() ? { email: syncEmail.value.trim(), password: syncPassword.value } : null;
+    try { rememberLogin(localStorage, remember, login); } catch (err) { dbg.warn('shaper', 'keeping the ShaperHub login on this computer failed', err && err.message); }
+  }
   let currentRemotePath = '/';
   let folderState = { loaded: false, path: '/', folders: [], files: [] };
   // TASK 774: the folder the open "already in My Files" question is about ({ path }: the folder the server answered for), or null; Replace it / Keep both
@@ -287,11 +309,12 @@ export function startShaperApp({
     showKeepSwitch(); // TASK 884: it can be changed only while signed in
   }
 
-  // TASK 884: signed in THIS session = a session token and the login still in the sign-in form (the app keeps no login, TASK 758: the fields hold it until the
-  // page goes; a replace always carries it, shaper-cloud.js THE REPLACE RULE). A reload, Switch account or a refused login ends it.
+  // TASK 884: signed in = the login in the sign-in form, and a session token it got (the fields hold it until the page goes; a replace always carries it,
+  // shaper-cloud.js THE REPLACE RULE) or, TASK 886, the form filled from the login kept on this computer. A reload (unless it is kept), Switch account, an
+  // edit of the fields or a refused login ends it.
   // the device setting (shaperhub-target.js KEEP_HUB_KEY, localStorage like MODE_KEY / REVIEW_VIEW_KEY): storage blocked = off
   const keepHub = () => { try { return keepHubOn(localStorage); } catch (err) { dbg.warn('shaper', 'KEEP_HUB_KEY read failed', err && err.message); return false; } };
-  const signedIn = () => !!sessionToken && !!(syncEmail && syncEmail.value.trim()) && !!(syncPassword && syncPassword.value);
+  const signedIn = () => hasSignIn({ session: !!sessionToken, remembered: rememberedInForm, email: syncEmail.value, password: syncPassword.value });
   function showKeepSwitch() {
     if (!syncKeep) return;
     const v = keepSwitchView({ on: keepHub(), signedIn: signedIn(), target: getHubTarget(tickedSetKey()) }); // the target of the operations ticked now
@@ -306,6 +329,7 @@ export function startShaperApp({
 
   function clearSession() {
     sessionToken = null;
+    rememberedInForm = false; // TASK 886: the kept copy itself stays (only unticking or Switch account deletes it)
     folderState = { loaded: false, path: currentRemotePath, folders: [], files: [] };
     applySessionUi();
     renderFolderBrowser();
@@ -440,9 +464,10 @@ export function startShaperApp({
     if (res.ok && !data.error && typeof data.token === 'string' && data.token) {
       sessionToken = data.token;
       applySessionUi();
-    } else if (data && data.kind === 'login' && sessionToken) {
-      clearSession();
+    } else if (data && data.kind === 'login' && (sessionToken || rememberedInForm)) {
+      clearSession(); // TASK 886: a kept login that is refused is no sign-in either (its line: uploadErrorLines, the LOGIN_HINT)
     }
+    if (res.ok && !data.error) keepRememberedLogin(); // TASK 886: the form's login signed in: kept or deleted as the box says
     return { res, data, sentPassword: !!pass };
   }
   // the lines of a refused upload (the dialog's error, and TASK 884's replace on Generate): Shaper's words, and the LOGIN_HINT under a refused password
@@ -467,6 +492,9 @@ export function startShaperApp({
     track('export:shaperhub'); // TASK 738: an upload to ShaperHub, as the dialog's
     line.className = '';
     line.textContent = `✓ ${sentLine(data)}.`;
+    // TASK 886, owner turn 3649 ("On generate, and little popup in corner notices success"): an owner-asked exception to "no toast for normal behaviour":
+    // ONE success notice per Autosend replace that succeeded (never for the dialog's own Send, which shows its result in the dialog; a failure keeps the line above)
+    showNotification(`Sent ${data.filename || target.filename} to ShaperHub (${folderPlace(data.remotePath || target.remotePath)})`, 'success');
   }
   const hubQueue = createReplaceQueue(replaceHubTarget);
 
@@ -536,7 +564,7 @@ export function startShaperApp({
     await openRemoteFolder(data.path || currentRemotePath);
   }
 
-  if (syncSwitchBtn) syncSwitchBtn.addEventListener('click', () => { clearSession(); showExistsQuestion(false); showSyncStatus('', ''); if (syncSubmitBtn) syncSubmitBtn.disabled = false; if (syncEmail) syncEmail.focus(); }); // TASK 788: an open "already in My Files" question is about the account being left: it closes (Send, Browse usable again)
+  if (syncSwitchBtn) syncSwitchBtn.addEventListener('click', () => { clearSession(); keepRememberedLogin({ signOut: true }); showExistsQuestion(false); showSyncStatus('', ''); if (syncSubmitBtn) syncSubmitBtn.disabled = false; if (syncEmail) syncEmail.focus(); }); // TASK 788: an open "already in My Files" question is about the account being left: it closes (Send, Browse usable again)
   if (syncBrowseBtn) syncBrowseBtn.addEventListener('click', () => { openRemoteFolder(currentRemotePath); });
   if (syncRefreshBtn) syncRefreshBtn.addEventListener('click', () => { openRemoteFolder(currentRemotePath); });
   if (syncNewFolderBtn) syncNewFolderBtn.addEventListener('click', () => {
@@ -550,8 +578,9 @@ export function startShaperApp({
     if (e.key === 'Enter') { e.preventDefault(); createSubfolder(); }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (syncMkdirRow) syncMkdirRow.hidden = true; } // TASK 774: preventDefault: the dialog's own Escape (close) does not run
   });
-  if (syncEmail) syncEmail.addEventListener('input', () => { if (sessionToken) clearSession(); });
-  if (syncPassword) syncPassword.addEventListener('input', () => { if (sessionToken) clearSession(); });
+  if (syncEmail) syncEmail.addEventListener('input', () => { if (sessionToken || rememberedInForm) clearSession(); }); // TASK 886: an edited kept login is a new one: signed in again only when it is sent
+  if (syncPassword) syncPassword.addEventListener('input', () => { if (sessionToken || rememberedInForm) clearSession(); });
+  syncRemember.addEventListener('change', () => { if (!syncRemember.checked) keepRememberedLogin(); }); // TASK 886: unticked: deleted now; ticked: kept at the next sign-in
 
   // TASK 767: the file name the user typed for a design, kept for THIS session only (page memory, never stored): the design = its document tab, its
   // stored id and its name (a reused Untitled tab that now holds another design starts from that design's own name)
@@ -668,7 +697,7 @@ export function startShaperApp({
     showSyncStatus('is-success', line);
     const expStatus = document.getElementById('simexport-status');
     if (expStatus) expStatus.textContent = `✓ ${line}. It will now appear on your Origin over Wi-Fi.${payload.warning ? ` ${payload.warning}` : ''}`;
-    // TASK 758: the login is NOT kept by the app. Closing the dialog hides the form after the successful fetch: that is what tells the browser's
+    // TASK 758: the app keeps the login only when the box says so (TASK 886, callShaperHub). Closing the dialog hides the form after the successful fetch: that is what tells the browser's
     // password manager the sign-in succeeded (it then offers to save it). The fields keep their values until the page goes (not cleared).
     syncCloseTimer = setTimeout(closeSyncModal, 1200); // TASK 788: ended when the dialog closes (below), so it only ever closes the opening it was started for
   }

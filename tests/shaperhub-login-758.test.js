@@ -3,6 +3,8 @@
 //    functions/api/shaper-upload.js, server.js), no line that writes to storage, logs, sends analytics or writes the page names the email or the
 //    password; the login leaves the page ONCE: the body of the POST to /api/shaper-upload;
 //  - the old "Remember login" checkbox and key are gone: the key is named in ONE file (shaperhub-login.js), main.js deletes it ONCE at start;
+//  - TASK 886 (owner turns 3612-3614, superseding 758's "the app keeps no login"): the ONE storage line allowed to name the login is shaperhub-login.js
+//    rememberLogin's write under REMEMBER_LOGIN_KEY (the "Remember login on this computer" box, off by default); the old key and checkbox stay gone;
 //  - forgetOldLogin removes the old key without reading it and keeps every other key; a storage error reaches the caller;
 //  - the sign-in markup is a password form: email input name=username autocomplete=username type=email, password input name=password
 //    autocomplete=current-password, each with a <label for>, a submit button, no autocomplete="off".
@@ -29,7 +31,8 @@ const LOGIN = /\b(email|password|syncEmail|syncPassword|username|creds?|credenti
 const noStrings = (line) => line.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, "''");
 const leaks = [];
 for (const f of FILES) read(f).split('\n').forEach((line, i) => { const code = noStrings(line); if (SINK.test(code) && LOGIN.test(code)) leaks.push(`${f}:${i + 1}: ${line.trim()}`); });
-eq(leaks, [], 'no storage / log / analytics / page-writing line names the email or the password');
+// TASK 886: the one exception, exactly: the remembered login's write (shaperhub-login.js rememberLogin, under REMEMBER_LOGIN_KEY, only when the box is ticked)
+eq(leaks.map((l) => l.replace(/:\d+: /, ': ')), ['apps/shaper/src/shaperhub-login.js: storage.setItem(REMEMBER_LOGIN_KEY, JSON.stringify({ email: login.email, password: login.password }));'], 'no storage / log / analytics / page-writing line names the email or the password, but the ONE remembered-login write (TASK 886)');
 
 // the login leaves the page once: the upload POST's body
 const main = read('apps/shaper/src/main.js') + read('apps/shaper/src/shaper-app.js'); // TASK 881: the page's wiring is shaper-app.js (shared by the website and the Fusion panel) + main.js (the website's own parts)
@@ -45,7 +48,7 @@ const walk = (dir) => { for (const e of fs.readdirSync(path.join(ROOT, dir), { w
 for (const d of ['apps', 'packages', 'functions']) walk(d);
 eq(named, ['apps/shaper/src/shaperhub-login.js'], 'the old key is named only in shaperhub-login.js');
 eq(OLD_LOGIN_KEY, 'shaper_hub_creds', 'the key earlier versions stored the login under');
-ok(!/CRED_STORAGE_KEY|sync-remember|syncRemember/.test(main), 'main.js has no credential key or Remember checkbox');
+ok(!/CRED_STORAGE_KEY|'sync-remember'/.test(main), 'main.js has no old credential key or old Remember checkbox (TASK 886: its own box is #sync-remember-login, its key REMEMBER_LOGIN_KEY)');
 eq([...main.matchAll(/forgetOldLogin\(/g)].length, 1, 'main.js deletes the old login in ONE place');
 ok(/^\s*try \{ forgetOldLogin\(localStorage\); \} catch \(err\) \{ dbg\.warn\('shaper', '[^']*', err && err\.message\); \}\r?$/m.test(main), 'at app start (TASK 881: main.js beforeChrome, before the header), a storage error goes to the Log');
 
@@ -65,7 +68,8 @@ assert.throws(() => forgetOldLogin({ removeItem() { throw new Error('SecurityErr
 
 // ── 4. the sign-in markup ──
 const html = read('apps/shaper/index.html');
-ok(!/Remember login|sync-remember|sync-checkbox-label/.test(html), 'no Remember-login checkbox or its CSS');
+ok(!/Remember login in this browser|id="sync-remember"|sync-checkbox-label/.test(html), 'no OLD Remember-login checkbox or its CSS');
+ok(/<input id="sync-remember-login" type="checkbox" aria-describedby="sync-remember-hint">/.test(html), 'TASK 886: the new box, unticked by default (no checked attribute)');
 const win = new Window();
 win.document.write(html);
 const doc = win.document;

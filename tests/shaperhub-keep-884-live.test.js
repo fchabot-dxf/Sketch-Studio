@@ -1,10 +1,12 @@
 // tests/shaperhub-keep-884-live.test.js — TASK 884 (owner turns 3591-3597): "Keep ShaperHub up to date" on Shaper's WEBSITE, in a real browser, desktop 1280 x 800
 // (mouse) and phone 390 x 844 (touch). FAKE ShaperHub only: /api/shaper-upload is answered node-side by packages/core/shaper-cloud.js handleShaperUpload over
 // tests/shaperhub-fake-api.js; every non-local request is blocked and counted. The login is the fake's (never printed).
-//   each phase: a Pocket planned; Generate with the switch off sends nothing; the dialog's switch is disabled before a sign-in ("Needs a sign-in for this session.");
-//   sign in, open Furniture, Send -> the design's target is that file + folder; the dialog again: the switch enabled, its hint names them; turned ON;
+//   each phase: a Pocket planned; Generate with the switch at its default (ON, TASK 886) but no target sends nothing; the dialog's switch is disabled before a
+//   sign-in ("Needs a sign-in for this session."); its label is "Autosend" (TASK 886, owner turn 3648);
+//   sign in, open Furniture, Send -> the design's target is that file + folder; the dialog again: the switch enabled and on, its hint names them; turned OFF
+//   (stored '0'): a Generate sends nothing; turned ON again;
 //   Prepare: the Pocket's depth one step up (its card's + stepper, OK); Generate -> the fake receives ONE upload, mode 'replace', the same name and folder and the
-//   NEW svg (the new depth), with the login (THE REPLACE RULE); the status line ends "✓ Replaced <name> in My Files/Furniture." (no dialog, no toast);
+//   NEW svg (the new depth), with the login (THE REPLACE RULE); the status line ends "✓ Replaced <name> in My Files/Furniture." (no dialog) and, TASK 886 (owner turn 3649), ONE success toast "Sent <name> to ShaperHub (My Files/Furniture)"; the dialog's own Send shows none;
 //   desktop only: three Generates while a replace is held -> two replaces in all (the first, then the LATEST), never two at once; a reload -> the target is still
 //   the design's, the switch is on but disabled (no sign-in in this new page), a Generate sends nothing and says ShaperHub was not updated.
 // Screenshots (cropped to the dialog) to .evidence/884/.
@@ -99,8 +101,8 @@ const shot = async (name, sel = '#shaper-sync-modal') => {
 };
 const statusText = () => evalJs(`document.getElementById('simexport-status').textContent`);
 const hubTarget = () => evalJs(`import('/apps/shaper/src/shaperhub-target.js').then((m) => m.getHubTarget('all'))`); // everything ticked: the 'all' set
-const keep = () => evalJs(`(() => { const c = document.getElementById('sync-keep-updated'); return { checked: c.checked, disabled: c.disabled, hint: document.getElementById('sync-keep-hint').textContent, label: document.querySelector('label.sync-keep-row').textContent.trim() }; })()`);
-const setting = () => evalJs(`localStorage.getItem('shaper-keep-hub-up-to-date') === '1'`); // the device setting (shaperhub-target.js KEEP_HUB_KEY)
+const keep = () => evalJs(`(() => { const c = document.getElementById('sync-keep-updated'); return { checked: c.checked, disabled: c.disabled, hint: document.getElementById('sync-keep-hint').textContent, label: document.querySelector('label[for="sync-keep-updated"]').textContent.trim() }; })()`);
+const setting = () => evalJs(`localStorage.getItem('shaper-keep-hub-up-to-date')`); // the device setting (shaperhub-target.js KEEP_HUB_KEY): '1' on, '0' off, null = the default (on, TASK 886)
 const openDialog = async () => {
   await pressExportAction(cdp, clickEl, 'btn-sync-shaper');
   await waitFor(`document.getElementById('shaper-sync-modal').open`, 'the Sync dialog opens');
@@ -113,6 +115,11 @@ const generate = async (done, what) => {
   await pressExportAction(cdp, clickEl, 'btn-generate-svg');
   await waitFor(`(${done})(document.getElementById('simexport-status').textContent)`, what, 60000);
 };
+// TASK 886: every toast the page's notification manager shows (#notification-container's children), recorded by an observer the TEST installs after each load
+const watchToasts = () => evalJs(`(() => { if (window.__test886Toasts) return; window.__test886Toasts = []; new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes)
+  if (n.nodeType === 1 && n.parentElement && n.parentElement.id === 'notification-container') window.__test886Toasts.push({ level: n.getAttribute('data-level'), text: n.textContent }); }).observe(document.body, { childList: true, subtree: true }); })()`);
+const toasts = () => evalJs(`window.__test886Toasts.slice()`);
+const TOAST = `Sent ${NAME} to ShaperHub (My Files/Furniture)`;
 const svgDepths = (svg) => [...svg.matchAll(/shaper:cutDepth="([^"]+)"/g)].map((x) => x[1]);
 
 async function phase(label) {
@@ -121,8 +128,9 @@ async function phase(label) {
   await resetBufferLive(cdp);
   await navigate(`${LOCAL}apps/shaper/index.html`, 10000);
   await waitForApp('design-canvas');
+  await watchToasts();
   await waitFor(`!!(window.__designController && window.__designController.state)`, label + ': the design controller');
-  await evalJs(`localStorage.removeItem('shaper-keep-hub-up-to-date')`); // each phase starts with the switch at its default (off)
+  await evalJs(`localStorage.removeItem('shaper-keep-hub-up-to-date')`); // each phase starts with the switch at its default (ON since TASK 886)
   // two rectangles (120 x 70, 80 x 70), a Pocket 6 mm deep on one, 8 mm on the other: two operations (the plan set through the page's own cut-plan module, before any send)
   await evalJs(`(async () => { const st = window.__designController.state;
     [[0, 0], [120, 0], [120, 70], [0, 70], [150, 0], [230, 0], [230, 70], [150, 70]].forEach(([x, y], i) => st.joints.set('Rj' + i, { x, y }));
@@ -139,20 +147,20 @@ async function phase(label) {
   await waitFor(`!document.getElementById('view-review').hidden`, label + ': the Export step');
   assert.deepStrictEqual(await hubTarget(), null, label + ': a new design has no target');
 
-  // ── switch off (and no target): Generate sends nothing ──
+  // ── the switch at its default (ON, TASK 886) but no target yet: Generate sends nothing ──
   const n0 = uploads.length;
-  await generate(`(s) => s.includes('Drop it into')`, label + ': Generate (switch off)');
+  await generate(`(s) => s.includes('Drop it into')`, label + ': Generate (switch on by default, no target)');
   await sleep(800);
-  assert.strictEqual(uploads.length, n0, label + ': switch off -> Generate sent nothing');
+  assert.strictEqual(uploads.length, n0, label + ': no target -> Generate sent nothing');
 
   // ── the dialog before a sign-in: the switch is disabled, its hint says what it needs ──
   await openDialog();
   const k0 = await keep();
   console.log(label + ' switch before a sign-in: ' + JSON.stringify(k0));
-  assert.deepStrictEqual(k0, { checked: false, disabled: true, hint: 'Needs a sign-in for this session.', label: 'Keep ShaperHub up to date' }, label + ': no sign-in -> the switch is off and disabled');
+  assert.deepStrictEqual(k0, { checked: true, disabled: true, hint: 'Needs a sign-in for this session.', label: 'Autosend' }, label + ': no sign-in -> the switch shows its default (on) and is disabled');
   await shot(`${label}-dialog-signed-out.png`);
   if (phone) {
-    const row = await evalJs(`(() => { const r = document.querySelector('label.sync-keep-row').getBoundingClientRect(), d = document.getElementById('shaper-sync-modal').getBoundingClientRect(); return { h: Math.round(r.height), left: Math.round(d.left), right: Math.round(d.right), doc: document.documentElement.scrollWidth, vw: innerWidth }; })()`);
+    const row = await evalJs(`(() => { const r = document.querySelector('label[for="sync-keep-updated"]').getBoundingClientRect(), d = document.getElementById('shaper-sync-modal').getBoundingClientRect(); return { h: Math.round(r.height), left: Math.round(d.left), right: Math.round(d.right), doc: document.documentElement.scrollWidth, vw: innerWidth }; })()`);
     console.log('phone switch row: ' + JSON.stringify(row));
     assert.ok(row.h >= 44 && row.left >= 0 && row.right <= 390 && row.doc <= row.vw, 'phone: the switch row is a 44 px target, the dialog inside the screen, no sideways scroll: ' + JSON.stringify(row));
   }
@@ -166,6 +174,7 @@ async function phase(label) {
   await waitFor(`document.querySelector('#sync-breadcrumbs [aria-current="location"]').dataset.path === '/Furniture/'`, label + ': Furniture open');
   assert.strictEqual(await evalJs(`document.getElementById('sync-filename').value`), NAME, label + ': the file name is the design\'s');
   const n1 = uploads.length;
+  const t1 = (await toasts()).length;
   await clickEl('#sync-btn-submit');
   if (label === 'phone') { // the desktop phase put the file there (the same fake): the "already in My Files" question, answered Replace it
     await waitFor(`!document.getElementById('sync-exists').hidden`, label + ': the exists question');
@@ -177,15 +186,25 @@ async function phase(label) {
   const firstSvg = uploads[uploads.length - 1].svg;
   assert.deepStrictEqual(await hubTarget(), TARGET, label + ': the target is the file and the folder of that send');
   await waitFor(`!document.getElementById('shaper-sync-modal').open`, label + ': the dialog closes after the send (TASK 758)');
+  assert.strictEqual((await toasts()).length, t1, label + ': the dialog's own Send shows no toast (TASK 886: its result is in the dialog)');
 
-  // ── the dialog again: the switch enabled, the hint names the file and folder; turn it ON ──
+  // ── the dialog again: the switch enabled and on (the default), the hint names the file and folder; turned OFF (Generate sends nothing), then ON ──
   await openDialog();
   await waitFor(`!document.getElementById('sync-keep-updated').disabled`, label + ': signed in -> the switch can be turned on');
   const k1 = await keep();
-  assert.deepStrictEqual(k1, { checked: false, disabled: false, hint: `Each Generate replaces ${NAME} in My Files/Furniture on ShaperHub.`, label: 'Keep ShaperHub up to date' }, label + ': the hint says exactly what it does');
+  assert.deepStrictEqual(k1, { checked: true, disabled: false, hint: `Each Generate replaces ${NAME} in My Files/Furniture on ShaperHub.`, label: 'Autosend' }, label + ': the hint says exactly what it does');
+  await clickEl('#sync-keep-updated');
+  await waitFor(`!document.getElementById('sync-keep-updated').checked`, label + ': the switch off');
+  assert.strictEqual(await setting(), '0', label + ': the device setting is off (an explicit choice, stored)');
+  await closeDialog();
+  const nOff = uploads.length;
+  await generate(`(s) => s.includes('Drop it into')`, label + ': Generate (switch off, a target)');
+  await sleep(800);
+  assert.strictEqual(uploads.length, nOff, label + ': switch off -> Generate sent nothing');
+  await openDialog();
   await clickEl('#sync-keep-updated');
   await waitFor(`document.getElementById('sync-keep-updated').checked`, label + ': the switch on');
-  assert.strictEqual(await setting(), true, label + ': the device setting is on');
+  assert.strictEqual(await setting(), '1', label + ': the device setting is on');
   await shot(`${label}-dialog-switch-on.png`);
   await closeDialog();
 
@@ -200,6 +219,7 @@ async function phase(label) {
 
   // ── Generate: the target replaced, quietly ──
   const n2 = uploads.length;
+  const t2 = (await toasts()).length;
   await generate(`(s) => s.includes(${JSON.stringify(REPLACED)})`, label + ': Generate replaced the target');
   const sent2 = uploads.slice(n2);
   assert.strictEqual(sent2.length, 1, label + ': one upload');
@@ -212,7 +232,12 @@ async function phase(label) {
   console.log(label + ' status line: ' + line);
   assert.ok(line.startsWith(`Exported 2 cuts → ${NAME}.`) && line.includes(REPLACED), label + ': the status line says it was replaced: ' + line);
   assert.strictEqual(await evalJs(`document.getElementById('shaper-sync-modal').open`), false, label + ': no dialog opened');
-  assert.strictEqual(await evalJs(`document.querySelectorAll('.sk-notification, .notification, .sk-toast').length`), 0, label + ': no toast');
+  await waitFor(`window.__test886Toasts.length > ${t2}`, label + ': the Autosend success toast');
+  await sleep(500);
+  const tw = (await toasts()).slice(t2);
+  console.log(label + ' toasts: ' + JSON.stringify(tw));
+  assert.ok(tw.length === 1 && tw[0].level === 'success' && tw[0].text.includes(TOAST), label + ': ONE success toast (TASK 886, owner turn 3649): ' + JSON.stringify(tw));
+  await shot(`${label}-autosend-toast.png`, '#notification-container');
   await shot(`${label}-status-replaced.png`, '#simexport-status');
   return { firstSvg, ops, sixId };
 }
@@ -238,7 +263,7 @@ try {
   assert.ok(partLine.startsWith(`Exported 1 cut → ${PART}.`), 'partial: the file is named after its ticked operation: ' + partLine);
   await openDialog();
   assert.strictEqual(await evalJs(`document.getElementById('sync-filename').value`), PART, 'partial: the dialog offers the name of the partial file');
-  assert.deepStrictEqual(await keep(), { checked: true, disabled: false, hint: 'Each Generate replaces the file last sent with the operations ticked now: send it once first.', label: 'Keep ShaperHub up to date' }, 'partial: the hint says these ticks were never sent');
+  assert.deepStrictEqual(await keep(), { checked: true, disabled: false, hint: 'Each Generate replaces the file last sent with the operations ticked now: send it once first.', label: 'Autosend' }, 'partial: the hint says these ticks were never sent');
   await shot('desktop-dialog-partial-never-sent.png');
   await closeDialog();
   await openStage('prepare');
@@ -250,6 +275,7 @@ try {
   let release; hold = { promise: new Promise((r) => { release = r; }) };
   mostInFlight = 0;
   const n3 = uploads.length;
+  const t3 = (await toasts()).length;
   await generate(`(s) => s.includes('Replacing ${NAME}')`, 'queue: Generate 1 (its replace held)');
   await waitFor(`true`, 'tick');
   for (let i = 0; i < 50 && uploads.length === n3; i++) await sleep(100);
@@ -264,6 +290,8 @@ try {
   assert.strictEqual(uploads.length - n3, 2, 'queue: two replaces in all (the first, then ONE more)');
   assert.strictEqual(mostInFlight, 1, 'queue: never two replaces at once');
   assert.ok(uploads.slice(n3).every((x) => x.mode === 'replace' && x.filename === NAME && x.remotePath === '/Furniture/'), 'queue: both replace the target');
+  const tq = (await toasts()).slice(t3);
+  assert.ok(tq.length === 2 && tq.every((x) => x.level === 'success' && x.text.includes(TOAST)), 'queue: one success toast per replace that succeeded (two): ' + JSON.stringify(tq));
 
   // a reload: the target is still the design's; no sign-in in the new page -> the switch on but disabled, a Generate sends nothing and says so
   await waitFor(`import('/packages/ui/project-store.js').then((PS) => PS.getProjectStore().readBuffer({})).then((b) => JSON.stringify(b).includes('"hubTargets"'))`, 'the working buffer holds the target (the Untitled design lives there)');
@@ -281,7 +309,7 @@ try {
   assert.ok((await statusText()).includes('ShaperHub not updated: sign in with Sync to ShaperHub to keep it up to date.'), 'reload: the status line says the file there is not the new one');
   await openDialog();
   const k2 = await keep();
-  assert.deepStrictEqual(k2, { checked: true, disabled: true, hint: 'Needs a sign-in for this session.', label: 'Keep ShaperHub up to date' }, 'reload: the switch on, disabled, its hint says what it needs');
+  assert.deepStrictEqual(k2, { checked: true, disabled: true, hint: 'Needs a sign-in for this session.', label: 'Autosend' }, 'reload: the switch on, disabled, its hint says what it needs');
   await shot('desktop-dialog-after-reload.png');
   await closeDialog();
 

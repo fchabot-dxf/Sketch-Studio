@@ -1,6 +1,6 @@
 // tests/shaperhub-keep-884-node.test.js — TASK 884 (owner turns 3591-3597, 3607-3608): "Keep ShaperHub up to date", in Node (no browser). After a file was sent once,
 // the Sync dialog's switch makes every Generate REPLACE that same file on ShaperHub. FAKE Shaper API only (tests/shaperhub-fake-api.js; every other request blocked).
-//   1. the setting: declared ONCE (shaperhub-target.js KEEP_HUB_KEY, a localStorage device setting like Shaper's others), off by default;
+//   1. the setting: declared ONCE (shaperhub-target.js KEEP_HUB_KEY, a localStorage device setting like Shaper's others), ON by default (TASK 886, owner turn 3645: "Autoresend on by default"); an explicit choice is kept;
 //   2. a target = the file + folder of the LAST successful send, from the server's own answers (handleShaperUpload): Send ('sent'), Replace it ('replaced'),
 //      Keep both (the NEW name the server answered); an 'exists' question or an error makes none;
 //   3. the file holds the TICKED operations (task 798): its NAME says which when not all (export-payload.js exportFileName: all / one / two ticked), and the
@@ -33,11 +33,16 @@ const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L10 0"/></svg
 const store = new Map();
 const storage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
 eq(KEEP_HUB_KEY, 'shaper-keep-hub-up-to-date', 'the key');
-eq(keepHubOn(storage), false, 'off by default (a device that never set it)');
+eq(keepHubOn(storage), true, 'TASK 886 (owner turn 3645): ON by default (a device that never set it)');
 setKeepHub(storage, true);
-eq([keepHubOn(storage), store.get(KEEP_HUB_KEY)], [true, '1'], 'on');
+eq([keepHubOn(storage), store.get(KEEP_HUB_KEY)], [true, '1'], 'on (stored)');
 setKeepHub(storage, false);
-eq([keepHubOn(storage), store.has(KEEP_HUB_KEY)], [false, false], 'off again: no entry');
+eq([keepHubOn(storage), store.get(KEEP_HUB_KEY)], [false, '0'], 'off: an explicit choice, stored (the unset default is on)');
+setKeepHub(storage, true);
+eq([keepHubOn(storage), store.get(KEEP_HUB_KEY)], [true, '1'], 'on again');
+store.set(KEEP_HUB_KEY, '0');
+eq(keepHubOn(storage), false, 'a device that stored off keeps it');
+store.delete(KEEP_HUB_KEY);
 eq((read('apps/shaper/src/shaperhub-target.js').match(/'shaper-keep-hub-up-to-date'/g) || []).length, 1, 'declared once (shaperhub-target.js KEEP_HUB_KEY)');
 ok(!read('packages/core/settings-manager.js').includes('KEEP_HUB') && !/keep-hub/.test(read('packages/core/settings-manager.js')), 'not a shared setting: nothing in #core/settings-manager.js (so nothing syncs it to other devices)');
 ok(/keepHubOn\(localStorage\)/.test(read('apps/shaper/src/shaper-app.js')), 'the page reads it from its localStorage (this device)');

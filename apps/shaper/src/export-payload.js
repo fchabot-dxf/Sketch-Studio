@@ -5,18 +5,41 @@
 import { svgOf, bitCentrePaths, simElements } from './op-derive.js'; // TASK 817: the file and the Paths view's travel, derived by the ONE module the background worker runs too
 import { exportJob, idle as pathsIdle, onRecalculate } from './op-paths.js'; // TASK 817: the page's export, made in the background (the worker's memo caches warm from the paths it generated)
 import { docUnit } from '#core/settings-manager.js';
-import { exportEncoding } from './shaper.js';            // injected as the exporter's encoding
+import { exportEncoding, cutTypeById, STOCK_TYPE_ID } from './shaper.js';            // injected as the exporter's encoding; TASK 884: the type labels (the Operations list's)
 import { describeOperations } from './operations.js'; // TASK 743: the operations (display only) the preview copy maps its elements to
 import { hintLabel } from './param-hints.js'; // TASK S3: the Recalculate action's name (the toolbar button's)
-import { planEntries } from './cut-plan.js'; // TASK 798: the ticked operations (the file) and the whole plan (its frame)
-import { shaperFileName } from '#core/shaper-cloud.js';   // TASK 767: the one name rule (the upload applies it too)
+import { planEntries, isTicked } from './cut-plan.js'; // TASK 798: the ticked operations (the file) and the whole plan (its frame); TASK 884: THE tick filter
+import { storeOps } from './operations-store.js'; // TASK 884: the operations in the Operations list's order
+import { shaperFileName, SHAPER_DEFAULT_NAME } from '#core/shaper-cloud.js';   // TASK 767: the one name rule (the upload applies it too)
 import { UNTITLED } from '#ui/document-buffer-core.js'; // TASK 881: the autosave loop's own module (not the page-store wrapper)
 
-/** TASK 767: THE name of every file the Export step produces (Generate Shaper SVG, the sidebar Download, the Sync to ShaperHub dialog's file name),
- *  declared once: the design's name (the document tab's name; in Fusion mode the imported selection's name, main.js) cleaned by shaperFileName,
- *  + .svg. An Untitled design (or none) gets the default name (shaper-cloud.js SHAPER_DEFAULT_NAME + .svg). */
-export function exportFileName(designName) {
-  return shaperFileName(!designName || designName === UNTITLED ? '' : designName);
+// TASK 884 (owner turns 3607-3608): the file holds the TICKED operations only (task 798), so its NAME says which when it is not all of them. The operations a file can
+// leave out = every one but the Stock (cut-plan.js isTicked: the board, always in the file), each with its NUMBER in the Operations list: its place in the list
+// (operations-store.js storeOps, the order describeOperations lists and op-list.js numbers `i + 1`, the Stock counted), so reordering or deleting an operation
+// before it changes the number (and so the name of a partial file).
+const leavable = (ops) => ops.map((op, i) => ({ op, n: i + 1 })).filter(({ op }) => op.type !== STOCK_TYPE_ID);
+/** TASK 884: the ticked part of a file's name: '' when every operation is ticked (the full file), else each ticked operation's type label (the Operations list's,
+ *  cut type menuLabel) and its number there, in list order, joined by " - " ("Outside 1 - Outside 2": owner turn 3611, a dash survives shaperFileName where a comma became _). `ops` = the stored operations in list order. */
+export function tickedNamePart(ops = storeOps()) {
+  const all = leavable(ops), on = all.filter(({ op }) => isTicked(op));
+  return on.length === all.length ? '' : on.map(({ op, n }) => `${(cutTypeById(op.type) || {}).menuLabel || op.type} ${n}`).join(' - ');
+}
+/** TASK 884: the key of the ticked set (the ShaperHub targets are kept per set: shaperhub-target.js): 'all' when every operation is ticked, else the ticked
+ *  operations' ids, sorted (a reorder keeps the key; the name's numbers may change). */
+export function tickedSetKey(ops = storeOps()) {
+  const all = leavable(ops), on = all.filter(({ op }) => isTicked(op));
+  return on.length === all.length ? 'all' : on.map(({ op }) => String(op.id)).sort().join(',');
+}
+
+/** TASK 767: THE name of every file the Export step produces (Generate Shaper SVG, the sidebar Download, the Sync to ShaperHub dialog's file name, TASK 884's
+ *  replace on Generate), declared once: the design's name (the document tab's name; in Fusion mode the imported selection's name, main.js) cleaned by
+ *  shaperFileName, + .svg. An Untitled design (or none) gets the default name (shaper-cloud.js SHAPER_DEFAULT_NAME + .svg). TASK 884: a file of SOME of the
+ *  operations (`ops`, the stored operations in list order: some unticked) is "<design name> - <tickedNamePart>.svg" ("bromont - Outside 1.svg", "bromont - Outside 1 - Outside 2.svg"); every one
+ *  ticked: the design's name alone, as before. */
+export function exportFileName(designName, ops = storeOps()) {
+  const base = !designName || designName === UNTITLED ? '' : designName;
+  const part = tickedNamePart(ops);
+  return shaperFileName(part ? `${base || SHAPER_DEFAULT_NAME} - ${part}` : base);
 }
 
 /** The Shaper SVG of `entries` (the Prepare cut plan, cut-plan.js planEntries()) on the solved sketch `state`: the downloaded file, or with

@@ -23,6 +23,7 @@ import { getStock, setStock } from './stock.js';
 import { loadBits, saveBits } from './tool-table.js';
 import { forget as forgetPaths } from './op-paths.js';
 import { hintText } from './param-hints.js';
+import { getHubTargets, setHubTargets } from './shaperhub-target.js'; // TASK 884: the files this design was last sent as on ShaperHub (per ticked-operation set), kept in the design's project
 
 export const FUSION_HOST_PARAM = 'host';
 export const FUSION_HOST_VALUE = 'fusion';
@@ -118,6 +119,7 @@ export function captureFusionProject({ reviewLook = null, reviewViewMode = null 
       ...(reviewViewMode ? { reviewViewMode } : {}),
     },
     selections,
+    ...(Object.keys(getHubTargets()).length ? { hubTargets: getHubTargets() } : {}), // TASK 884: as the website's document (shaper-doc.js captureShaperDoc): only once the design was sent
   };
 }
 
@@ -138,6 +140,7 @@ export function applyFusionProject(project, { controller = null, prepare = null,
     applyStore(null);
     setSelections([], { sync: false });
     setStock({ ...DEFAULT_STOCK });
+    setHubTargets(null); // TASK 884: a new design has no ShaperHub target
   } else {
     setStock(project.stock && typeof project.stock === 'object' ? { ...DEFAULT_STOCK, ...project.stock } : { ...DEFAULT_STOCK });
     const ps = project.prepareSettings && typeof project.prepareSettings === 'object' ? project.prepareSettings : {};
@@ -148,6 +151,7 @@ export function applyFusionProject(project, { controller = null, prepare = null,
     if (typeof onRestoreLook === 'function' && (ps.reviewLook || ps.reviewViewMode)) onRestoreLook(ps);
     applyStore(project);
     setSelections(Array.isArray(project.selections) ? project.selections : [], { sync: false });
+    setHubTargets(project.hubTargets); // TASK 884: the design's ShaperHub targets (none when it was never sent)
     if (!hasSelection) {
       const staleKeys = new Set(storeOps().flatMap((o) => o.geometry.map((r) => r.key)));
       if (staleKeys.size) renameGeometry(new Map(), staleKeys, { keepEmpty: true });

@@ -6,8 +6,8 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from './helpers/cdp-browser.js';
+import { makeGoStage } from './helpers/go-stage.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
-import { settledCentre } from './helpers/settled-centre.js';
 
 const EVIDENCE_DIR = path.resolve('.evidence/806');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -92,20 +92,7 @@ async function run({ width, height, tag }) {
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: p.x, y: p.y, button: 'left', buttons: 0, clickCount: 1 });
     return p;
   };
-  const goStage = async (tab) => {
-    if (width <= 640) {
-      if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) {
-        await settledCentre(cdp, '.sk-sidebar-chevron', 'sidebar chevron');
-        await click('.sk-sidebar-chevron');
-      }
-      await settledCentre(cdp, `.sk-sidebar-stage[data-tab="${tab}"]`, `${tab} drawer entry`);
-      await click(`.sk-sidebar-stage[data-tab="${tab}"]`);
-    } else {
-      await settledCentre(cdp, `.sk-header-tab[data-tab="${tab}"]`, `${tab} header tab`);
-      await click(`.sk-header-tab[data-tab="${tab}"]`);
-    }
-    await waitFor(`!document.getElementById('view-${tab}').hidden`, `${tab} stage visible`);
-  };
+  const goStage = makeGoStage({ cdp, width, click });
   const openOpsSheet = async () => {
     await waitFor(`!!document.querySelector('#prepare-ops .ops-row')`, 'ops rows rendered');
     const isHidden = await evalJs(`(() => { const b = document.querySelector('#prepare-ops .ops-body'); return !b || b.hidden || getComputedStyle(b).display === 'none'; })()`);

@@ -23,7 +23,7 @@ const PARAMS = {
   // TASK S2 (owner turn 2740): a Roughing's / Contour's Depth row (CUT_TYPES depthParam): its ONE depth (810's Bottom row is gone)
   levelsDepth: { label: 'Depth', hint: 'From model: each shape to its own model depth. A typed depth: the cut follows the model’s slope and stops flat at that depth.' },
   stockDepth: { label: 'Thickness', hint: 'The thickness of your board, shown in the 3D preview. Not cut.' }, // the depth row of a Stock loop (CUT_TYPES stock.depthParam)
-  sculptedOn: { label: 'Sculpted parts sit on', hint: 'Where a 3D relief (an STL, a Fusion body) sits when the board is thicker than it. Flat cuts always start at the top.', items: SCULPTED_ON.choices.map((c) => `sculptedOn:${c.id}`) }, // TASK 898
+  sculptedOn: { label: 'Sculpted parts sit on', hint: 'Where a 3D relief (an STL, a Fusion body) sits when this Stock is thicker than it. Without a Stock, a relief sits at the top. Flat cuts always start at the top.', items: SCULPTED_ON.choices.map((c) => `sculptedOn:${c.id}`) }, // TASK 898
   clearing: { label: 'Clearing', hint: 'How the inside of the pocket is removed.' },
   stepover: { label: 'Stepover', hint: 'How far the bit moves sideways between passes, as a share of its diameter. Smaller is smoother and slower.' },
   // TASK 766: the last pass that takes the allowance off is the Origin's own inside cut with Loop off, the loop's turn along the wall with Loop on (pocket-clearing.js)

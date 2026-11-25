@@ -18271,3 +18271,8 @@ advisor default Floor). Claude Opus subagent, branch agents/stockT2-898. apps/sh
   2a0f7c133885fc0264d7f137ce62f752 (origin/main app code: record 25 -> 20 -> 30, no Stock; relief in 30 mm: depth 20, levels z 0 .. 20) and probe-after.txt md5
   e666216094e6d249b870a910f789eac6 (record 25 kept, ONE Stock {geometry 0, 'model'}; depth 30, levels z 10 .. 30); desktop/phone-ops-stock-row.png,
   -stock-card.png, -export-3d-floor(-zoom).png, -export-3d-top(-zoom).png (Floor "Roughing: 12 levels, 0.315 to 0.787 in", Top "11 levels, 0.039 to 0.472 in").
+- Advisor ruling (review of 898): a design with NO Stock operation places sculpted parts at the TOP (today's file, byte for byte): the Floor | Top choice (default
+  Floor) is the Stock operation's. Declared once in cut-plan.js reliefDrop (no Stock operation -> 0); the Stock hint says it ("Without a Stock, a relief sits at the top").
+  Node test: a website STL relief in a 30 mm board with no Stock operation -> the 20 mm file byte for byte (fail-first without the rule:
+  .evidence/898/fail-first-nostock.txt "2: no Stock operation, a 30 mm board: today's file, byte for byte (Top)"); with a Stock operation -> Floor as before. The
+  roughing-contour-792-node record workaround is dropped (its v2 document has no Stock operation: the part stays at the top).

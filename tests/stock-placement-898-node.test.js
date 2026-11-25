@@ -4,7 +4,8 @@
 //     written into the declared record; a thicker part added re-reads it; a TYPED Stock thickness survives an add, and the notice says the part is taller (the
 //     stl-import.js rule); a selection that replaces the design (no selection id) gets its own one Stock again; the Fusion per-design project saved and opened again
 //     keeps it, resolved from the persisted part thickness. Open STL (the website) makes no Stock row and still sets the record (its 'part' option).
-//  2. The placement (the Stock card's "Sculpted parts sit on": Floor | Top, default Floor; cut-plan.js reliefDrop, the ONE place): a 20 mm relief in a 30 mm stock:
+//  2. The placement (the Stock card's "Sculpted parts sit on": Floor | Top, default Floor; cut-plan.js reliefDrop, the ONE place). With NO Stock operation (the
+//     website's default) a relief in a thicker board stays at the Top: today's file, byte for byte. With a Stock operation, a 20 mm relief in a 30 mm stock:
 //     Floor = the part's bottom on the stock's bottom: the Roughing runs 10 .. 30 mm, its first level (10 mm) clears the 10 mm of stock above the part's top, every
 //     other level is Top's 10 mm deeper; Top = the part's top at the stock's top: 1 .. 20 mm, the Shaper SVG byte for byte the one of today (the part in a 20 mm
 //     stock); a Contour follows (no pass above the part's top, its deepest at 30 mm); a flat cut (a Pocket on a drawn shape, a Pocket on the relief's own region)
@@ -126,10 +127,17 @@ try {
     const polyArea = (p) => { let s = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; s += a.x * b.y - b.x * a.y; } return Math.abs(s) / 2; };
     const sitsOn = (v) => setOpFields(stocks()[0], { sculptedOn: v }, st);
 
-    // stock == part (20 mm, the record Open STL set; no Stock operation: the default, Floor)
+    // stock == part (20 mm, the record Open STL set; no Stock operation)
     const S20 = svg();
     const top20 = depths(cutsOf('roughing'));
     eq([top20[0], top20[top20.length - 1]], [1, 20], '2: stock = part: the Roughing runs 1 .. 20 mm');
+    // the website with NO Stock operation (advisor ruling): nowhere to see the choice, so a thicker board keeps today's file (the part's top at the stock's top)
+    eq(stocks().length, 0, '2: (no Stock operation)');
+    setStock({ ...getStock(), thickness: 30 });
+    eq(resolveStock(st).board.thickness, 30, '2: no Stock operation, the board 30 mm (the record)');
+    eq(svg(), S20, "2: no Stock operation, a 30 mm board: today's file, byte for byte (Top)");
+    eq(depths(cutsOf('roughing')), top20, '2: no Stock operation: the Roughing 1 .. 20 mm');
+    setStock({ ...getStock(), thickness: 20 });
     setStockOp(null, st); // an EMPTY Stock (its thickness unset: the record's 20 mm)
     sitsOn('top');
     eq(svg(), S20, '2: stock = part: Top writes the same file, byte for byte');

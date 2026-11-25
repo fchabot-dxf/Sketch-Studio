@@ -114,7 +114,9 @@ export const STOCK_TYPE_ID = 'stock';
 // TASK 898 (owner turn 3703: "2 allow to choose"): WHERE A SCULPTED PART SITS in a stock thicker than it, a setting of the Stock (its card's row `sculptedOn`): a
 // sculpted part = a region with relief levels (an STL's, a Fusion body's) cut by Roughing / Contour. Floor = the part's bottom on the stock's bottom (its levels go
 // (stock - part) deeper: the Roughing's first levels take the stock above the part off); Top = the part's top at the stock's top. A FLAT cut (Outside, Inside,
-// Pocket, On line) always cuts from the top (the Shaper cuts from the surface): no choice. Unset = the default. Applied in ONE place: cut-plan.js reliefDrop.
+// Pocket, On line) always cuts from the top (the Shaper cuts from the surface): no choice. Unset = the default. It is the Stock OPERATION's: a design with no Stock
+// operation (the website's default) places its parts at the Top, as before 898; a Fusion selection always has one (cut-plan.js ensureStock). Applied in ONE place:
+// cut-plan.js reliefDrop.
 export const SCULPTED_ON = Object.freeze({
   choices: Object.freeze([Object.freeze({ id: 'floor', label: 'Floor' }), Object.freeze({ id: 'top', label: 'Top' })]),
   defaultId: 'floor', // the advisor's default (turn 3703)

@@ -48,8 +48,8 @@ const modelDepth = (op, key) => (op.type === STOCK_TYPE_ID ? partsThickness() : 
 const importedDepth = (op, key) => (op.type === STOCK_TYPE_ID ? partsThickness() : sourceDepth(key));
 // ── TASK 898 (owner turn 3703: "2 allow to choose"; shaper.js SCULPTED_ON, the Stock's setting): WHERE A SCULPTED PART SITS in a stock thicker than it, THE one place:
 // reliefDrop = the depth of the part's top below the stock's top. A region with relief LEVELS (an STL's, a Fusion body's) cut by a Roughing / Contour (`type`), the
-// Stock set to Floor (the default) and the stock thicker than the part: (stock - part), so the part's bottom is on the stock's bottom; else 0 (Top: the part's top at
-// the stock's top, as before 898; a FLAT cut type: Outside / Inside / Pocket / On line always cut from the top; no levels; a stock not thicker). The part's height =
+// design's Stock OPERATION set to Floor (its default) and the stock thicker than the part: (stock - part), so the part's bottom is on the stock's bottom; else 0 (NO
+// Stock operation: the choice is that operation's, so a design without one keeps the part's top at the stock's top, byte for byte as before 898; Top: the same; a FLAT cut type: Outside / Inside / Pocket / On line always cut from the top; no levels; a stock not thicker). The part's height =
 // its selection's thicknessMm (the STL's height, the Fusion body's), else its levels' deepest (a relief region is its whole part, from its top to its bottom:
 // #core stl-slice, the add-in's SA-35 body relief); the stock = stock.js boardThickness. Its readers: modelDepth (the part's model depth, its bottom: a Roughing /
 // Contour Depth 'model'), resolveEntry (its levels, for the derivation: placedLevels) and fusion-toolpaths.js (the Fusion viewport draws a path from its PART's
@@ -63,7 +63,8 @@ export function reliefDrop(type, key) {
   const reg = regionOf(key);
   if (!reg || !hasLevels(reg)) return 0;
   const sop = stockOpNow();
-  if (sculptedOnOf(sop && sop.settings) !== 'floor') return 0;
+  if (!sop) return 0; // no Stock operation (the website's default): nowhere to see the choice, so the part's top at the stock's top, as before 898 (advisor ruling)
+  if (sculptedOnOf(sop.settings) !== 'floor') return 0;
   const drop = boardThickness() - partHeightOf(key, reg);
   return drop > 1e-9 ? drop : 0;
 }

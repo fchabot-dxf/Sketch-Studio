@@ -311,8 +311,17 @@
     .sync-btn-primary { background: #059669; color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; font: 13px system-ui, sans-serif; font-weight: 500; cursor: pointer; }
     .sync-btn-primary:hover:not(:disabled) { background: #10b981; }
     .sync-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* TASK 884: Keep ShaperHub up to date: the switch and the line under it */
+    .sync-keep { display: flex; flex-direction: column; gap: 3px; }
+    .sync-keep-row { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: #cbd5e1; cursor: pointer; align-self: flex-start; }
+    .sync-keep-row input { width: 16px; height: 16px; margin: 0; accent-color: #059669; cursor: pointer; }
+    .sync-keep-row:has(input:disabled) { color: #6b7280; cursor: not-allowed; }
+    .sync-keep-row input:disabled { cursor: not-allowed; }
+    .sync-keep-hint { font-size: 11px; color: #9ca3af; line-height: 1.4; padding-left: 24px; }
+    .simexport-status .is-error { color: #f87171; } /* TASK 884: the replace after a Generate was refused */
     /* TASK 758: on a phone (narrow screen or a coarse pointer) the sign-in's fields and buttons are 44 px touch targets */
     @media (max-width: 640px), (pointer: coarse) {
+      .sync-keep-row { min-height: 44px; } /* TASK 884: the switch's row is its touch target (the label toggles it) */
       .sync-field input, .sync-mkdir-row input, .sync-btn-primary, .sync-btn-secondary, .sync-link-btn, .sync-entry { min-height: 44px; box-sizing: border-box; }
       .sync-modal-close { min-width: 44px; min-height: 44px; }
     }
@@ -893,6 +902,11 @@
         <div class="sync-field">
           <div class="sync-label-row"><label for="sync-filename" data-hint="syncFilename"></label></div>
           <input id="sync-filename" name="filename" type="text" required placeholder="my-project.svg">
+        </div>
+        <!-- TASK 884: Keep ShaperHub up to date (a device setting, #core/settings-manager.js SHAPER_HUB_KEEP_UP_TO_DATE); the line under it says what it does now -->
+        <div class="sync-keep">
+          <label class="sync-keep-row" for="sync-keep-updated"><input id="sync-keep-updated" type="checkbox" role="switch" aria-describedby="sync-keep-hint"> <span data-label="keepHubUpToDate"></span></label>
+          <div id="sync-keep-hint" class="sync-keep-hint"></div>
         </div>
         <div id="sync-modal-status" class="sync-status"></div>
         <!-- TASK 767: the name is already in My Files: the three choices (main.js sendToShaperHub; the dialog's own Cancel / Send hide meanwhile) -->

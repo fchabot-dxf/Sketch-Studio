@@ -12,8 +12,11 @@
 // is; one undo step; the stock thickness is never changed (a taller part is SAID: "<file> is 1.2 in tall: the stock is 0.75 in"). It lands where
 // INSERT_PLACE says (freePlace) and then moves like any shape: its levels follow it (relief-frame.js). Every part has its own STL source (stl-source.js
 // list); the card shows the selected relief's (setCurrentStl, from Prepare's focus) and a re-slice replaces THAT part only, where it is now.
+// TASK 897 (owner turn 3690): the file may be an STL, an OBJ or a 3MF (mesh-formats.js readMesh, the ONE mesh-reading step: the same triangle list); all that
+// follows is this STL path. A 3MF's declared unit is the source's Units (mesh-formats.js); a file of several objects is ONE part (the notice says so). An STL is
+// read at once (openFile / insertFile return the result); an OBJ / 3MF loads its reader first (they return a Promise of the result).
 import { browserFileSeam } from '#ui/project-file.js';
-import { parseStl, sliceStl, STL_DEFAULTS, orientationForUp, orientationOf, orientedBounds } from '#core/stl-slice.js';
+import { sliceStl, STL_DEFAULTS, orientationForUp, orientationOf, orientedBounds } from '#core/stl-slice.js';
 import { computeGeometryBounds } from '#core/geometry-bounds.js';
 import { findLoops } from '#core/loop-finder.js';
 import { lengthText } from '#core/settings-manager.js';
@@ -26,6 +29,7 @@ import { getStock } from './stock.js';
 import { placement, placementNow, IDENTITY } from './relief-frame.js';
 import { mountStlCard } from './stl-card.js';
 import { openOrientView } from './orient-view.js'; // TASK 808: the Orient view (click the floor face)
+import { readMesh, MESH_FILE_PICK } from './mesh-formats.js'; // TASK 897: STL, OBJ, 3MF
 
 /** The drawer entry's icon: a cube (18 x 18, the drawer's stroke style). */
 export const STL_ICON = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5l5.5 3v7L9 15.5l-5.5-3v-7zM3.5 5.5L9 8.5l5.5-3M9 8.5v7"/></svg>';
@@ -33,9 +37,6 @@ export const STL_ICON = '<svg width="18" height="18" viewBox="0 0 18 18" fill="n
 /** TASK 841: Insert STL's icon: the cube, smaller, with a plus (its 18 x 18 inner markup: the Prepare toolbar's button; the whole svg: the drawer). */
 export const STL_INSERT_MARKUP = '<path d="M7.5 5l4.5 2.5v5.5L7.5 15.5 3 13V7.5zM3 7.5L7.5 10 12 7.5M7.5 10v5.5M14.5 1.5v5M12 4h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>';
 export const STL_INSERT_ICON = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none">${STL_INSERT_MARKUP}</svg>`;
-
-/** Shaper's file pick for Open STL: an STL, read as bytes (binary or ASCII STL). */
-export const STL_FILE_PICK = Object.freeze({ description: 'STL 3D part', mime: 'model/stl', exts: Object.freeze(['.stl']), binary: true });
 
 /**
  * TASK 841: WHERE an inserted relief lands. Its footprint (the work area's box) is centred in the current view; when it comes closer than `gapMm` to an existing
@@ -99,7 +100,7 @@ export function createStlImporter({ ensureSketch, getController, prepare, panelE
    * place (a re-slice: its own Roughing, the stock as its source says: an opened part sets it, an inserted one leaves it); `at` = TASK 841, a NEW part inserted at
    * that placement. On success the part's STL source is this mesh with these settings.
    */
-  const land = (tris, key, { name, up, rotation, floor, unit, part = null, opened = false, at = null }) => {
+  const land = (tris, key, { name, up, rotation, floor, unit, part = null, opened = false, at = null, format = 'stl', objects = 1 }) => {
     ensureSketch();
     const sliced = sliceStl(tris, { name, up, unit, rotation });
     if (!sliced.ok) return sliced;
@@ -115,38 +116,44 @@ export function createStlImporter({ ensureSketch, getController, prepare, panelE
     if (!res.ok) return res;
     const n = sliced.info.sections;
     if (!res.imported) { notice(res.message, false); return { ...res, info: sliced.info }; }
-    const src = { name, up, rotation, floor, unit, triangles: sliced.info.triangles, sizeMm: sliced.info.sizeMm, key, part: res.selectionId, opened: !id || opened };
+    const src = { name, up, rotation, floor, unit, triangles: sliced.info.triangles, sizeMm: sliced.info.sizeMm, key, part: res.selectionId, opened: !id || opened,
+      ...(format !== 'stl' ? { format } : {}) }; // TASK 897: an STL's source is as before (no format: an STL)
     if (id) putStlSource(src); else setStlSource(src); // the card follows (stl-card.js); Open STL: the list is this one source
     setCurrentStl(res.selectionId);
     const said = at ? `Inserted ${name}` : id || res.replaced ? `Replaced with ${name}` : `Added ${name}`;
     const taller = keep ? tallerText(name, sliced.info.sizeMm.z) : null;
-    const message = selectionNotice(`${said}: ${levelsText(n)}${taller ? ` · ${taller}` : ''}`, res.warnings);
+    const merged = objects > 1 ? `${objects} objects in the file, sliced as one part` : null; // TASK 897: a file of several objects is one relief
+    const message = selectionNotice(`${said}: ${levelsText(n)}${merged ? ` · ${merged}` : ''}${taller ? ` · ${taller}` : ''}`, res.warnings);
     notice(message, false);
     return { ...res, message, info: sliced.info };
   };
+  // TASK 897: the file read by its format (mesh-formats.js readMesh), then `then(tris, key, name, settings)`: settings = the slicing defaults (STL_DEFAULTS: +Z up,
+  // mm) with the file's declared unit (a 3MF's) and its format / object count
   const read = (bytes, name, then) => {
-    const parsed = parseStl(bytes);
-    if (!parsed.ok) return parsed;
-    return then(parsed.triangles, rememberMesh(parsed.triangles), String(name || 'part.stl'));
+    const nm = String(name || 'part.stl');
+    const go = (mesh) => (mesh.ok ? then(mesh.triangles, rememberMesh(mesh.triangles), nm,
+      { ...STL_DEFAULTS, unit: mesh.unit || STL_DEFAULTS.unit, format: mesh.format, objects: mesh.objects }) : mesh);
+    const mesh = readMesh(bytes, nm);
+    return mesh instanceof Promise ? mesh.then(go) : go(mesh);
   };
-  /** An STL file's bytes (or an ASCII STL's text) -> a new design (the defaults: STL_DEFAULTS, +Z up, mm). */
-  const openFile = (bytes, name) => read(bytes, name, (tris, key, nm) => land(tris, key, { name: nm, ...STL_DEFAULTS }));
-  /** TASK 841: an STL file's bytes -> one more relief part of the design (sliced as Open slices it), placed by INSERT_PLACE in the current view. */
-  const insertFile = (bytes, name) => read(bytes, name, (tris, key, nm) => {
+  /** A mesh file's bytes (an STL, OBJ or 3MF; or an ASCII STL's text) -> a new design. */
+  const openFile = (bytes, name) => read(bytes, name, (tris, key, nm, settings) => land(tris, key, { name: nm, ...settings }));
+  /** TASK 841: a mesh file's bytes -> one more relief part of the design (sliced as Open slices it), placed by INSERT_PLACE in the current view. */
+  const insertFile = (bytes, name) => read(bytes, name, (tris, key, nm, settings) => {
     ensureSketch();
     const st = getController().state;
     const view = getView ? getView() : st.view;
-    const b = orientedBounds(tris, { rotation: orientationForUp(STL_DEFAULTS.up).rotation, unit: STL_DEFAULTS.unit }); // its footprint, as the slicer turns it
+    const b = orientedBounds(tris, { rotation: orientationForUp(settings.up).rotation, unit: settings.unit }); // its footprint, as the slicer turns it
     const w = b.maxX - b.minX, h = b.maxY - b.minY; // the slicer's part: x 0..w, y -h..0 in the sketch (Y down)
     const c = freePlace({ w, h }, view, occupiedBoxes(st));
-    return land(tris, key, { name: nm, ...STL_DEFAULTS, at: placement(0, c.x - w / 2, c.y + h / 2) });
+    return land(tris, key, { name: nm, ...settings, at: placement(0, c.x - w / 2, c.y + h / 2) });
   });
   // a source sliced again with another Up side / rotation or Units (its part only, where it is now)
   const resliceSource = (s, next = {}) => {
     // TASK 808: ONE orientation (a stored rotation), set two ways: an Up preset (`up`) or a clicked floor face (`orient`: { up, rotation, floor })
     const o = next.orient ? orientationOf(next.orient) : next.up ? orientationForUp(next.up) : { up: s.up, rotation: s.rotation };
     const floor = next.orient ? next.orient.floor || null : next.up ? null : s.floor;
-    return land(meshOf(s.key), s.key, { name: s.name, up: o.up, rotation: o.rotation, floor, unit: next.unit || s.unit, part: s.part, opened: Boolean(s.opened) });
+    return land(meshOf(s.key), s.key, { name: s.name, up: o.up, rotation: o.rotation, floor, unit: next.unit || s.unit, part: s.part, opened: Boolean(s.opened), format: s.format || 'stl' });
   };
   /** The card's STL sliced again with another Up side or Units (null when the design has no STL source). */
   const reslice = (next = {}) => {
@@ -166,14 +173,14 @@ export function createStlImporter({ ensureSketch, getController, prepare, panelE
     for (const s of getStlSources()) if (s.old) res = resliceSource(s, {});
     return res;
   };
-  /** The file chooser (Shaper's STL pick); resolves null when it was cancelled. */
+  /** The file chooser (Shaper's mesh pick: STL, OBJ, 3MF); resolves null when it was cancelled. */
   const pickAndOpen = async () => {
-    const picked = await browserFileSeam.open(STL_FILE_PICK);
+    const picked = await browserFileSeam.open(MESH_FILE_PICK);
     return picked ? openFile(picked.bytes, picked.name) : null;
   };
-  /** TASK 841: the same chooser, the STL inserted. */
+  /** TASK 841: the same chooser, the mesh inserted. */
   const pickAndInsert = async () => {
-    const picked = await browserFileSeam.open(STL_FILE_PICK);
+    const picked = await browserFileSeam.open(MESH_FILE_PICK);
     return picked ? insertFile(picked.bytes, picked.name) : null;
   };
   return { openFile, insertFile, reslice, orient, reimportOld, pickAndOpen, pickAndInsert };

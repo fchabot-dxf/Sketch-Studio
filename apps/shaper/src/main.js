@@ -36,6 +36,7 @@ let shaperImporter = null; // the SVG / DXF importer (cut-import.js), once creat
 
 // TASK 790 / 841: a drawer entry that picks an STL (`pick`: the importer's chooser + import) — Open STL and Insert STL, declared once each with it. A cancelled
 // chooser does nothing; a file that is not a readable STL is told in the drawer (the design unchanged); an import closes the drawer, then `after(res)`.
+// TASK 897: the file may be an STL, an OBJ or a 3MF (stl-import.js reads it by its format; the entries' labels are format-neutral: param-hints.js).
 function stlAction({ id, label, tooltip, icon, pick, after = () => {} }) {
   return { id, label, icon, tooltip, keepOpen: true, onClick: async () => {
     try {

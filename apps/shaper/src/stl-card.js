@@ -5,12 +5,14 @@
 // right column (#prepare-panel) and folds like the Operations sheet (disclosure.js: open on a wide screen, folded on a phone). Built from the cut
 // card's own parts: its row labels (.cut-field-label, in .stl-row rows laid out as its .cut-row), its preset buttons (.cut-presets / .cut-preset), the one hint binding (hint.js bindHint: its hints are the cursor tooltip)
 // with the labels and hints of THE table (param-hints.js).
+// TASK 897: the source may be an STL, an OBJ or a 3MF: the head shows the file name and its format (mesh-formats.js, the format's label).
 import { STL_UP_SIDES, STL_UNITS } from '#core/stl-slice.js';
 import SettingsManager, { lengthText, isPrecisionKey } from '#core/settings-manager.js';
 import { getStlSource, onStlSourceChange } from './stl-source.js';
 import { bindHint } from './hint.js';
 import { hintLabel } from './param-hints.js';
 import { mountDisclosure, CARET_SVG } from './disclosure.js';
+import { meshFormatById } from './mesh-formats.js';
 
 const UP_LABEL = (id) => id.replace('-', '−'); // the sign as a real minus
 
@@ -22,7 +24,7 @@ export function mountStlCard(hostEl, { onChange = () => {}, onOrient = () => {} 
   card.className = 'stl-card';
   card.hidden = true;
   card.innerHTML = `
-    <div class="stl-head-row"><button type="button" class="stl-head"><span class="stl-title"></span><span class="stl-name"></span>${CARET_SVG}</button></div>
+    <div class="stl-head-row"><button type="button" class="stl-head"><span class="stl-title"></span><span class="stl-name"></span><span class="stl-format"></span>${CARET_SVG}</button></div>
     <div class="stl-body">
       <div class="stl-row" data-row="stlUp"><button type="button" class="cut-field-label" data-hint="stlUp"></button><div class="cut-presets stl-ups" role="group"></div></div>
       <div class="stl-row" data-row="stlOrient"><button type="button" class="stl-orient" data-hint="stlOrient"></button></div>
@@ -63,6 +65,8 @@ export function mountStlCard(hostEl, { onChange = () => {}, onOrient = () => {} 
     if (!s) return;
     card.querySelector('.stl-name').textContent = s.name;
     card.querySelector('.stl-name').title = s.name;
+    const fmt = meshFormatById(s.format); // TASK 897: none stored = an STL; an id this version does not know (a newer one's) is shown as stored
+    card.querySelector('.stl-format').textContent = fmt ? fmt.label : String(s.format);
     presets(ups, STL_UP_SIDES.map((id) => ({ id, label: UP_LABEL(id) })), 'up', s.up);
     presets(units, STL_UNITS.map((u) => ({ id: u.id, label: u.label })), 'unit', s.unit);
     size.textContent = `${lengthText(s.sizeMm.x)} × ${lengthText(s.sizeMm.y)} × ${lengthText(s.sizeMm.z, { show: 'unit' })}`; // the one length formatter (an inch fraction carries its mark)

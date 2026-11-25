@@ -51,6 +51,12 @@ const UNUSED = [
   'src/stl-import.js',                // Open / Insert STL, the STL card's importer
   'src/stl-card.js',                  // the STL card in Prepare (an imported STL's settings)
   'src/orient-view.js',               // the STL card's Orient view (TASK 808)
+  // TASK 897: the mesh formats (OBJ, 3MF) are the website's STL part's too: their table, their readers and three's loaders stay out of the panel
+  'src/mesh-formats.js',              // the formats and the one reading step (stl-import.js, stl-card.js)
+  'src/mesh-loaders.js',              // the OBJ / 3MF readers (loaded on demand)
+  'packages/ui/vendor/three/addons/loaders/OBJLoader.js',
+  'packages/ui/vendor/three/addons/loaders/3MFLoader.js',
+  'packages/ui/vendor/three/addons/libs/fflate.module.js',
 ];
 // USED: the panel's own boot, the shared wiring, the Fusion parts, Prepare (without Insert STL: TASK 885), Export, the Log, the vendored three.js
 const USED = [

@@ -115,12 +115,12 @@ async function phase(name) {
   const chooser = once('Page.fileChooserOpened');
   if (touch) {
     await openDrawer(name);
-    assert.strictEqual(await evalJs(`document.querySelector('[data-action="insert-stl"]').textContent.trim()`), 'Insert STL…', name + ': the entry');
+    assert.strictEqual(await evalJs(`document.querySelector('[data-action="insert-stl"]').textContent.trim()`), 'Insert 3D mesh…', name + ': the entry (TASK 897: format-neutral)');
     const order = await evalJs(`[...document.querySelectorAll('.sk-sidebar [data-action]')].map((e) => e.dataset.action).filter((a) => a.endsWith('-stl'))`);
     assert.deepStrictEqual(order, ['open-stl', 'insert-stl'], name + ': Insert STL next to Open STL');
     await clickEl('[data-action="insert-stl"]');
   } else {
-    assert.strictEqual(await evalJs(`document.getElementById('prepare-insert-stl').textContent.trim()`), 'STL', name + ': the toolbar\'s INSERT > STL');
+    assert.strictEqual(await evalJs(`document.getElementById('prepare-insert-stl').textContent.trim()`), 'Mesh', name + ': the toolbar INSERT > Mesh (TASK 897: was STL)');
     await shot(`${name}-0-toolbar-insert.png`, '#prepare-ribbon-frame');
     await pressToolbar('prepare-insert-stl', 'insert');
   }

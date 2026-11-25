@@ -18204,3 +18204,35 @@ Test only. Cause: goStage's phone path waited only for the drawer entry's left >
 Same pattern (copy of this goStage, same cause, NOT fixed here): tests/selection-mirror-795c-live.test.js:156, tests/stockkeep-864-live.test.js:56.
 Runs: 5x alone ok; 3x beside gate:quick ok; gate:quick `GATE tier=quick jobs=quick=22 files=610 pass=610 fail=0 deferred=11 elapsed=110s`.
 TURN 895 (advisor follow-up): goStage moved to ONE helper, tests/helpers/go-stage.js (makeGoStage({cdp,width,click}), settledCentre clicks); opselect-806-live, selection-mirror-795c-live, stockkeep-864-live import it, their local copies deleted. 3x alone each ok, once beside gate:quick each ok, gate:quick pass=610 fail=0.
+
+## TURN 897 — Shaper website: Open / Insert OBJ and 3MF meshes like an STL (owner turn 3690, option 2: native mesh formats; STEP stays a Fusion job)
+- ONE reading step, DECLARED once: apps/shaper/src/mesh-formats.js MESH_FORMATS (STL / OBJ / 3MF: id, label, extension, read) + readMesh(bytes, name): a file ->
+  the same triangle list #core/stl-slice.js parseStl returns, chosen by the extension. STL = parseStl, read at once (openFile / insertFile still return the result
+  synchronously); OBJ / 3MF = apps/shaper/src/mesh-loaders.js on three.js r170's own OBJLoader / ThreeMFLoader, imported dynamically (a Promise of the result).
+  Everything after it is the STL path of stl-import.js unchanged (land(): slicing, Up / Orient, the card, the saved source, Roughing / Contour).
+- Units: STL and OBJ carry none (the card's Units choice, mm first, as before). A 3MF declares one (read from its root model part): millimeter / micron /
+  centimeter / meter -> Units mm (scaled to mm), inch / foot -> Units in (foot scaled x12); an unknown unit is refused. Several objects (OBJ o / g, 3MF build
+  items with their transforms): merged into ONE relief part; the notice says "· N objects in the file, sliced as one part". An unknown extension: "<name> is not a
+  file Shaper can open: it opens 3D meshes in STL, OBJ and 3MF files."; a broken OBJ / 3MF: "This OBJ has no triangles." / "This 3MF could not be read: ...".
+- The pick: MESH_FILE_PICK (.stl, .obj, .3mf; replaces STL_FILE_PICK). Labels (param-hints.js): drawer "Open 3D mesh…" / "Insert 3D mesh…", Prepare toolbar
+  INSERT > "Mesh", the card's title "Mesh"; hints name STL, OBJ or 3MF; Units hint: "STL and OBJ files do not say; a 3MF says its unit, and is read in it". The
+  action ids stay open-stl / insert-stl. The card shows the file name and a format tag (.stl-format: STL / OBJ / 3MF).
+- Saved designs (stl-source.js): an OBJ / 3MF source carries `format` ('obj' / '3mf'), kept in undo snapshots and the document; an STL source carries none, so an
+  STL design's stored bytes are unchanged (probe on origin/main vs the branch: STLDOC md5 dc31bfe731e63f112700b1bc9f8480e5, 37682 bytes, both). The mesh is
+  stored as triangles, so a reopened design is re-sliced from them (never re-parsed). stl-source.js is the Fusion panel's too: it imports no mesh reader.
+- Vendored (exact files from three@0.170.0, the same version as the vendored three.module.js, taken from the local npm cache, cmp-identical): addons/loaders/
+  OBJLoader.js (21 194 B), addons/loaders/3MFLoader.js (37 140 B), addons/libs/fflate.module.js (fflate 0.8.2, 89 384 B); THIRD-PARTY-NOTICES.md + vendor README.
+  Bundle: loaded only when such a file is read: OBJ = mesh-loaders.js 5.8 KB + OBJLoader 21.2 KB; 3MF = + 3MFLoader 37.1 KB + fflate 89.4 KB. First load grows
+  by mesh-formats.js (3.5 KB, mostly its header comment) + ~2.8 KB of edits (comments, labels, one CSS rule).
+- Fusion panel: no mesh entries (fusion-main.js untouched); fusion-panel-881-node's UNUSED list += mesh-formats.js, mesh-loaders.js and the three new vendor files.
+- Tests: NEW tests/mesh-formats-897-node.test.js (63 checks: the cube and the task-889 relief as STL / OBJ / 3MF give bit-identical triangles and EXACTLY the
+  same slice JSON (levels, grid, work area, size); several objects merged; 3MF inches = Units in, 25.4 x 25.4 x 12.7 mm, = the STL in mm within 1e-4; cm scaled;
+  refusals; the app: Open OBJ / Insert 3MF / several objects / unknown extension; saved: STL source keys as before, OBJ `format` round trip and re-slice).
+  NEW tests/mesh-formats-897-live.test.js (desktop + phone 390: Insert relief.obj then cube.3mf through the real chooser; Roughing per part; card OBJ / 3MF;
+  accept ".stl,.obj,.3mf,model/stl"; no loader script before the first OBJ). Fixtures tests/fixtures/mesh-897/ (cube + 1 x 1 x 0.5 in block, 500-1127 B) written
+  by tests/fixtures/mesh-writers-897.js (committed: the tests write the relief with it in memory). Updated pins: stl-slice-790-node (the pick's extensions),
+  review-wiring (mesh-loaders.js loads three on demand), fusion-panel-881-node (UNUSED), insert-stl-841-live + stl-open-790-live (the entry / toolbar labels only).
+  Fail-first (origin/main code, .evidence/897/failfirst.txt): OLD pick exts [".stl"]; OLD openFile cube.obj -> "This binary STL is damaged: its header says
+  540,029,216 triangles ...".
+- Evidence (.evidence/897/, local): desktop-1-card-obj.png, desktop-2-card-3mf.png, desktop-3-prepare.png, phone-1-card-obj.png, phone-2-card-3mf.png,
+  phone-3-prepare.png, failfirst.txt, stl-doc-identical.txt.

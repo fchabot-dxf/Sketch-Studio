@@ -35,6 +35,38 @@ SOFTWARE.
 ## three.js
 
 `packages/ui/vendor/three/` : https://threejs.org : MIT licence. Its licence file is kept beside it: `packages/ui/vendor/three/LICENSE`.
+Besides the library and OrbitControls, Shaper's website carries two of its example loaders (three@0.170.0 `examples/jsm/loaders/OBJLoader.js` and
+`3MFLoader.js`, unmodified, in `addons/loaders/`: task 897, Open / Insert 3D mesh), under the same licence.
+
+## fflate
+
+`packages/ui/vendor/three/addons/libs/fflate.module.js` : fflate 0.8.2 by Arjun Barrett, https://github.com/101arrowz/fflate : MIT licence, as three@0.170.0
+ships it (`examples/jsm/libs/fflate.module.js`, unmodified; its header names the licence: https://github.com/101arrowz/fflate/blob/master/LICENSE). The 3MF
+loader unzips a 3MF package with it.
+
+```
+MIT License
+
+Copyright (c) 2023 Arjun Barrett
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## earcut
 

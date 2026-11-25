@@ -20,7 +20,7 @@ import { worldToScreen } from '#ui/coords.js';
 import { planReliefItems } from '../apps/shaper/src/cut-plan.js';
 import { getStock } from '../apps/shaper/src/stock.js';
 import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
-import { STL_FILE_PICK } from '../apps/shaper/src/stl-import.js';
+import { MESH_FILE_PICK } from '../apps/shaper/src/mesh-formats.js'; // TASK 897: Shaper's pick (was STL_FILE_PICK)
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 import { clickOpen } from './helpers/prepare-open.js'; // TASK S2: an operation is opened to edit it
 
@@ -134,7 +134,7 @@ const harness = (app) => {
 };
 const plan = () => [...V2_PLAN.values()].map((r) => `${r.cutType}@${r.cutDepth}`);
 
-eq(STL_FILE_PICK.exts, ['.stl'], "Shaper's own pick offers STL");
+eq(MESH_FILE_PICK.exts, ['.stl', '.obj', '.3mf'], "Shaper's own pick offers STL (TASK 897: and OBJ, 3MF)");
 ok(!IMPORT_FILE_PICK.exts.includes('.stl'), 'the SHARED import pick (SketchStudio, Pen Plotter, Trace, Shaper SVG / DXF) never offers STL: ' + IMPORT_FILE_PICK.exts);
 {
   V2_PLAN.clear();

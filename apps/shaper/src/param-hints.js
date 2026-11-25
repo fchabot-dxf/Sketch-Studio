@@ -144,15 +144,15 @@ const PARAMS = {
     : name ? `Each Generate replaces ${name} in ${place} on ShaperHub.` : 'Each Generate replaces the file last sent with the operations ticked now: send it once first.') },
   rememberLogin: { label: 'Remember login on this computer', hint: 'Saved as plain text in this app’s storage on this computer. Untick to delete it.' }, // TASK 886: the sign-in's checkbox; its hint is the line under it
   keepHubSignIn: { label: 'ShaperHub not updated', hint: 'ShaperHub not updated: sign in with Sync to ShaperHub to keep it up to date.' }, // TASK 884: a Generate with the switch on and no sign-in this session
-  // ── TASK 790: Open STL (the drawer) and the STL card (Prepare) ──
-  insertStlTool: { label: 'STL', hint: 'Insert STL: adds a 3D part (an STL file) as one more relief, its own Roughing, placed clear of the other shapes. Nothing else changes.' }, // TASK 841: the Prepare toolbar's INSERT section
-  openStl: { label: 'Open STL…', hint: 'Opens a 3D part (an STL file) as a relief to carve from the top: one part, roughed level by level, and the board thickness. It replaces the design.' }, // TASK 807
-  insertStl: { label: 'Insert STL…', hint: 'Adds a 3D part (an STL file) to the design as one more relief: its own Roughing, level by level, placed in the view clear of the other shapes. Nothing else changes, the board thickness included.' }, // TASK 841
-  stlCard: { label: 'STL', hint: 'The 3D part this relief was sliced from (the selected relief). Changing Up or Units slices it again and replaces that part where it is; Undo brings the previous one back.' }, // TASK 841: one per relief
+  // ── TASK 790: Open STL (the drawer) and the STL card (Prepare); TASK 897: any 3D mesh (STL, OBJ, 3MF: mesh-formats.js) ──
+  insertStlTool: { label: 'Mesh', hint: 'Insert 3D mesh: adds a 3D part (an STL, OBJ or 3MF file) as one more relief, its own Roughing, placed clear of the other shapes. Nothing else changes.' }, // TASK 841: the Prepare toolbar's INSERT section
+  openStl: { label: 'Open 3D mesh…', hint: 'Opens a 3D part (an STL, OBJ or 3MF file) as a relief to carve from the top: one part, roughed level by level, and the board thickness. It replaces the design.' }, // TASK 807
+  insertStl: { label: 'Insert 3D mesh…', hint: 'Adds a 3D part (an STL, OBJ or 3MF file) to the design as one more relief: its own Roughing, level by level, placed in the view clear of the other shapes. Nothing else changes, the board thickness included.' }, // TASK 841
+  stlCard: { label: 'Mesh', hint: 'The 3D part this relief was sliced from (the selected relief), its file and format. Changing Up or Units slices it again and replaces that part where it is; Undo brings the previous one back.' }, // TASK 841: one per relief
   stlUp: { label: 'Up', hint: 'Which side of the part faces up, toward the bit. Only what can be reached from that side is cut.' },
   stlOrient: { label: 'Orient…', hint: 'Shows the part in 3D: click the face that sits on the bed (any face, any angle) and the part turns to rest on it. Done slices it again; Cancel leaves it as it was.' }, // TASK 808
-  stlUnits: { label: 'Units', hint: 'What one unit in the STL file is: STL files do not say.' },
-  stlSize: { label: 'Size', hint: 'The part as sliced: width × length × height. An opened STL’s height is the board thickness too; an inserted one leaves the board as it is.' }, // TASK 841
+  stlUnits: { label: 'Units', hint: 'What one unit in the file is: STL and OBJ files do not say; a 3MF says its unit, and is read in it.' }, // TASK 897
+  stlSize: { label: 'Size', hint: 'The part as sliced: width × length × height. An opened part’s height is the board thickness too; an inserted one leaves the board as it is.' }, // TASK 841
   fusionSwitchDesign: { label: 'Switch design', hint: ({ doc } = {}) => `Switch back to ${doc || 'that design'} in Fusion to edit this operation.` },
 };
 

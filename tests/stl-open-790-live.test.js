@@ -95,7 +95,7 @@ const openStl = async (stl, what) => {
   await send('Page.setInterceptFileChooserDialog', { enabled: true });
   await clickEl(touch ? '.sk-sidebar-chevron' : '.sk-sidebar-btn');
   await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, what + ': the drawer opens'); await sleep(300);
-  assert.strictEqual(await evalJs(`document.querySelector('[data-action="open-stl"]').textContent.trim()`), 'Open STL…', what + ': the entry');
+  assert.strictEqual(await evalJs(`document.querySelector('[data-action="open-stl"]').textContent.trim()`), 'Open 3D mesh…', what + ': the entry (TASK 897: format-neutral)');
   const chooser = once('Page.fileChooserOpened');
   await clickEl('[data-action="open-stl"]');
   const ch = await Promise.race([chooser, sleep(5000).then(() => null)]);

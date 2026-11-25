@@ -3,7 +3,7 @@
 // callbacks. Cut params parse/format through #core/units.js per the document unit, and RE-LABEL when DOC_UNIT changes.
 // Cut data + gating live in shaper.js; the live records live in prepare-view.js (CUT_PLAN).
 
-import { cutTypeById, cutTypeHasParam, cutTypeHasField, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
+import { cutTypeById, cutTypeHasParam, cutTypeHasField, CUTTER_SHAPES, OFFSET_PRESETS, VBIT_PRESETS, BIT_PRESETS, CLEARING_CHOICES, SCULPTED_ON, sculptedOnOf } from './shaper.js'; // TASK 743: BIT_PRESETS is declared there now (an operation names its bit by it); TASK 745: the Clearing choices
 import { POCKET_CLEARING, allowanceDefault, finishInLoop } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
 import { CLEARING_REFUSED, CONTOUR_DEFAULTS, pocketToolDia } from './cut-plan.js'; // TASK 810: what a Contour starts with (its tab dots); TASK 852d: V-bit pocket tip width
 import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, CONTOUR_WALL_SIDES, boundaryOf, boundaryCalcOffset, hasLevels } from '#core/stepped-cut.js'; // TASK 810: Roughing's machining boundary; a Contour's walls
@@ -80,6 +80,8 @@ const SPLIT_PRESETS = SPLIT_FILES.modes.map((m) => ({ hint: choiceId('splitFiles
 const WALLS_PRESETS = CONTOUR_WALLS.choices.map((w) => ({ hint: choiceId('walls', w.id), label: hintLabel(choiceId('walls', w.id)), value: w.id })); // TASK 810: a Contour's which walls
 // TASK S2 (owner turn 2713): a Contour's own WALL SIDE (#core levelsCutAs `wallSide`), where its shape's model does not say it (a drawn shape)
 const WALL_SIDE_PRESETS = CONTOUR_WALL_SIDES.map((w) => ({ hint: choiceId('wallSide', w.id), label: hintLabel(choiceId('wallSide', w.id)), value: w.id }));
+// TASK 898 (owner turn 3703): the Stock's Sculpted parts sit on (shaper.js SCULPTED_ON: Floor | Top), as preset buttons (the ONE preset widget)
+const SCULPTED_PRESETS = SCULPTED_ON.choices.map((c) => ({ hint: choiceId('sculptedOn', c.id), label: hintLabel(choiceId('sculptedOn', c.id)), value: c.id }));
 // TASK 810 (owner turns 2657-2658): the ROUGHING and CONTOUR cards are organised in TABS, as Fusion CAM's operation dialogs: the ONE table of which row lives in which tab
 // (a row is its data-row or data-param). Each tab is a FIXED panel: the rows area keeps the height of the tallest tab (applyTabs), so switching tabs moves nothing outside
 // the card; a tab none of whose rows shows on this card is not offered. Every other cut type keeps its single card (no tab bar, every row in its place).
@@ -169,6 +171,10 @@ export function createCutPanel(hostEl, opts = {}) {
         <div class="cut-stepper cut-box">
           <div class="cut-mid"><input type="text" class="cut-num cut-depth" inputmode="decimal" placeholder="unset"><span class="cut-unit">mm</span></div>
         </div>
+      </div>
+      <div class="cut-row" data-row="sculptedOn"><!-- TASK 898: the Stock's, under its Thickness -->
+        <button type="button" class="cut-field-label" data-hint="sculptedOn"></button>
+        <div class="cut-presets cut-sculpted-on"></div>
       </div>
       <div class="cut-row" data-row="topDepth">
         <button type="button" class="cut-field-label" data-hint="topDepth"></button>
@@ -375,6 +381,7 @@ export function createCutPanel(hostEl, opts = {}) {
   // TASK 888: Split into files: the mode (preset buttons) and its number (By depth: a depth in the document unit, base mm stored; By levels: a count of levels)
   const splitModesWrap = $('.cut-split-modes'), splitInput = $('.cut-split-every'), splitUnit = $('.cut-split-unit');
   splitModesWrap.setAttribute('role', 'group');
+  $('.cut-sculpted-on').setAttribute('role', 'group'); // TASK 898
   splitInput.addEventListener('change', () => {
     const mode = splitModeOf(current.record);
     if (mode === 'depth') { const n = parseUnit(splitInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('splitDepth', n); else renderFields(); }
@@ -735,6 +742,9 @@ export function createCutPanel(hostEl, opts = {}) {
     stepInput.value = fieldText(Number(current.stepDepth) > 0 ? Number(current.stepDepth) : STEP_DEPTH.defaultMm);
     const deviation = Number(current.stepDeviation) > 0 ? Number(current.stepDeviation) : STEP_RESOLUTION.defaultMm;
     deviationInput.value = lengthText(deviation, { show: 'field', fractions: false }); // 0.1 mm = 0.0039 in: a tolerance finer than 1/64, always decimals
+    // TASK 898: the Stock's Sculpted parts sit on (the choice in effect: unset = the default, Floor)
+    place('sculptedOn', declares('sculptedOn'));
+    renderPresets($('.cut-sculpted-on'), declares('sculptedOn') ? SCULPTED_PRESETS : [], 'sculptedOn', sculptedOnOf(current.record));
     // TASK 742: Hold part, for a type that declares it (a plain Outside / Inside): the choice, then the Tabs rows (count, width, thickness) or the Onion skin row (thickness)
     const hold = declares('holdPart') ? (current.holdPart === 'tabs' || current.holdPart === 'skin' ? current.holdPart : 'off') : null;
     // TASK 813: the rows of a Hold part choice stay in place, greyed, while it does not use them

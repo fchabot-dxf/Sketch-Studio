@@ -7,7 +7,7 @@ import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { FUSION_ACTIONS, mountFusionPrepareBar } from '../apps/shaper/src/fusion-bridge.js';
 import { getSelections, setSelections } from '../apps/shaper/src/selection-list.js';
 import { clearSelections, regionSig, payloadSig } from '../apps/shaper/src/selection-edit.js';
-import { getStock, setStock } from '../apps/shaper/src/stock.js';
+import { getStock, setStock, resolveStock } from '../apps/shaper/src/stock.js';
 import { storeOps, setOpSettings, opById, memberOf, CONTOUR_TYPE } from '../apps/shaper/src/operations-store.js';
 import { getCutRecord, planEntries } from '../apps/shaper/src/cut-plan.js';
 import { exportShaperSVG } from '#core/shaper-export.js';
@@ -229,7 +229,9 @@ try {
   const outsideBeforeStock = opById(outsideOpId);
   st.saveState('before cut edit', { host: true });
   setOpSettings(outsideBeforeStock, { ...outsideBeforeStock.settings, toolDia: 9.525 });
-  eq(getStock().thickness, 12, 'stock starts at 12 mm');
+  // TASK 898 (STOCK T2): the import wrote no number into the declared record: the board's 12 mm come from the part (the selection's Stock row, 'model')
+  eq(resolveStock(st).board.thickness, 12, 'the board starts at 12 mm, from the part');
+  const stock0 = getStock().thickness;
 
   const hBeforeStock = st.history.length;
   thickInput.value = '25';
@@ -238,12 +240,12 @@ try {
   eq(st.history.length, hBeforeStock + 1, 'stock-card edit pushes its OWN undo step');
 
   st.undo();
-  eq(getStock().thickness, 12, '1st Undo reverts ONLY the stock-card edit');
+  eq(getStock().thickness, stock0, '1st Undo reverts ONLY the stock-card edit');
   eq(opById(outsideOpId).settings.toolDia, 9.525, '1st Undo does NOT revert the earlier cut-plan edit');
   st.redo();
   eq(getStock().thickness, 25, 'Redo puts the stock edit back');
   st.undo();
-  setStock({ ...getStock(), thickness: 12 });
+  setStock({ ...getStock(), thickness: stock0 });
 
   // Empty selection_data for existing selectionId clears prior cleanly.
   sent.length = 0;

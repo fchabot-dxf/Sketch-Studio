@@ -2,7 +2,8 @@
 // Declared once: the default record lives in #core/relief-model (DEFAULT_STOCK, base mm); this is the live copy the Review
 // tab reads. Module-level like the operations store. TASK 460: persisted in the document's Shaper host sidecar (shaper-doc.js).
 import { DEFAULT_STOCK } from '#core/relief-model.js';
-import { planStock } from './cut-plan.js';
+import { lengthText } from '#core/settings-manager.js'; // TASK 898: tallerNote's lengths
+import { planStock, planStockThickness } from './cut-plan.js'; // cut-plan.js imports boardThickness from here (functions only, read at call time)
 
 const STOCK = { ...DEFAULT_STOCK };
 
@@ -50,3 +51,15 @@ export function stockSig(state) {
   const { profile, ...stock } = resolveStock(state).stock;
   return profile ? { ...stock, profile: profile.sig } : stock;
 }
+
+/** TASK 898: the board's thickness read WITHOUT the sketch (cut-plan.js reliefDrop: the stock a sculpted part sits in): the Stock operation's (typed, or the parts'
+ *  for 'model': cut-plan.js planStockThickness), else the declared record's; resolveStock's board.thickness, except for a Stock whose shape no longer derives to a
+ *  loop (resolveStock then reads the record, this the Stock's own thickness). */
+export function boardThickness() {
+  const t = planStockThickness();
+  return t != null ? t : getStock().thickness;
+}
+
+/** TASK 841 / 898: the note of a part taller than the stock (owner: said, never fixed silently): "<name> is <height> tall: the stock is <thickness>", or null.
+ *  Insert STL (stl-import.js: the declared record) and a Fusion selection's add (fusion-import.js: the resolved board) say it. */
+export const tallerNote = (name, heightMm, stockMm) => (heightMm > stockMm + 1e-9 ? `${name} is ${lengthText(heightMm, { show: 'unit' })} tall: the stock is ${lengthText(stockMm, { show: 'unit' })}` : null);

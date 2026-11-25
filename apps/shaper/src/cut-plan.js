@@ -6,7 +6,7 @@
 // Module-level so it PERSISTS across Prepare re-mounts (Design↔Prepare, re-enter). This is app STATE (not #core).
 // Extracted from prepare-view.js (SP1j-4) so it is the SINGLE source of truth read by BOTH Prepare AND shaper-export.
 
-import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById, cutTypeHasParam, CUT_TYPES } from './shaper.js';
+import { defaultCutRecord, effectiveCutRecord, STOCK_TYPE_ID, cutTypeById, cutTypeHasParam, CUT_TYPES, sculptedOnOf } from './shaper.js'; // TASK 898: sculptedOnOf (where a sculpted part sits)
 import { deriveProfileCuts, deriveCutFootprintAt, makeProfile, ownedLoopIds, resolveProfileForLoop, derivedProfileForLoop, shapeIndexOf } from '#core/profile-model.js';
 import { steppedTerraces, stepGaps, terraceOptions, deriveCuts, STEP_DEPTH, STEP_RESOLUTION, resolutionLevel, LEVELS, hasLevels, roughingAllowance, roughLayout, boundaryOf, levelsCutAs } from '#core/stepped-cut.js'; // TASK 810: a Roughing's boundary (TASK 817: the levels facts and the footprints are op-derive.js's)
 import { docUnit, lengthText, angleText, areaText as coreAreaText } from '#core/settings-manager.js';
@@ -16,6 +16,7 @@ import { holdMode, holdDefaults } from '#core/hold-part.js'; // TASK 742: tabs /
 import { POCKET_CLEARING, clearingPattern, allowanceDefault, morphedBlocker, finishInLoop, autoRasterAngle, pocketRings } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket; TASK 853: autoRasterAngle
 import { CONTOUR_TYPE, memberOf, membersInFileOrder, planKeyOf, regionOf, setRegion, storeOps, insertOp, addRef, removeRef, deleteOp, setOpType, setOpSettings, setOpsOn, setRefTabsAt, takeSeq, renameGeometry, regionKeys, listOrder, setOpsOrder, opById } from './operations-store.js'; // TASK S1: the operations + regions store
 import { getSelections } from './selection-list.js'; // TASK 894: the parts' thickness (a Stock's 'model')
+import { boardThickness } from './stock.js'; // TASK 898: the stock a sculpted part sits in (reliefDrop); stock.js imports this module too (functions only, read at call time)
 import { opKeyOf, newOpPlace, defaultOrderIds } from './operations.js'; // TASK S1: which operation a shape goes into (the operation key), where a new one goes
 import { isTaperedCutter } from '#core/cutter-profile.js'; // TASK 842: a tapered bit's cone goes to the 3D Review with its shape
 import { BIT_RECORD_FIELDS, DEFAULT_VBIT_TIP_WIDTH_MM, vbitTipWidth } from './tool-table.js'; // TASK 842: the fields a bit sets in an operation (a Contour remembers them whole); TASK 852d: V-bit tipWidth
@@ -39,8 +40,49 @@ const sourceDepth = (key) => { const s = (regionOf(key) || {}).source; return s 
 // body's; add-in SA-37: a several-body selection's is its thickest body's), undefined when no part has one (sketch-only parts, a drawn design). Re-read, never copied.
 const partsThickness = () => { let t; for (const e of getSelections()) if (Number.isFinite(e.thicknessMm) && e.thicknessMm > 0 && !(t >= e.thicknessMm)) t = e.thicknessMm; return t; };
 /** TASK 894: what a Depth of 'model' reads, per operation type (THE one place): a Stock's = the parts' thickness; any other type's = the shape's (`key`) imported
- *  depth. undefined = nothing to read ('model' then reads as 'unset'). */
-const modelDepth = (op, key) => (op.type === STOCK_TYPE_ID ? partsThickness() : sourceDepth(key));
+ *  depth (TASK 898: placed in the stock: a sculpted part on the Floor of a thicker stock is reliefDrop deeper). undefined = nothing to read ('model' then reads as
+ *  'unset'). */
+const modelDepth = (op, key) => (op.type === STOCK_TYPE_ID ? partsThickness() : placedDepth(op.type, key));
+/** TASK 898: the depth a Depth is STORED 'model' against (normalizeDepth): the model's own (a Stock's: the parts' thickness; any other: the shape's imported depth),
+ *  not placed in the stock, so what a Depth is stored as never depends on the stock at the time (an import files its regions before its part and its Stock are known). */
+const importedDepth = (op, key) => (op.type === STOCK_TYPE_ID ? partsThickness() : sourceDepth(key));
+// ── TASK 898 (owner turn 3703: "2 allow to choose"; shaper.js SCULPTED_ON, the Stock's setting): WHERE A SCULPTED PART SITS in a stock thicker than it, THE one place:
+// reliefDrop = the depth of the part's top below the stock's top. A region with relief LEVELS (an STL's, a Fusion body's) cut by a Roughing / Contour (`type`), the
+// Stock set to Floor (the default) and the stock thicker than the part: (stock - part), so the part's bottom is on the stock's bottom; else 0 (Top: the part's top at
+// the stock's top, as before 898; a FLAT cut type: Outside / Inside / Pocket / On line always cut from the top; no levels; a stock not thicker). The part's height =
+// its selection's thicknessMm (the STL's height, the Fusion body's), else its levels' deepest (a relief region is its whole part, from its top to its bottom:
+// #core stl-slice, the add-in's SA-35 body relief); the stock = stock.js boardThickness. Its readers: modelDepth (the part's model depth, its bottom: a Roughing /
+// Contour Depth 'model'), resolveEntry (its levels, for the derivation: placedLevels) and fusion-toolpaths.js (the Fusion viewport draws a path from its PART's
+// top). The region keeps its levels as imported (the plan, the save, the Prepare height map read them so); only what the derivation is handed is placed. ──
+const partHeightOf = (key, reg) => {
+  const e = getSelections().find((s) => Array.isArray(s.cutKeys) && s.cutKeys.includes(key));
+  return e && Number.isFinite(e.thicknessMm) && e.thicknessMm > 0 ? e.thicknessMm : reg.levels[reg.levels.length - 1].z;
+};
+export function reliefDrop(type, key) {
+  if (!key || !(cutTypeById(type) || {}).levelsOp) return 0;
+  const reg = regionOf(key);
+  if (!reg || !hasLevels(reg)) return 0;
+  const sop = stockOpNow();
+  if (sculptedOnOf(sop && sop.settings) !== 'floor') return 0;
+  const drop = boardThickness() - partHeightOf(key, reg);
+  return drop > 1e-9 ? drop : 0;
+}
+const placedDepth = (type, key) => {
+  const d = sourceDepth(key), drop = reliefDrop(type, key);
+  return drop > 0 && d !== 'unset' && Number.isFinite(Number(d)) ? Number(d) + drop : d;
+};
+// a levels list (never mutated) placed `drop` deeper: every section `drop` deeper, and first an EMPTY section at the part's top (z = drop): there is no part above
+// it, so a level from the stock's top down to the part's top reads no material (#core stepped-cut sectionAt: the first section at or below the level): the
+// Roughing clears its whole work area there (its first levels: the stock above the part), a Contour has no pass there. Memoised per list and drop, so the
+// derivation's caches (by the list's identity) keep working.
+const PLACED = new WeakMap(); // levels -> Map(drop -> placed levels)
+function placedLevels(levels, drop) {
+  if (!(drop > 0) || !Array.isArray(levels)) return levels;
+  let byDrop = PLACED.get(levels);
+  if (!byDrop) { byDrop = new Map(); PLACED.set(levels, byDrop); }
+  if (!byDrop.has(drop)) byDrop.set(drop, [{ z: drop, loops: [] }, ...levels.map((lv) => ({ z: lv.z + drop, loops: lv.loops }))]);
+  return byDrop.get(drop);
+}
 /** TASK 894: whether 'model' reads a value for the WHOLE operation: a Stock's, when the parts have a thickness (an EMPTY Stock too); any other's, when every shape has an
  *  imported depth. */
 const hasModelDepth = (op) => (op.type === STOCK_TYPE_ID ? partsThickness() !== undefined : op.geometry.length > 0 && op.geometry.every((r) => sourceDepth(r.key) !== undefined));
@@ -124,10 +166,10 @@ export function pocketToolDia(rec) {
 const withPocketTool = (rec) => (rec && rec.cutterShape === 'vbit' && isPocketType(rec) ? { ...rec, toolDia: vbitTipWidth(rec) } : rec);
 
 export function resolveEntry(key, rec) {
-  if (!isContourKey(key)) return { key, target: parseKey(key), rec: withPocketTool(withBoundaryTarget(rec)) };
+  if (!isContourKey(key)) return { key, target: parseKey(key), rec: withPocketTool(withBoundaryTarget(rec && rec.levels ? { ...rec, levels: placedLevels(rec.levels, reliefDrop(rec.cutType, key)) } : rec)) }; // TASK 898: a sculpted part's levels where it sits in the stock
   if (!rec) return null;
   const pk = partKeyOf(key), reg = regionOf(pk) || {};
-  return { key, target: parseKey(pk), rec: { ...rec, baseDepth: rec.cutDepth, ...(reg.slope ? { slope: reg.slope } : {}), ...(reg.levels ? { levels: reg.levels } : {}) } };
+  return { key, target: parseKey(pk), rec: { ...rec, baseDepth: rec.cutDepth, ...(reg.slope ? { slope: reg.slope } : {}), ...(reg.levels ? { levels: placedLevels(reg.levels, reliefDrop(rec.cutType, pk)) } : {}) } }; // TASK 898: placed (reliefDrop)
 }
 /** TASK 810: a Roughing record whose boundary (#core boundaryOf) is the Stock or a picked Shape, with that shape's target `boundaryTarget` ({ kind, id }: the Stock
  *  of the plan, stockKeyOf; the picked `boundaryShape` key); without one (no Stock, nothing picked) the record as stored: the derivation then refuses with its reason.
@@ -173,8 +215,8 @@ const memberKey = (planKey, rec) => { const e = isContourKey(planKey) ? resolveE
 function normalizeDepth(op) {
   const refs = op.type === STOCK_TYPE_ID ? [null] : op.geometry; // TASK 894: a Stock's 'model' is the parts' thickness, one value for the operation (an EMPTY one too)
   if (!refs.length || op.settings.cutDepth === undefined) return;
-  const d = recordOf(op, refs[0]).cutDepth;
-  const model = d !== 'unset' && Number.isFinite(Number(d)) && refs.every((r) => { const s = modelDepth(op, r && r.key); return s !== undefined && Number(s) === Number(d); });
+  const d = op.settings.cutDepth === 'model' ? importedDepth(op, refs[0] && refs[0].key) ?? 'unset' : recordOf(op, refs[0]).cutDepth; // TASK 898: compared unplaced (importedDepth)
+  const model = d !== 'unset' && Number.isFinite(Number(d)) && refs.every((r) => { const s = importedDepth(op, r && r.key); return s !== undefined && Number(s) === Number(d); });
   const next = model ? 'model' : d;
   if (op.settings.cutDepth !== next) setOpSettings(op, { ...op.settings, cutDepth: next });
 }
@@ -327,10 +369,22 @@ export function setStock(key, state = null) {
   if (key && prev && prev.geometry.length === 1 && prev.geometry[0].key === key) return { op: prev, moved: false };
   const moved = Boolean(prev && prev.geometry.length);
   if (prev) deleteOp(prev);
-  const draft = { type: STOCK_TYPE_ID, settings: settingsPart({ ...(key ? freshRecord(key) : defaultCutRecord()), cutType: STOCK_TYPE_ID }), geometry: key ? [{ key, seq: takeSeq() }] : [] };
-  const op = placeNew(state, draft);
+  const op = placeNew(state, stockDraft(key));
   settleOrder(state);
   return { op, moved };
+}
+// a NEW Stock operation holding the shape `key` (null: EMPTY), its settings from the shape's fresh record (setStock, ensureStock)
+const stockDraft = (key) => ({ type: STOCK_TYPE_ID, settings: settingsPart({ ...(key ? freshRecord(key) : defaultCutRecord()), cutType: STOCK_TYPE_ID }), geometry: key ? [{ key, seq: takeSeq() }] : [] });
+/** TASK 898 (docs/STOCK-MODEL-890.md section 5 row T2, 2.2): a Fusion selection's Stock: the document's ONE Stock as it is (a picked footprint, a typed thickness: the
+ *  user's), else a NEW EMPTY Stock (the footprint = the parts' bounds + margin) whose thickness is FROM THE PART ('model': the parts' largest thicknessMm, re-read at
+ *  every resolution, recordOf; the declared record's while no part has one). Returns the Stock operation. */
+export function ensureStock(state = null) {
+  const prev = storeOps().find((op) => op.type === STOCK_TYPE_ID);
+  if (prev) return prev;
+  const draft = stockDraft(null);
+  const op = placeNew(state, { ...draft, settings: { ...draft.settings, cutDepth: 'model' } });
+  settleOrder(state);
+  return op;
 }
 /** TASK S2: change an operation's type (allowed when every shape can take it: typeRefusal; the card greys it otherwise). Its id, tick, place and shapes are kept, its
  *  settings too, plus what the type starts with (startRecord; a Contour starts from the last Contour's). To the Stock: it becomes the one Stock (another goes). */
@@ -1091,6 +1145,11 @@ export function stockKeyOf() {
 }
 /** TASK 894: the Stock's membership (the first in the plan, as stockKeyOf), or null. */
 const stockMember = () => membersInFileOrder().find(({ op }) => op.type === STOCK_TYPE_ID) || null;
+/** TASK 898: THE Stock operation (one per document, as planStock reads it): the one holding a shape (stockMember), else an EMPTY one; null when there is none. */
+const stockOpNow = () => { const m = stockMember(); return m ? m.op : storeOps().find((o) => o.type === STOCK_TYPE_ID && !o.geometry.length) || null; };
+/** TASK 898: the Stock operation's thickness read WITHOUT the sketch (stock.js boardThickness): base mm, or null (no Stock; its thickness unset). planStock's, except
+ *  that a Stock whose shape no longer derives to a loop still gives its thickness here (planStock then has no Stock: the declared record's). */
+export function planStockThickness() { const op = stockOpNow(); return op ? stockThicknessOf(recordOf(op)) : null; }
 /** TASK 894: a Stock record's thickness: base mm, or null when unset (the declared record's applies). */
 const stockThicknessOf = (rec) => { const t = Number(rec.cutDepth); return rec.cutDepth !== 'unset' && Number.isFinite(t) && t > 0 ? t : null; };
 
@@ -1128,7 +1187,7 @@ export function planStock(state) {
     const profile = planStockProfile(state);
     return profile ? { key: m.ref.key, thickness: profile.thickness, model: profile.thickness != null && m.op.settings.cutDepth === 'model', profile } : null;
   }
-  const op = storeOps().find((o) => o.type === STOCK_TYPE_ID && !o.geometry.length);
+  const op = stockOpNow(); // no Stock holds a shape: the EMPTY one (TASK 898: THE lookup)
   if (!op) return null;
   const thickness = stockThicknessOf(recordOf(op));
   return { key: null, thickness, model: thickness != null && op.settings.cutDepth === 'model', profile: null };

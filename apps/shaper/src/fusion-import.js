@@ -11,10 +11,10 @@ import { loopPolygon } from '#core/loop-geometry.js';
 import { makeProfile, directlyContainedLoops } from '#core/profile-model.js';
 import { newShapeId } from '#core/shape-id.js';
 import { fitToDrawing } from '#ui/input-handlers/pan-zoom.js';
-import { keyOf, fileShape, setRegionSource, setRegionFrame } from './cut-plan.js'; // TASK S1: the one writer; the imported cut type / depth of a region
+import { keyOf, fileShape, setRegionSource, setRegionFrame, ensureStock } from './cut-plan.js'; // TASK S1: the one writer; the imported cut type / depth of a region
 import { storeOps, regionKeys, applyStore, memberOf, opById, renameGeometry, regionOf, setRegion, setOpGeometry, takeSeq, deleteOp } from './operations-store.js'; // TASK S1: the operations + regions store
 import { CUT_TYPES, STOCK_TYPE_ID, defaultCutRecord } from './shaper.js';
-import { getStock, setStock } from './stock.js';
+import { getStock, setStock, resolveStock, tallerNote } from './stock.js'; // TASK 898: a Fusion selection's Stock row, the taller note
 import { ringWalk, readLevels } from '#core/stepped-cut.js'; // TASK 792: readLevels (a part's material sections, the payload's `levels`)
 import { setStlSource } from './stl-source.js'; // TASK 790: the replaced design's STL source goes with it (an STL import sets its own after)
 import { DEFAULT_STOCK } from '#core/relief-model.js'; // TASK 794: the stock thickness of a design that starts over, when the payload has none
@@ -189,7 +189,8 @@ export function selectionDesignName(source) {
  * TASK 841 (Insert STL, stl-import.js): `addAs` = the selection id to ADD the payload as (a new id: a new part; an id already in the list: that part replaced in
  * place), as a payload's own selectionId does, but never sent to the add-in (fusion: false); `place` = the placement (relief-frame.js, a rotation + move) the
  * payload's geometry and levels land at (default: where the payload says); `join: false` = its shapes go into NEW operations, never into one that is already
- * there (cut-plan.js fileShape); `stock` = 'keep' (the stock thickness is not touched) | 'part' (it becomes the payload's) | null (as above: TASK 794);
+ * there (cut-plan.js fileShape); `stock` = 'keep' (the stock thickness is not touched) | 'part' (the declared record's becomes the payload's) | null (a Fusion selection,
+ * TASK 898: the design's ONE Stock operation, an EMPTY one from the part when there is none: cut-plan.js ensureStock);
  * `fit: false` = the view is left as it is. Every region with levels keeps its part's own FRAME (relief-frame.js: its levels follow its outline when it moves).
  */
 export function importFusionSelection(payload, { controller, prepare = null, onImport = null, addAs = null, place = null, join = true, stock = null, fit = true, clearGroup = null } = {}) {
@@ -360,10 +361,9 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   if (typeof st.saveState === 'function') st.saveState('import ' + sourceName, { host: true });
 
   // TASK 795: a payload WITH a selectionId (the add-in's Add selection) is ADDED to the design (its entry in selection-list.js); the same id again updates that
-  // selection in place; a payload without one (Open STL, an old add-in) REPLACES the design as before. `fresh` = the design starts over (a replace, or an add to an
-  // empty design): the stock thickness and the operation order are this part's own (TASK 794).
+  // selection in place; a payload without one (Open STL, an old add-in) REPLACES the design as before. (TASK 898: the stock no longer reads whether the design
+  // starts over: a Fusion selection's board is its Stock operation's, below.)
   const planEmpty = !storeOps().length && !regionKeys().length;
-  const fresh = !selectionId || (!prior && st.shapes.length === 0 && planEmpty);
   // TASK 712: the selection replaces the design (see the doc comment): the empty document, and no cut-plan record.
   const replaced = !selectionId && (st.shapes.length > 0 || !planEmpty);
   if (!selectionId) {
@@ -556,10 +556,16 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
     ...(clearTok ? { clearToken: clearTok } : {}),
   });
 
-  // Stock thickness (TASK 794): a fresh start takes this part's (the app's default when the payload has none) and its own operation order; an add to a design that has
-  // parts keeps the order and the stock never gets thinner than the thickest part (or than the user set it). TASK 841: `stock` 'keep' / 'part' say it instead.
-  if (stock === 'part' || (stock !== 'keep' && fresh)) setStock({ ...getStock(), thickness: thicknessMm != null ? thicknessMm : DEFAULT_STOCK.thickness }); // TASK S1: its operations are the ones this import made
-  else if (stock !== 'keep' && thicknessMm != null) setStock({ ...getStock(), thickness: Math.max(getStock().thickness, thicknessMm) });
+  // Stock thickness. TASK 841: `stock` 'part' = the declared record becomes this part's (the app's default when the payload has none: TASK 794; Open STL, an opened
+  // STL's re-slice), 'keep' = untouched (an inserted STL). TASK 898 (docs/STOCK-MODEL-890.md section 5 row T2): a FUSION SELECTION (null) writes no number: the
+  // design's ONE Stock operation gives the board (cut-plan.js ensureStock: an EMPTY one, its thickness from the part, when there is none), so the parts' thickness is
+  // re-read at every resolution and a thickness the user typed on it stays; a part added taller than the board is said (tallerNote), never fixed.
+  let taller = null;
+  if (stock === 'part') setStock({ ...getStock(), thickness: thicknessMm != null ? thicknessMm : DEFAULT_STOCK.thickness });
+  else if (stock !== 'keep') {
+    ensureStock(st);
+    if (thicknessMm != null) taller = tallerNote(sourceName, thicknessMm, resolveStock(st).board.thickness);
+  }
 
   if (controller.svg && fit) {
     fitToDrawing(controller.svg, Object.create(st, { shapes: { value: selectionId ? st.shapes : built.shapes } })); // an added selection: the view frames the whole design
@@ -580,6 +586,6 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
     name: selectionDesignName(data.source), // TASK 767: the design is now this selection: main.js names it so (the export file names follow); TASK 774: the Fusion DOCUMENT's name
     selectionId: entry.id,
     replaced, // TASK 807: the design was replaced (Open STL words its own notice)
-    message: `${replaced ? 'Replaced with' : prior ? 'Updated' : 'Added'} ${sourceName}: ${counts}`,
+    message: `${replaced ? 'Replaced with' : prior ? 'Updated' : 'Added'} ${sourceName}: ${counts}${taller ? ` · ${taller}` : ''}`, // TASK 898: + a part taller than the stock
   };
 }

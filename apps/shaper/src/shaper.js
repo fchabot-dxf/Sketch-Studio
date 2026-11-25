@@ -74,7 +74,7 @@ export const CUT_TYPES = [
   // draws the board behind the cuts); `exportParams` = the attributes the exported element carries (a guide keeps all
   // three), `params` = the rows the Prepare card shows. Declared AFTER the guide so classify() (import) reads blue as a GUIDE:
   // re-importing gives a Guide the owner can re-mark Stock.
-  { id: 'stock',    label: 'Stock',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'The board: this closed profile, extruded to its thickness (shown in Review; exported as a guide)', targetKind: 'region', menuLabel: 'Stock', depthParam: 'stockDepth', exportFirst: true, icon: "<path d='M2 6l6-3.2L14 6 8 9.2z' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M2 6v4l6 3.2L14 10V6' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>", opRank: 0, fields: [], params: ['cutDepth'], exportParams: ['cutDepth', 'cutOffset', 'toolDia'] },
+  { id: 'stock',    label: 'Stock',    cutType: 'guide',   fill: '#0068FF', stroke: '#0068FF', desc: 'The board: this closed profile, extruded to its thickness (shown in Review; exported as a guide)', targetKind: 'region', menuLabel: 'Stock', depthParam: 'stockDepth', exportFirst: true, icon: "<path d='M2 6l6-3.2L14 6 8 9.2z' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/><path d='M2 6v4l6 3.2L14 10V6' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linejoin='round'/>", opRank: 0, fields: [], params: ['cutDepth', 'sculptedOn'], exportParams: ['cutDepth', 'cutOffset', 'toolDia'] }, // TASK 898: + where a sculpted part sits in it (SCULPTED_ON)
   // TASK 792 (owner turns 2474-2512): ROUGHING and CONTOUR, two OPERATIONS for any part with depth information (an STL's sections, a Fusion region's
   // slope rings, a drawn region: #core/stepped-cut.js, its TASK 792 header). Generated in the app as PLAIN cuts at fixed depths (the Origin sees plain
   // pockets / inside / outside cuts); `levelsOp` = which one (#core deriveCuts; injected into the record by effectiveCutRecord and the exporter).
@@ -111,6 +111,16 @@ export const CLEARING_CHOICES = POCKET_CLEARING.patterns.map((p) => ({ ...p, ico
 // TASK 472: the id of the Stock type, and the encoding the EXPORT gets: CUT_TYPES with each entry's `exportParams` (if any) as its
 // `params`, so a Stock loop exports exactly like a Guide while its Prepare card shows only the thickness row.
 export const STOCK_TYPE_ID = 'stock';
+// TASK 898 (owner turn 3703: "2 allow to choose"): WHERE A SCULPTED PART SITS in a stock thicker than it, a setting of the Stock (its card's row `sculptedOn`): a
+// sculpted part = a region with relief levels (an STL's, a Fusion body's) cut by Roughing / Contour. Floor = the part's bottom on the stock's bottom (its levels go
+// (stock - part) deeper: the Roughing's first levels take the stock above the part off); Top = the part's top at the stock's top. A FLAT cut (Outside, Inside,
+// Pocket, On line) always cuts from the top (the Shaper cuts from the surface): no choice. Unset = the default. Applied in ONE place: cut-plan.js reliefDrop.
+export const SCULPTED_ON = Object.freeze({
+  choices: Object.freeze([Object.freeze({ id: 'floor', label: 'Floor' }), Object.freeze({ id: 'top', label: 'Top' })]),
+  defaultId: 'floor', // the advisor's default (turn 3703)
+});
+/** TASK 898: the placement a Stock's settings say (SCULPTED_ON; none / unknown = the default). */
+export const sculptedOnOf = (settings) => (settings && SCULPTED_ON.choices.some((c) => c.id === settings.sculptedOn) ? settings.sculptedOn : SCULPTED_ON.defaultId);
 export const exportEncoding = () => CUT_TYPES.map((t) => (t.exportParams ? { ...t, params: t.exportParams } : t));
 
 

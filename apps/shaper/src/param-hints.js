@@ -9,7 +9,7 @@
 // CHOICES (a cut type, a clearing pattern, a cutter shape, a hold-part mode) take their LABEL from their own declaration (CUT_TYPES.menuLabel,
 // POCKET_CLEARING.patterns, CUTTER_SHAPES, HOLD_PART.modes: the one source those labels already have, read by the notes and the Operations list too);
 // this table adds their hint. Their id here is `<parameter>:<choice id>` (choiceId below).
-import { CUT_TYPES, CLEARING_CHOICES, CUTTER_SHAPES } from './shaper.js';
+import { CUT_TYPES, CLEARING_CHOICES, CUTTER_SHAPES, SCULPTED_ON } from './shaper.js'; // TASK 898: SCULPTED_ON (the Stock's Sculpted parts sit on)
 import { HOLD_PART } from '#core/hold-part.js';
 import { SPLIT_FILES } from './split-files.js'; // TASK 888
 import { ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, CONTOUR_WALL_SIDES } from '#core/stepped-cut.js'; // TASK 792: Roughing's layouts; TASK 810: its boundary and tool rule, a Contour's walls
@@ -23,6 +23,7 @@ const PARAMS = {
   // TASK S2 (owner turn 2740): a Roughing's / Contour's Depth row (CUT_TYPES depthParam): its ONE depth (810's Bottom row is gone)
   levelsDepth: { label: 'Depth', hint: 'From model: each shape to its own model depth. A typed depth: the cut follows the model’s slope and stops flat at that depth.' },
   stockDepth: { label: 'Thickness', hint: 'The thickness of your board, shown in the 3D preview. Not cut.' }, // the depth row of a Stock loop (CUT_TYPES stock.depthParam)
+  sculptedOn: { label: 'Sculpted parts sit on', hint: 'Where a 3D relief (an STL, a Fusion body) sits when the board is thicker than it. Flat cuts always start at the top.', items: SCULPTED_ON.choices.map((c) => `sculptedOn:${c.id}`) }, // TASK 898
   clearing: { label: 'Clearing', hint: 'How the inside of the pocket is removed.' },
   stepover: { label: 'Stepover', hint: 'How far the bit moves sideways between passes, as a share of its diameter. Smaller is smoother and slower.' },
   // TASK 766: the last pass that takes the allowance off is the Origin's own inside cut with Loop off, the loop's turn along the wall with Loop on (pocket-clearing.js)
@@ -183,6 +184,10 @@ const CHOICE_HINTS = {
     all: 'A pass at every level, the straight walls too.',
     sloped: 'Skips the pass along the shape’s own outline: the sloped walls only.',
   },
+  sculptedOn: { // TASK 898 (owner turn 3703)
+    floor: 'Its bottom on the board’s bottom: the Roughing first takes off the wood above it.',
+    top: 'Its top at the board’s top: the wood under it stays.',
+  },
   wallSide: { // TASK S2
     inside: 'The walls inside the shape: a hollow, a pocket.',
     outside: 'The walls outside the shape: the outline of a part.',
@@ -228,6 +233,7 @@ const CHOICE_SOURCES = {
   boundaryTool: ROUGH_BOUNDARY.tools.map((t) => ({ id: t.id, label: t.label })), // TASK 810: its tool rule
   walls: CONTOUR_WALLS.choices.map((w) => ({ id: w.id, label: w.label })), // TASK 810: a Contour's which walls
   wallSide: CONTOUR_WALL_SIDES.map((w) => ({ id: w.id, label: w.label })), // TASK S2: a Contour's own wall side
+  sculptedOn: SCULPTED_ON.choices.map((c) => ({ id: c.id, label: c.label })), // TASK 898: the Stock's Sculpted parts sit on
 };
 
 /** The id of a choice's entry: `<parameter>:<choice id>`. */

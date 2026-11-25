@@ -18041,4 +18041,5 @@ Owner turns 3612-3614 (reverses TASK 758's "the app keeps no login", turn 2260 s
 - Tests: NEW tests/shaperhub-remember-886-node.test.js (50 checks), tests/shaperhub-remember-886-live.test.js (desktop + phone 390), tests/shaperhub-remember-886-fusion-live.test.js
   (the panel build, reopen via request_selection), tests/shaperhub-login-scan.js (the 758 page scan, shared). UPDATED 758 node + live (the one allowed storage line / key,
   the new box present and unticked, nothing anywhere while unticked), 884 node + live + fusion-live (ON default, '0' stored for off, label Autosend, the toast).
+- The Fusion panel now loads shaperhub-login.js (one path for both pages): tests/fusion-panel-881-node.test.js moves it from UNUSED to USED; docs/FUSION-PANEL-881.md says so.
 - Evidence (local) .evidence/886/: desktop/phone remember-unticked / remember-ticked / remember-ticked-after-reload, desktop-wrong-password-line, fusion-panel-*.

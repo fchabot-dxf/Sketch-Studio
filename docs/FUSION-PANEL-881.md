@@ -87,6 +87,7 @@ SAME = the same in both. **Fusion**: USED / UNUSED in the Fusion panel; "owner t
 | Stock thickness card, Look (material, colour) | main.js:876-914; stock-card.js | USED (moves to the footer with task 880) |
 | Diagnostic log | #ui/diagnostic-log.js | USED |
 | Old ShaperHub login removal at start | main.js:71; shaperhub-login.js | UNUSED offline (a fresh origin has nothing stored) |
+| Remember login on this computer (TASK 886) | shaper-app.js; shaperhub-login.js | USED (the module is in the panel since task 886; the old login's removal stays main.js only) |
 | Templates (template picker) | reached through feedback.js, transform-box.js, file-dialog.js, sidebar-projects.js | UNUSED |
 
 ## 6. Fusion tests today
@@ -201,7 +202,7 @@ Recorded only; not built in this task (the redesign comes after the offline pane
   from the repo page, nothing missing, no reference leaving the folder when it is served under any path, nothing in it the page does not
   load (but the licences and the manifest).
 - **Excluded by the module graph** (tests/fusion-panel-881-node.test.js asserts each is reached by the website and not by the panel, and
-  is not in the folder): src/main.js, addin-download.js, cut-import.js, shaperhub-login.js, shaper-browser.js; packages/ui design-browser,
+  is not in the folder): src/main.js, addin-download.js, cut-import.js, shaper-browser.js (shaperhub-login.js until task 886: the panel loads it now); packages/ui design-browser,
   app-chrome, sidebar-projects, project-actions, project-manager, document-tabs, save-button, account-avatar, file-dialog, sketch-import,
   feedback, style-panel, project-store, document-buffer, cloud/google-account, cloud/auth-state, cloud/providers, cloud/drive-adapter,
   cloud/router-adapter, cloud/settings-sync; about.html (and privacy.html). The website page reaches 275 files, the panel page 243.

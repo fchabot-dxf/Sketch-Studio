@@ -1,6 +1,7 @@
 // apps/shaper/src/shaperhub-target.js — TASK 884 (owner turns 3591-3597): "Keep ShaperHub up to date". After a design was sent to ShaperHub once, the Sync
 // dialog's switch makes every Generate REPLACE that same file there, without opening the dialog. What is declared here, once:
-//   the SETTING's key (the value is declared in #core/settings-manager.js DEFAULT_SETTINGS with Shaper's other settings: off by default, per device);
+//   the SETTING: a device setting, kept in this browser's localStorage like Shaper's other device settings (modes.js MODE_KEY 'shaper-mode', shaper-app.js
+//     'shaper-review-view' / 'shaper-review-look'); off by default;
 //   the TARGETS: per TICKED-OPERATION SET of the design shown (advisor, task 884: the exported file holds the ticked operations only, task 798, while its name is
 //     the design's; so a Generate with other ticks must never replace the file of another set), the file + folder of that set's LAST successful send: a record
 //     { <set key>: { filename, remotePath } } (export-payload.js tickedSetKey: 'all' when every operation is ticked, else the ticked operations' ids); {} = never sent. Kept with
@@ -12,7 +13,13 @@
 import { normalizeRemotePath } from '#core/shaper-cloud.js';
 import { hintText } from './param-hints.js';
 
-export const KEEP_HUB_KEY = 'SHAPER_HUB_KEEP_UP_TO_DATE';
+export const KEEP_HUB_KEY = 'shaper-keep-hub-up-to-date'; // '1' = on; no entry = off (the default)
+/** Whether the switch is on, in `storage` (the page's localStorage). */
+export const keepHubOn = (storage) => storage.getItem(KEEP_HUB_KEY) === '1';
+/** Turns the switch on / off in `storage`. */
+export function setKeepHub(storage, on) {
+  if (on) storage.setItem(KEEP_HUB_KEY, '1'); else storage.removeItem(KEEP_HUB_KEY);
+}
 
 /** A folder as the dialog names it: My Files, or My Files/<sub>/<folder>. */
 export const folderPlace = (path) => (!path || path === '/' ? 'My Files' : `My Files${path.slice(0, -1)}`);

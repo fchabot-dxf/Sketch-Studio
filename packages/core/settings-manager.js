@@ -84,9 +84,6 @@ const DEFAULT_SETTINGS = {
     // Task 842: Shaper's TOOL TABLE, the user's bit library ({ v: 1, bits: [...] }); null = the table's first-use bits. Read and written only by
     // apps/shaper/src/tool-table.js (it validates every bit on read); per user, for all his designs (a design keeps a copy of each bit it uses), never in a document.
     SHAPER_TOOL_TABLE: null,
-    // Task 884: Shaper's "Keep ShaperHub up to date" (the Sync dialog's switch, apps/shaper/src/shaperhub-target.js): true = each Generate replaces the file the design
-    // was last sent as on ShaperHub. Off by default; per DEVICE (not in SYNCED_SETTING_KEYS below), never in a document.
-    SHAPER_HUB_KEEP_UP_TO_DATE: false,
 
     // Debug
     SHOW_DEBUG_OVERLAY: false,

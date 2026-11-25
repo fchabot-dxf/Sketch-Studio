@@ -100,7 +100,7 @@ const shot = async (name, sel = '#shaper-sync-modal') => {
 const statusText = () => evalJs(`document.getElementById('simexport-status').textContent`);
 const hubTarget = () => evalJs(`import('/apps/shaper/src/shaperhub-target.js').then((m) => m.getHubTarget('all'))`); // everything ticked: the 'all' set
 const keep = () => evalJs(`(() => { const c = document.getElementById('sync-keep-updated'); return { checked: c.checked, disabled: c.disabled, hint: document.getElementById('sync-keep-hint').textContent, label: document.querySelector('label.sync-keep-row').textContent.trim() }; })()`);
-const setting = () => evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.get('SHAPER_HUB_KEEP_UP_TO_DATE'))`);
+const setting = () => evalJs(`localStorage.getItem('shaper-keep-hub-up-to-date') === '1'`); // the device setting (shaperhub-target.js KEEP_HUB_KEY)
 const openDialog = async () => {
   await pressExportAction(cdp, clickEl, 'btn-sync-shaper');
   await waitFor(`document.getElementById('shaper-sync-modal').open`, 'the Sync dialog opens');
@@ -122,7 +122,7 @@ async function phase(label) {
   await navigate(`${LOCAL}apps/shaper/index.html`, 10000);
   await waitForApp('design-canvas');
   await waitFor(`!!(window.__designController && window.__designController.state)`, label + ': the design controller');
-  await evalJs(`import('/packages/core/settings-manager.js').then((m) => m.default.set('SHAPER_HUB_KEEP_UP_TO_DATE', false))`); // each phase starts with the switch at its default (off)
+  await evalJs(`localStorage.removeItem('shaper-keep-hub-up-to-date')`); // each phase starts with the switch at its default (off)
   // two rectangles (120 x 70, 80 x 70), a Pocket 6 mm deep on one, 8 mm on the other: two operations (the plan set through the page's own cut-plan module, before any send)
   await evalJs(`(async () => { const st = window.__designController.state;
     [[0, 0], [120, 0], [120, 70], [0, 70], [150, 0], [230, 0], [230, 70], [150, 70]].forEach(([x, y], i) => st.joints.set('Rj' + i, { x, y }));

@@ -1,6 +1,6 @@
 // tests/shaperhub-keep-884-node.test.js — TASK 884 (owner turns 3591-3597, 3607-3608): "Keep ShaperHub up to date", in Node (no browser). After a file was sent once,
 // the Sync dialog's switch makes every Generate REPLACE that same file on ShaperHub. FAKE Shaper API only (tests/shaperhub-fake-api.js; every other request blocked).
-//   1. the setting: declared ONCE (#core/settings-manager.js DEFAULT_SETTINGS), off by default, per device (not a synced key);
+//   1. the setting: declared ONCE (shaperhub-target.js KEEP_HUB_KEY, a localStorage device setting like Shaper's others), off by default;
 //   2. a target = the file + folder of the LAST successful send, from the server's own answers (handleShaperUpload): Send ('sent'), Replace it ('replaced'),
 //      Keep both (the NEW name the server answered); an 'exists' question or an error makes none;
 //   3. the file holds the TICKED operations (task 798): its NAME says which when not all (export-payload.js exportFileName: all / one / two ticked), and the
@@ -17,8 +17,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createFakeShaperApi, FAKE_LOGIN } from './shaperhub-fake-api.js';
 import { handleShaperUpload } from '../packages/core/shaper-cloud.js';
-import SettingsManager, { isSyncedSetting } from '../packages/core/settings-manager.js';
-import { KEEP_HUB_KEY, getHubTarget, setHubTarget, getHubTargets, setHubTargets, targetOfSend, autoSendDecision, keepSwitchView, createReplaceQueue, folderPlace } from '../apps/shaper/src/shaperhub-target.js';
+import { KEEP_HUB_KEY, keepHubOn, setKeepHub, getHubTarget, setHubTarget, getHubTargets, setHubTargets, targetOfSend, autoSendDecision, keepSwitchView, createReplaceQueue, folderPlace } from '../apps/shaper/src/shaperhub-target.js';
 import { exportFileName, tickedNamePart, tickedSetKey } from '../apps/shaper/src/export-payload.js';
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
 import { captureFusionProject, applyFusionProject } from '../apps/shaper/src/fusion-bridge.js';
@@ -30,13 +29,18 @@ const ok = (c, m) => { assert.ok(c, m); checks++; };
 const eq = (a, b, m) => { assert.deepStrictEqual(a, b, m); checks++; };
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L10 0"/></svg>';
 
-// ── 1. the setting ──
-eq(KEEP_HUB_KEY, 'SHAPER_HUB_KEEP_UP_TO_DATE', 'the key');
-eq(SettingsManager.getDefault(KEEP_HUB_KEY), false, 'off by default');
-eq(SettingsManager.get(KEEP_HUB_KEY), false, 'read as off on a fresh device');
-eq(isSyncedSetting(KEEP_HUB_KEY), false, 'per device: not a setting that follows the user to his other devices');
-eq((read('packages/core/settings-manager.js').match(/SHAPER_HUB_KEEP_UP_TO_DATE/g) || []).length, 1, 'declared once in the settings manager');
-eq(read('apps/shaper/src/shaperhub-target.js').match(/'SHAPER_HUB_KEEP_UP_TO_DATE'/g).length, 1, 'named once by Shaper (shaperhub-target.js KEEP_HUB_KEY)');
+// ── 1. the setting: a device setting (localStorage, like Shaper's shaper-mode / shaper-review-view / shaper-review-look) ──
+const store = new Map();
+const storage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+eq(KEEP_HUB_KEY, 'shaper-keep-hub-up-to-date', 'the key');
+eq(keepHubOn(storage), false, 'off by default (a device that never set it)');
+setKeepHub(storage, true);
+eq([keepHubOn(storage), store.get(KEEP_HUB_KEY)], [true, '1'], 'on');
+setKeepHub(storage, false);
+eq([keepHubOn(storage), store.has(KEEP_HUB_KEY)], [false, false], 'off again: no entry');
+eq((read('apps/shaper/src/shaperhub-target.js').match(/'shaper-keep-hub-up-to-date'/g) || []).length, 1, 'declared once (shaperhub-target.js KEEP_HUB_KEY)');
+ok(!read('packages/core/settings-manager.js').includes('KEEP_HUB') && !/keep-hub/.test(read('packages/core/settings-manager.js')), 'not a shared setting: nothing in #core/settings-manager.js (so nothing syncs it to other devices)');
+ok(/keepHubOn\(localStorage\)/.test(read('apps/shaper/src/shaper-app.js')), 'the page reads it from its localStorage (this device)');
 
 // ── 2. a target from the server's answers ──
 const realFetch = globalThis.fetch;

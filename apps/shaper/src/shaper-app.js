@@ -45,7 +45,7 @@ import { mountExportSim } from './export-sim.js'; // TASK 801: the Export step's
 import { SIM } from './cut-timeline.js'; // TASK 801: its one line under the controls
 import { track } from '#ui/analytics.js'; // TASK 738: the ShaperHub upload, a Fusion selection received
 import { UPLOAD_MODES } from '#core/shaper-cloud.js'; // TASK 884: the replace's mode (the request contract)
-import { KEEP_HUB_KEY, getHubTarget, setHubTarget, targetOfSend, autoSendDecision, keepSwitchView, createReplaceQueue, folderPlace } from './shaperhub-target.js'; // TASK 884: Keep ShaperHub up to date
+import { keepHubOn, setKeepHub, getHubTarget, setHubTarget, targetOfSend, autoSendDecision, keepSwitchView, createReplaceQueue, folderPlace } from './shaperhub-target.js'; // TASK 884: Keep ShaperHub up to date
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 import { createStlImporter, STL_INSERT_MARKUP } from './stl-import.js'; // TASK 790: the STL card in Prepare; TASK 841: Insert STL (the Prepare toolbar's; the website's drawer adds Open / Insert STL)
@@ -207,7 +207,7 @@ export function startShaperApp({
     file.textContent = name;
     const setKey = tickedSetKey(); // the ticked operations this file holds: only THEIR target is replaced (a set never sent stays local until a Send)
     const target = getHubTarget(setKey);
-    const decision = autoSendDecision({ on: SettingsManager.get(KEEP_HUB_KEY) === true, target, signedIn: signedIn() });
+    const decision = autoSendDecision({ on: keepHub(), target, signedIn: signedIn() });
     if (decision === 'send') {
       const line = document.createElement('span');
       status.replaceChildren(`Exported ${n} cut${n === 1 ? '' : 's'} → `, file, '. ', line);
@@ -289,15 +289,20 @@ export function startShaperApp({
 
   // TASK 884: signed in THIS session = a session token and the login still in the sign-in form (the app keeps no login, TASK 758: the fields hold it until the
   // page goes; a replace always carries it, shaper-cloud.js THE REPLACE RULE). A reload, Switch account or a refused login ends it.
+  // the device setting (shaperhub-target.js KEEP_HUB_KEY, localStorage like MODE_KEY / REVIEW_VIEW_KEY): storage blocked = off
+  const keepHub = () => { try { return keepHubOn(localStorage); } catch (err) { dbg.warn('shaper', 'KEEP_HUB_KEY read failed', err && err.message); return false; } };
   const signedIn = () => !!sessionToken && !!(syncEmail && syncEmail.value.trim()) && !!(syncPassword && syncPassword.value);
   function showKeepSwitch() {
     if (!syncKeep) return;
-    const v = keepSwitchView({ on: SettingsManager.get(KEEP_HUB_KEY) === true, signedIn: signedIn(), target: getHubTarget(tickedSetKey()) }); // the target of the operations ticked now
+    const v = keepSwitchView({ on: keepHub(), signedIn: signedIn(), target: getHubTarget(tickedSetKey()) }); // the target of the operations ticked now
     syncKeep.checked = v.checked;
     syncKeep.disabled = v.disabled;
     syncKeepHint.textContent = v.hint;
   }
-  if (syncKeep) syncKeep.addEventListener('change', () => { SettingsManager.set(KEEP_HUB_KEY, syncKeep.checked); showKeepSwitch(); });
+  if (syncKeep) syncKeep.addEventListener('change', () => {
+    try { setKeepHub(localStorage, syncKeep.checked); } catch (err) { dbg.warn('shaper', 'KEEP_HUB_KEY write failed', err && err.message); } // shown as it is stored (below)
+    showKeepSwitch();
+  });
 
   function clearSession() {
     sessionToken = null;

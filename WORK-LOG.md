@@ -17995,6 +17995,28 @@ A Fusion BODY's RELIEF from the add-in (shaper-addin SA-35: ONE region in sliceS
   phone 390 Open STL; fail-first: desktop Layout clipped, 0 pass lines), tests/fixtures/relief-terrain-889.js (the synthetic relief, generated in the test).
 - Behaviour changes: every stepped band pass (a Contour's levels, from levels or a slope; a slope Roughing cut as Inside / Outside terraces) now draws a thin
   continuous line per pass in Prepare; Roughing's Layout buttons are field-coloured 12 px, 2 columns (44 px on a phone).
+## TURN 885 (no Insert STL in the Fusion panel; Claude Opus subagent)
+- Owner turn 3604 ("Yes remove it"; "I dont need to add stl in the fusion addin"). The STL part is now DECLARED by the entry, like createImporter /
+  mountDesignBrowser: startShaperApp takes `createStlImporter(ctx)` (default: null) and `prepareLeadGroups(app)` (default: none). main.js (the website,
+  plain and ?host=fusion) passes stl-import.js's createStlImporter and the Prepare toolbar's INSERT section (insertStlGroup, moved unchanged from
+  shaper-app.js); fusion-main.js passes neither. shaper-app.js no longer imports stl-import.js; no branch on Fusion mode.
+- Without the part: Prepare's toolbar starts with OPERATIONS (no INSERT section / label); no STL card; the restore's reimportOld() runs only with
+  the part (`if (stlImporter)`, like `if (shaperImporter)`); app.stlImporter() is null and nothing in the panel calls it; nameAfterSelection's
+  comment says an opened STL names the design on the website only.
+- Panel folder: src/stl-import.js, src/stl-card.js, src/orient-view.js out (240 files reached, 243 before; 245 files + manifest, 7,655,751 bytes).
+  Kept (shared): stl-source.js, core/stl-slice.js, relief-frame.js. docs/FUSION-PANEL-881.md: rows 78-79, ruling line 152, counts, new section 14.
+- Behaviour change, panel only: a workspace saved by the website-in-Fusion with an inserted STL keeps its relief operations but has no STL card
+  (re-slice / orient) in the panel; a pre-807 STL design is not re-sliced there. The website: none.
+- Tests (fail-first): fusion-panel-881-node: stl-import.js, stl-card.js, orient-view.js UNUSED (reached by the website, not by the panel, not in
+  its folder); failed before the change ("the Fusion panel's graph does not reach src/stl-import.js"), ok after (383 checks).
+  fusion-panel-881-live: the panel's Prepare toolbar = Operations / Recalculate / Tools, no #prepare-insert-stl, no .stl-card; the website
+  (?host=fusion and plain) keeps Insert / Operations / Recalculate / Tools, the button and the card. Failed before (actual 'insert:Insert',
+  insertStl true, stlCard 1), ok after.
+- gate:quick 591/591. Live, one at a time: all 249 the merge plan lists: 245 ok first pass; 4 failed under another project's gate on the
+  shared CPU (drive-folder-browser, op-paths-817 long task 139 ms, opfirst-relief, opfirst-ui-s2) and passed alone on re-run. shell-smoke 13/13.
+- Evidence (.evidence/885/, local): prepare-toolbar-panel-BEFORE.png md5 81bac6f5910ab7b7a5c039353b85f4e3 (INSERT > STL first),
+  prepare-toolbar-panel.png 3c7403252c493d366678335f43b2390a (starts with OPERATIONS), panel-closure-before/after.txt, node-failfirst.txt,
+  live-failfirst.txt, live-after.txt, live-plan-results.txt.
 ## TURN 884 — Keep ShaperHub up to date (Claude Opus subagent, branch agents/autosync-884)
 Owner turns 3591-3597 ("Ok"), advisor heads-up (targets per ticked set), owner ruling turns 3607-3608 (the file name follows the ticked operations).
 - THE SWITCH: the Sync dialog's "Keep ShaperHub up to date" (apps/shaper/index.html #sync-keep-updated, role=switch) + the line under it (#sync-keep-hint, param-hints.js

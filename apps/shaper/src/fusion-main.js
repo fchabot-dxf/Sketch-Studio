@@ -5,6 +5,7 @@
 //   Fusion mode always (the panel exists only in Fusion's palette; not read from the address);
 //   the plain drawer (#ui/app-shell.js): the stage switcher and Log; no project layer, Google Drive, account, Settings, Download, STL entries, add-in
 //   download, About or Rate & feedback (owner turns 3494 / 3503);
+//   no STL part (owner turn 3604, TASK 885): no Insert STL in Prepare's toolbar (no INSERT section), no STL card, stl-import.js not loaded;
 //   the autosave loop on an in-memory store (the workspace lives in the Fusion design: SA-19's save_project), so nothing is kept in the browser.
 // Not loaded at all (the build's module graph proves it, tests/fusion-panel-881-node.test.js): the website's main.js and every module only it reaches.
 

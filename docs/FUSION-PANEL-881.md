@@ -75,8 +75,8 @@ SAME = the same in both. **Fusion**: USED / UNUSED in the Fusion panel; "owner t
 | Part | Where | Fusion |
 |---|---|---|
 | Prepare: canvas, operations toolbar (the shared tool ribbon with Prepare's own buttons), cut card, operations list, notice, Tool table window | prepare-stage.js; main.js:631-647 | USED |
-| Prepare toolbar "Insert STL" (lead group) | main.js:639-640, 648-653; stl-import.js | present in Fusion today; **owner to decide** (a Fusion design brings its geometry from Fusion; the drawer's STL entries are already hidden) |
-| STL card in Prepare (an imported STL's settings) | stl-card.js; main.js:664-666 | only with an inserted STL: follows the Insert STL decision |
+| Prepare toolbar "Insert STL" (lead group) | main.js:639-640, 648-653; stl-import.js | **UNUSED: removed from the Fusion panel** (owner turn 3604, "Yes remove it"; task 885). The website keeps it, plain and with `?host=fusion` |
+| STL card in Prepare (an imported STL's settings) | stl-card.js; main.js:664-666 | **UNUSED: not in the Fusion panel** (task 885, with Insert STL). The website keeps it |
 | SVG / DXF drop anywhere on the page | main.js:705 (`shaperImporter.mountDrop()`); cut-import.js | live in Fusion today; imports into the HIDDEN Design (modes.js:87-89: `showDesign` does nothing in Fusion mode). UNUSED |
 | Paths worker (operation paths in the background) | main.js:122; paths-worker.js | USED |
 | Generate Shaper SVG (download) | main.js:160-190 | USED |
@@ -149,7 +149,8 @@ files today.
   TAKE the Drive / projects / templates layers as passed values instead of importing them. The website stays BEHAVIOUR-identical (not
   byte-identical), proven by the existing website and Fusion-mode tests plus shell-smoke; every changed / new module is listed.
 - Rate & feedback and the "Enjoying Shaper?" card: UNUSED in the Fusion panel (they cannot send from 127.0.0.1): left out of the Fusion build.
-- Insert STL (Prepare toolbar): KEPT in the Fusion panel for now (owner to review later).
+- Insert STL (Prepare toolbar): ~~KEPT in the Fusion panel for now (owner to review later).~~ REMOVED from the Fusion panel: owner turn 3604
+  ("Yes remove it"; "I dont need to add stl in the fusion addin"), task 885, see section 14.
 - Send to ShaperHub offline (R1): out of scope; the open item for a follow-up task. functions/ and the add-in are not touched.
 - STEP 3 targets http://127.0.0.1 only (file:// ruled out live).
 - STEP 2 starts only once task 880 is on origin/main, merged in first.
@@ -204,7 +205,7 @@ Recorded only; not built in this task (the redesign comes after the offline pane
   is not in the folder): src/main.js, addin-download.js, cut-import.js, shaperhub-login.js, shaper-browser.js; packages/ui design-browser,
   app-chrome, sidebar-projects, project-actions, project-manager, document-tabs, save-button, account-avatar, file-dialog, sketch-import,
   feedback, style-panel, project-store, document-buffer, cloud/google-account, cloud/auth-state, cloud/providers, cloud/drive-adapter,
-  cloud/router-adapter, cloud/settings-sync; about.html (and privacy.html). The website page reaches 275 files, the panel page 243.
+  cloud/router-adapter, cloud/settings-sync; about.html (and privacy.html). The website page reaches 275 files, the panel page 243 (after tasks 884 + 885: the website 276, the panel 241; task 885 took out 3, section 14).
 - **Kept although the panel does not show them** (part of the shared Design tab engine the panel runs, or of a used module): the Design
   view's DOM and its tool ribbon instance (#design-ribbon; the ribbon module is Prepare's toolbar too), the sketch engine's text support
   (text-fonts.js, opentype, the bundled fonts: about 1.2 MB), the template picker's modal (transform-box.js uses it), the store engine's
@@ -223,9 +224,9 @@ list is computed (beforeChrome) instead of just before it.
 
 ## 13. STEP 3: what the add-in must serve (SA-32)
 
-- **One folder**, `index.html` at its top: `index.html`, `src/` (45 files), `styles/main.css`, `assets/` (3), `packages/` (196: core, ui
-  with vendor/three, vendor/opentype, vendor/fonts), `LICENSE.md`, `THIRD-PARTY-NOTICES.md`, and `fusion-panel.json`. 248 files + the
-  manifest, 7,685,886 bytes (build 2026-11-24). Every reference is relative and stays inside the folder, so it works at the server root
+- **One folder**, `index.html` at its top: `index.html`, `src/` (43 files), `styles/main.css`, `assets/` (3), `packages/` (196: core, ui
+  with vendor/three, vendor/opentype, vendor/fonts), `LICENSE.md`, `THIRD-PARTY-NOTICES.md`, and `fusion-panel.json`. 246 files + the
+  manifest, 7,673,186 bytes (build 2026-11-24, after tasks 884 + 885; 248 files, 7,685,886 bytes before them). Every reference is relative and stays inside the folder, so it works at the server root
   or under a path.
 - **The entry**: `index.html` (its module: `src/fusion-main.js`). No query string is needed: the panel is Fusion mode, with its workspace
   in the Fusion design (in memory in the page), by declaration. A `?host=fusion&project=design` the add-in still passes is ignored.
@@ -244,3 +245,26 @@ list is computed (beforeChrome) instead of just before it.
   a follow-up task. Nothing else is fetched from shaper-svg.pages.dev or any other host (the live test records every request: all to the
   panel's own server, all 200). Open ShaperHub (My Files) and the export status line's link open hub.shapertools.com in a new window (a
   link the user follows, not a load).
+
+## 14. Task 885: no Insert STL in the Fusion panel (owner turn 3604)
+
+Owner turn 3604: "Yes remove it"; "I dont need to add stl in the fusion addin". The website keeps Open STL, Insert STL and the STL card
+exactly as before, plain and with `?host=fusion`.
+
+- **Declared, not detected**: the STL part is one more thing the ENTRY passes to `startShaperApp`, like `createImporter` /
+  `mountDesignBrowser`: `createStlImporter(ctx)` (stl-import.js: the STL card in Prepare, the importer Open / Insert STL call) and
+  `prepareLeadGroups(app)` (the Prepare toolbar's sections before Operations). `main.js` passes stl-import.js's `createStlImporter` and
+  the INSERT section (`insertStlGroup`, moved unchanged from shaper-app.js); `fusion-main.js` passes neither. shaper-app.js no longer
+  imports stl-import.js. No branch on Fusion mode.
+- **Without the part**: Prepare's toolbar starts with OPERATIONS (no INSERT section, no empty one, no label: `leadGroups` is `[]`);
+  no STL card is mounted; the restore's `reimportOld()` (task 807, a design saved with an STL before 807 sliced again) runs only on a page
+  with the part (`if (stlImporter)`, as `if (shaperImporter)` for the SVG / DXF drop); `app.stlImporter()` is null and nothing in the
+  panel calls it (its callers are main.js's drawer entries and toolbar button). `nameAfterSelection`'s comment now says an opened STL
+  names the design on the website (main.js's Open STL); in the panel only a Fusion selection does.
+- **Out of the panel's folder** (tests/fusion-panel-881-node.test.js UNUSED, each still reached by the website): src/stl-import.js,
+  src/stl-card.js, src/orient-view.js. Kept (reached by shared modules: the saved document's STL sources and the relief engine):
+  src/stl-source.js (shaper-doc.js, selection-list.js, selection-edit.js, fusion-import.js), packages/core/stl-slice.js (height-map.js,
+  level-smooth.js, stepped-cut.js), src/relief-frame.js (cut-plan.js, fusion-import.js). The panel page reaches 3 files fewer than before it (243 -> 240 at origin/main e6d98227; 241 with task 884 merged).
+- **Behaviour change in the panel only**: a workspace saved in a Fusion design by the website in Fusion mode WITH an inserted STL keeps its
+  relief operations (they are ordinary cut-plan entries) but has no STL card to re-slice or re-orient that part in the panel; a design
+  saved with an STL before task 807 is not re-sliced as a relief when it opens in the panel.

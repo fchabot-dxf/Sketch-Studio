@@ -8,6 +8,8 @@
 // download, About, Rate & feedback), no footer gear, no document tabs, no account; it opens on Prepare without ?host=fusion in its address. Every request
 // it makes is to its own server and finds its file (no 404, nothing outside the folder; the module worker included: the server sees every request).
 // Screenshots (legible) to .evidence/881/: the panel's Prepare after the cut at 1280 x 800 and at the palette size 480 x 731, its drawer, its Export.
+// TASK 885 (owner turn 3604): the panel's Prepare toolbar has no INSERT section (no Insert STL); the website, in Fusion mode and plain, keeps it. The panel's
+// toolbar, cropped, to .evidence/885/prepare-toolbar-panel.png.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -24,6 +26,10 @@ const { buildFusionPanel, PANEL_MIME } = require('../scripts/build-site.cjs');
 
 const EVIDENCE_DIR = path.resolve('.evidence/881');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
+const EVIDENCE_885 = path.resolve('.evidence/885');
+fs.mkdirSync(EVIDENCE_885, { recursive: true });
+// Prepare's toolbar: its sections (data-section:label), whether the Insert STL button is in the page, and the STL card (stl-card.js, made at boot, hidden)
+const PREPARE_TOOLBAR = `({ groups: [...document.querySelectorAll('#prepare-ribbon .sk-ribbon-group')].map((g) => g.dataset.section + ':' + g.querySelector('.sk-ribbon-group-label').textContent), insertStl: !!document.getElementById('prepare-insert-stl'), stlCard: document.querySelectorAll('#prepare-panel .stl-card').length })`;
 
 // the payload of fusion-import-664-live.test.js (a sketch: a 40 x 30 rectangle with a 5 mm hole, the hole's disk, an open chain, a construction line)
 const PAYLOAD = {
@@ -108,6 +114,7 @@ async function flow(label, url, mod, { evidence = false } = {}) {
     footerGear: !!document.getElementById('btn-settings'),
     stylePanel: !!document.querySelector('.sk-style-panel'),
     sent: window.adsk._sent.map((m) => m.action),
+    toolbar: ${PREPARE_TOOLBAR},
   }))()`);
   if (evidence) { // the open drawer, zoomed (its Log entry legible)
     await waitFor(`document.querySelector('.sk-sidebar').classList.contains('open')`, label + ': the drawer open');
@@ -136,6 +143,9 @@ async function flow(label, url, mod, { evidence = false } = {}) {
   await sleep(400);
   if (evidence) {
     await shot('panel-prepare-1280x800.png');
+    const r = await evalJs(`(() => { const b = document.getElementById('prepare-ribbon-frame').getBoundingClientRect(); return { x: b.left, y: b.top, width: Math.min(b.width, 720), height: b.height }; })()`);
+    const { data } = await send('Page.captureScreenshot', { format: 'png', clip: { ...r, scale: 2 } }); // TASK 885: the toolbar, zoomed (its sections' names legible)
+    fs.writeFileSync(path.join(EVIDENCE_885, 'prepare-toolbar-panel.png'), Buffer.from(data, 'base64'));
     await send('Emulation.setDeviceMetricsOverride', { width: 480, height: 731, deviceScaleFactor: 1, mobile: false });
     await waitFor(`window.innerWidth === 480`, 'the palette size');
     await sleep(400);
@@ -164,6 +174,13 @@ try {
   const web = await flow('website', `http://127.0.0.1:${port}/apps/shaper/index.html?host=fusion&project=design`, '/apps/shaper/src/main.js');
   assert.deepStrictEqual(web.boot.drawerActions, ['download', 'settings', 'log', 'feedback'], 'the website in Fusion mode: its drawer as today');
   assert.strictEqual(web.boot.footerGear && web.boot.stylePanel, true, 'the website in Fusion mode: its Settings (footer gear + panel) as today (the panel checks below can fail)');
+  const WEB_TOOLBAR = { groups: ['insert:Insert', 'operations:Operations', 'recalculate:Recalculate', 'tools:Tools'], insertStl: true, stlCard: 1 };
+  assert.deepStrictEqual(web.boot.toolbar, WEB_TOOLBAR, 'the website in Fusion mode: the Prepare toolbar keeps INSERT (Insert STL) first, as today');
+  // the plain website (no ?host=fusion): the same toolbar
+  await navigate(`http://127.0.0.1:${port}/apps/shaper/index.html`);
+  await waitForApp('design-canvas');
+  await waitFor(`!!document.getElementById('prepare-insert-stl')`, 'the plain website: its Prepare toolbar');
+  assert.deepStrictEqual(await evalJs(PREPARE_TOOLBAR), WEB_TOOLBAR, 'the plain website: the Prepare toolbar keeps INSERT (Insert STL) first, as today');
 
   // 2. the built panel, from its own server (no ?host=fusion: the panel is Fusion mode by declaration)
   requested.length = 0;
@@ -177,6 +194,8 @@ try {
   assert.strictEqual(p.boot.footerGear, false, 'no Settings gear in the footer');
   assert.strictEqual(p.boot.stylePanel, false, 'no Settings panel in the page');
   assert.deepStrictEqual(p.boot.sent, ['ping'], 'the panel pinged the add-in once at boot');
+  // TASK 885 (owner turn 3604): no Insert STL in the panel: Prepare's toolbar has no INSERT section (no empty one, no label) and no Insert STL button
+  assert.deepStrictEqual(p.boot.toolbar, { groups: ['operations:Operations', 'recalculate:Recalculate', 'tools:Tools'], insertStl: false, stlCard: 0 }, 'the panel: the Prepare toolbar has no INSERT section, Prepare no STL card');
   assert.strictEqual(p.name, web.name, `the same file name (${p.name})`);
   assert.strictEqual(p.svg, web.svg, 'the panel exports the website\'s Shaper SVG, byte for byte');
   assert.ok(/<svg/.test(p.svg) && /shaper:cutType/.test(p.svg), 'a Shaper SVG');
@@ -189,7 +208,7 @@ try {
   for (const f of ['/index.html', '/src/fusion-main.js', '/src/paths-worker.js', '/src/op-derive.js', '/packages/ui/vendor/three/three.module.js', '/assets/constraint-glyphs.svg']) {
     assert.ok(panel.log.some((r) => r.url === f), `the panel loaded ${f} from its folder`);
   }
-  for (const f of ['/src/main.js', '/packages/ui/app-chrome.js', '/packages/ui/cloud/google-account.js', '/packages/ui/style-panel.js', '/packages/ui/feedback.js']) {
+  for (const f of ['/src/main.js', '/packages/ui/app-chrome.js', '/packages/ui/cloud/google-account.js', '/packages/ui/style-panel.js', '/packages/ui/feedback.js', '/src/stl-import.js']) {
     assert.ok(!panel.log.some((r) => r.url === f), `the panel never asks for ${f}`);
   }
   const served = new Set(panel.log.map((r) => r.url.slice(1)));

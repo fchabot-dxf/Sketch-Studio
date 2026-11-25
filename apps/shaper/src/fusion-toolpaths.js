@@ -14,6 +14,8 @@
 //   - `frame` is the selection's 3D frame from `selection_data.frame` (`{ units: 'mm', yAxis: 'up', originMm, uAxis, vAxis,
 //     normal, topHeightMm }`), where `originMm` lies on the part's top plane (`z = 0` mm) and each path's `z` is the
 //     cut depth in mm from the part's top (`z >= 0`, going into the part along `-normal`).
+//   - TASK 891 (add-in SA-36): a region may carry its OWN frame (a body of a several-body selection: each body is read in its own frame, its own top =
+//     depth 0); a path is in its region's frame, else its selection's, and carries it as `frame` when that is not the message's (`frameByKeyMap`).
 //   - One decimation tolerance (`TOOLPATH_DECIMATE_TOL_MM = 0.05` mm) and one debounce (`TOOLPATHS_DEBOUNCE_MS = 300` ms)
 //     are declared once here.
 
@@ -148,7 +150,8 @@ function frameByKeyMap(selections) {
     if (!sel || !sel.frame) continue;
     const f = normalizeFrame(sel.frame);
     if (!topFrame) topFrame = f;
-    for (const k of sel.cutKeys || []) byKey.set(k, f);
+    const own = sel.frames || {};
+    for (const k of sel.cutKeys || []) byKey.set(k, own[k] ? normalizeFrame(own[k]) : f);
   }
   return { topFrame: topFrame || normalizeFrame(null), byKey };
 }

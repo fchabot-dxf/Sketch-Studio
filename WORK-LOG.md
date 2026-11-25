@@ -18071,3 +18071,19 @@ Owner turns 3612-3614 (reverses TASK 758's "the app keeps no login", turn 2260 s
   the new box present and unticked, nothing anywhere while unticked), 884 node + live + fusion-live (ON default, '0' stored for off, label Autosend, the toast).
 - The Fusion panel now loads shaperhub-login.js (one path for both pages): tests/fusion-panel-881-node.test.js moves it from UNUSED to USED; docs/FUSION-PANEL-881.md says so.
 - Evidence (local) .evidence/886/: desktop/phone remember-unticked / remember-ticked / remember-ticked-after-reload, desktop-wrong-password-line, fusion-panel-*.
+
+## TURN 891 — a several-body Fusion selection: each body's toolpaths in Fusion drawn on its own body (Claude Opus subagent, branch agents/multibody-891)
+With add-in task SA-36 (branch sa-36-multibody-relief there; advisor live check, owner turns 3666-3669): ONE Single Solid Body selection of a sculpted body (its
+Relief region) and a box (its Outline outside): in Fusion the relief's contours stood beside / below the freeform body (repro: 36 mm low).
+- Cause (add-in side): each body is read in its own frame (its own top = depth 0) but the merged payload carried ONE frame (the box's top), and every path's `z` is
+  a depth from its part's top. The add-in now gives each body region `frame` = the frame its body was read in (shaper-addin docs/SELECTION-BRIDGE.md 6.1).
+- This side: apps/shaper/src/selection-edit.js buildEntry keeps the payload's region frames by plan key (`frames`, only when a region has one: a one-body payload,
+  a sketch, an STL -> no field, the entry as before); selection-list.js `sane` keeps it (documented with the entry's fields); fusion-toolpaths.js frameByKeyMap: a key's
+  frame = its region's own, else its selection's (the existing per-path `frame` override then sends it when it is not the message's).
+- Not the panel's placement: relief-frame.js `place` is Insert STL only; an add-in payload lands at IDENTITY.
+- Test: NEW tests/fusion-multibody-891-node.test.js (16 checks) on the add-in's own output (tests/fixtures/fusion-multibody-891.json, written by shaper-addin
+  extract_selection on its fakes: the dome relief + an 80 x 50 x 5 mm box beside it): the entry keeps both frames; every Roughing path carries the relief's frame,
+  the Outline's none; every path put in Fusion by the add-in's mapping (origin + x u + y v - z n) lies inside its own body (across: an Outline one bit radius, a
+  Roughing its work area roughingWorkGrow; along the normal: exactly); a one-body payload: no frames anywhere (as before).
+  Fail-first (origin/main's three files): "AssertionError [ERR_ASSERTION]: 1. the entry keeps each region's frame by plan key / actual: []"; with checks 1-2 off
+  (scratch copy): "3. every path lies on its own body (12 off)", first { name: 'Freeform', op: 'op-1', z: 6, w: [ 12.433, 26.017, -1 ] } (7 mm low).

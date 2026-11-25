@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/no-min-736-node.test.js — TASK 736: NO app-imposed minimum on Shaper's sizes (owner turn 2071: "let users decide").
 // ONE rule for a size (bit diameter, stock thickness, step depth, adaptive resolution): any value > 0, typed or stepped, is kept exactly; 0 / negative / non-numbers are
 // refused (the box reverts); the − button stops at the smallest positive multiple of its step (never 0). Depth may be 0, the offset any sign (unchanged).

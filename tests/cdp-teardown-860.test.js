@@ -1,3 +1,4 @@
+// gate: exclusive
 // tests/cdp-teardown-860.test.js — TASK 860: teardown order, bounded tree wait, locked-folder handoff, and zero timer leaks.
 import assert from 'node:assert';
 import path from 'node:path';

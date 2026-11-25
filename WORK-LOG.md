@@ -18276,3 +18276,10 @@ advisor default Floor). Claude Opus subagent, branch agents/stockT2-898. apps/sh
   Node test: a website STL relief in a 30 mm board with no Stock operation -> the 20 mm file byte for byte (fail-first without the rule:
   .evidence/898/fail-first-nostock.txt "2: no Stock operation, a 30 mm board: today's file, byte for byte (Top)"); with a Stock operation -> Floor as before. The
   roughing-contour-792-node record workaround is dropped (its v2 document has no Stock operation: the part stays at the top).
+- Merge-gate follow-up: (1) selection-mirror-795c-live read the declared RECORD after Undo of a card edit (expected the part's 12 mm, which the record held only because a
+  selection wrote it before T2); the app is right (Undo restores the record's own value; the board stays 12 mm from the part, the Stock row kept): the test now asserts
+  the record back to its pre-edit value and the board 12 mm with the Stock row ['model'] after the Undo. (2) OWNER ruling turns 3710-3712: the Stock row is UNNUMBERED
+  (a header-like row at the top); cutting operations are numbered 1, 2, 3 without it. ONE numbering: operations.js listNumbers (describeOperations gives each op its
+  `number`; op-list.js shows it, its words name an unnumbered row by its text; prepare-stage.js card header "Stock · no shapes yet"; export-payload.js tickedNamePart /
+  chunkFileName (leavable) and exportTickLine read it). File names are as before 898 (split-files-888-live's names unchanged). Website designs with a Stock op also
+  lose the Stock's number: opbar-s3-node, op-ticks-798-node, visfix-825-node, shaperhub-keep-884-node updated (TASK 898 comments).

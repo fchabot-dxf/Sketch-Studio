@@ -83,7 +83,7 @@ eq(tickedNamePart(tick(OPS, ['op-3'])), 'Outside 1 - Outside 2', 'name: two tick
 eq(exportFileName('bromont', tick(OPS, ['op-3'])), 'bromont - Outside 1 - Outside 2.svg', 'name: two ticked, through shaperFileName unchanged (the dash is kept)');
 eq(exportFileName('bromont', tick(OPS, ['op-1', 'op-2'])), 'bromont - Pocket 3.svg', 'name: the number is the operation\'s place in the Operations list');
 const withStock = [op('op-9', 'stock'), ...OPS];
-eq(exportFileName('bromont', tick(withStock, ['op-2', 'op-3'])), 'bromont - Outside 2.svg', 'name: the Stock (always in the file) is never named, but counts in the list numbers');
+eq(exportFileName('bromont', tick(withStock, ['op-2', 'op-3'])), 'bromont - Outside 1.svg', 'name: the Stock (always in the file) is never named and (TASK 898, owner turns 3710-3712) unnumbered: the names are the same with or without it');
 eq(exportFileName('bromont', withStock), 'bromont.svg', 'name: the Stock and every operation ticked = the full name');
 eq(exportFileName('Untitled', tick(OPS, ['op-1'])), 'shaper-export - Outside 2 - Pocket 3.svg', 'name: an Untitled design\'s partial file');
 eq(exportFileName(null), 'shaper-export.svg', 'name: no operations (the store empty) = as before');

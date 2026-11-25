@@ -275,7 +275,19 @@ function entryCutsByOp(state, entries, geo = null, { pending = null, outOfDate =
  * nothing; the export's list of its ticked entries passes every: false, only the operations with cuts in them). TASK 798: + `on` (its tick, cut-plan.js isTicked) and `tickable` (false for the Stock: always exported, the
  * board every file is placed by); `frame` = the whole plan's entries when `entries` are the ticked ones (the hole ownership stays the whole plan's, as the export).
  */
+/** TASK 898 (owner turns 3710-3712): THE NUMBER of each operation in the Operations list, and so in a file's name (export-payload.js tickedNamePart /
+ *  chunkFileName): its place among the CUTTING operations, 1, 2, 3 ... in list order; the Stock is UNNUMBERED (null: a header-like row at the top of the list, as a
+ *  setup's stock in Fusion CAM), so a design's operations keep their numbers whether it has a Stock or not. `ops` = the stored operations in list order (their
+ *  `type`). -> Map(id -> number | null). */
+export function listNumbers(ops) {
+  const out = new Map();
+  let n = 0;
+  for (const op of ops) out.set(op.id, op.type === STOCK_TYPE_ID ? null : ++n);
+  return out;
+}
+
 export function describeOperations(state, entries = planEntries(), frame = null, { every = true } = {}) {
+  const numbers = listNumbers(storeOps()); // TASK 898: the list's numbers (the Stock none)
   const ents = (entries || []).filter((e) => e && e.target && e.rec && e.rec.cutType);
   const pending = new Set(); // TASK 817: the operations whose paths are being generated (or, open, wait for their OK)
   const outOfDate = new Set(); // TASK S3: the operations whose inputs changed since they were generated (Recalculate)
@@ -286,7 +298,7 @@ export function describeOperations(state, entries = planEntries(), frame = null,
     if (!records.length && !every && !pending.has(stored.id) && !outOfDate.has(stored.id)) continue; // TASK S2: an export's list (every: false): only what it cuts
     const storedRec = { cutType: stored.type, ...stored.settings };
     const rec = records.length ? records[0].rec : storedRec; // TASK S2: EVERY operation is listed (an empty one, one that cuts nothing), with its own settings
-    const op = { key: stored.id, id: stored.id, tool: toolOf(storedRec), cutType: stored.type, settings: settingsOf(rec), records, shapes: stored.geometry.map((r) => r.key), first: records.length ? byOp.get(stored.id)[0].i : Infinity, on: isTicked(stored), tickable: stored.type !== STOCK_TYPE_ID }; // TASK 798: its tick (the Stock: always, not tickable); TASK S2: `shapes` = its geometry keys
+    const op = { key: stored.id, id: stored.id, tool: toolOf(storedRec), cutType: stored.type, settings: settingsOf(rec), records, shapes: stored.geometry.map((r) => r.key), first: records.length ? byOp.get(stored.id)[0].i : Infinity, on: isTicked(stored), tickable: stored.type !== STOCK_TYPE_ID, number: numbers.get(stored.id) }; // TASK 898: `number` = its list number (listNumbers; the Stock null); TASK 798: its tick (the Stock: always, not tickable); TASK S2: `shapes` = its geometry keys
     op.rank = levelsRank(op);
     op.pending = pending.has(stored.id); // TASK 817: its paths are not generated yet (its row spins while they are generating)
     op.outOfDate = outOfDate.has(stored.id); // TASK S3: its inputs changed since it was generated (its row's mark; Recalculate)

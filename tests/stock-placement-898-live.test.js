@@ -130,8 +130,10 @@ async function phase(tag, { width, height, mobile }) {
   const s0 = await evalJs(stockOp);
   assert.deepStrictEqual([s0 && s0.geometry, s0 && s0.cutDepth], [0, 'model'], `${tag}: ONE EMPTY Stock operation, its thickness from the part: ${JSON.stringify(s0)}`);
   await opsOpen();
-  const rows = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-row')].map((r) => ({ id: r.dataset.id, text: r.querySelector('.ops-name').textContent }))`);
+  const rows = await evalJs(`[...document.querySelectorAll('#prepare-ops .ops-row')].map((r) => ({ id: r.dataset.id, num: r.querySelector('.ops-num').textContent, text: r.querySelector('.ops-name').textContent }))`);
   assert.ok(rows.some((r) => r.id === s0.id && /Stock/.test(r.text)), `${tag}: the Operations list shows the Stock row: ${JSON.stringify(rows)}`);
+  // owner turns 3710-3712: the Stock row at the top, UNNUMBERED; the cutting operations numbered from 1 (the file names' numbers too)
+  assert.deepStrictEqual(rows.map((r) => [r.num, r.text.split(' ')[0]]), [['', 'Stock'], ['1', 'Roughing']], `${tag}: the Stock unnumbered at the top, the Roughing 1`);
   assert.strictEqual(await evalJs(roughDepth), 12, `${tag}: the Roughing to the part's 12 mm (stock = part)`);
   const listShot = await shotOf(`${tag}-ops-stock-row.png`, '#prepare-ops');
 
@@ -140,6 +142,7 @@ async function phase(tag, { width, height, mobile }) {
   await waitFor(`!!document.querySelector('#prepare-panel .cut-row[data-row="sculptedOn"]') && document.querySelector('#prepare-panel .cut-row[data-row="sculptedOn"]').style.display !== 'none'`, `${tag}: the Sculpted parts sit on row`);
   const card = await evalJs(`(() => { const r = document.querySelector('#prepare-panel .cut-row[data-row="sculptedOn"]'); return { label: r.querySelector('.cut-field-label').textContent, choices: [...r.querySelectorAll('.cut-preset')].map((b) => b.textContent + (b.classList.contains('is-active') ? '*' : '')) }; })()`);
   assert.deepStrictEqual(card, { label: 'Sculpted parts sit on', choices: ['Floor*', 'Top'] }, `${tag}: the row, Floor in effect (the default)`);
+  assert.strictEqual(await evalJs(`document.querySelector('#prepare-panel .cut-op-head').textContent`), 'Stock · no shapes yet', `${tag}: the card's header: the Stock, unnumbered`);
   const thicknessShown = await evalJs(`(() => { const i = document.querySelector('#prepare-panel .cut-depth'); return { value: i.value, placeholder: i.placeholder }; })()`); // what the card shows for 'model' (T3 rules the card: reported)
   await typeInto('#prepare-panel .cut-depth', '20 mm'); // the panel's document unit is inches: the unit typed
   assert.strictEqual((await evalJs(stockOp)).cutDepth, 20, `${tag}: the Stock typed 20 mm`);

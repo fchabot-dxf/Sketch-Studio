@@ -67,7 +67,7 @@ try {
   eq(storeOps().filter((o) => o.type === 'guide').length, 3, 'setup: three Guides');
   // V2: the Export line
   app.press(rowBox(idOf('guide', 2))); app.press(rowBox(idOf('pocket', 1)));
-  eq(exportTickLine(ops()), 'Exporting 3 of 5 operations (unticked: 4. Guide · 1.5 mm, 6. Pocket (spiral) · 6 mm (¼″ end mill)). Place it with the same anchor as the earlier file.', 'V2: the unticked ones are named as the list names them, with their numbers: the Spiral pocket is not "Pocket 6 mm"');
+  eq(exportTickLine(ops()), 'Exporting 3 of 5 operations (unticked: 3. Guide · 1.5 mm, 5. Pocket (spiral) · 6 mm (¼″ end mill)). Place it with the same anchor as the earlier file.', 'V2: the unticked ones are named as the list names them, with their numbers (TASK 898: the Stock unnumbered): the Spiral pocket is not "Pocket 6 mm"');
   void idOf; void rowBox;
 
   // V7: constraintTargets: a rectangle A-B-C-D (L1..L4) and a separate line P-Q (L5)

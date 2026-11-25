@@ -17961,6 +17961,34 @@ Shaper's Export view has no side panel (owner turn 3484: "remove this sidebar an
   d32faf185257b7a80cf81e140c9d9e20, panel-export.svg, panel-requests.txt, panel-build.txt, fusion-panel.json.
 - Open: R1 Send to ShaperHub offline (/api/shaper-upload is the website's route: 404 on the add-in's server), follow-up task.
 
+## TURN 890 (DESIGN DOC: one shared STOCK model for the website and the Fusion panel)
+- Wrote docs/STOCK-MODEL-890.md (no code). It covers: the inventory of every stock reader and writer (website, Fusion panel, the add-in's `stock.thicknessMm`, STL, 3D / sim, the SVG page, the stock card, the task 864 Stock tokens), each with file:line; the reviewer's starting point checked line by line (all true; setStockField's one caller is stock-card.js:35, and a stored file can still restore width / height); the model; setups; UI; a T1-T9 task split with tests; 3 owner questions.
+- Decision: the Stock IS the Stock operation, ONE per setup. Empty geometry = the setup's drawingExtent + the declared 6 in margin; one shape = that profile. Its thickness is its `cutDepth`: typed, `'model'` (from the part = the largest `thicknessMm` of the setup's selection entries, re-read in `recordOf`, as Depth 'model' is) or `'unset'` (the declared record). Not stored: `source`, 'fusion-sketch', shapeKey / tokens (they would be second truths). `resolveStock` is EXTENDED (`board` replaces `fromLoop`). No task touches packages/core except the optional width / height removal (T9).
+- Findings (reported, not fixed): F1 an EMPTY Stock op's thickness is never read (cut-plan.js:1091 -> stock.js:36); F2 `reviewSig` carries getStock(), not the resolved stock (shaper-app.js:791); F3 a Stock picked on an imported region stores a number, not 'model' (cut-plan.js:57); F4 the selection entry's `thicknessMm` is persisted but never read; F5 the add-in sends `stock` only for exactly ONE body (shaper-addin fusion_selection.py:1387-1388).
+## TURN 889 (relief view bugs: Prepare's Contour passes, the Layout row, the Paths streak; Claude Opus subagent)
+- 1 PREPARE CONTOUR PATHS SPARSE. Cause: apps/shaper/src/prepare-view.js computeLook drew a stepped cut's pass (a footprint with `terrace`: a Contour level)
+  ONLY as its marching travel marks, and those are thinned on screen (TASK 757 thinTravel: a ring is dropped when it comes within 16 px of a kept ring
+  ANYWHERE); a Contour's level loops all meet on the steep walls, so nearly every pass lost its only drawing (node: 4 of 218; live desktop 27 dashed rings,
+  phone 9). Fix (one place, computeLook): a stepped band's pass also draws its bit-centre path(s) as the thin continuous guide of the many-pass paths
+  (.sk-clear-path, the clearing paths' declared style); the travel marks stay thinned on top for the direction. All 218 drawn, readable at Prepare's zoom
+  (thin 1 px / 0.35 lines; a dense wall reads as a lighter band, as in Export Paths). No reduction needed.
+  Rule reported (not changed): Prepare draws a membership's paths only while it is hovered / selected (TASK 455 state model, prepare-view.js computeLook
+  "the idle state is ONLY the svg line, so a look exists only to be drawn in the hover / selected states"), and while an operation is open its shapes show
+  only that operation's paths (TASK S2, drawnItems: "while an operation is active, its shapes show only its own"). Declared, see TURN 839's ITEM 1 note.
+- 2 ROUGHING "Layout" ROW CLIPPED. Cause: the row (data-row="roughLayout") had no declaration in apps/shaper/index.html, so it fell on the 4-column bit-preset
+  grid (40 px columns at 14 px: "Terraces" 50 px wide centred in 40 px, cut at the card's left). Fix: declared with the other choice rows (wallSide's 2 columns,
+  12 px, field background, 44 px on a phone). Every choice row checked live, desktop + phone 390, on every tab: Roughing tool:toolDia, geometry:boundary,
+  geometry:boundaryTool, passes:roughLayout, passes:stepDepth, passes:stepDeviation; Contour tool:toolDia, geometry:walls, geometry:wallSide,
+  passes:stepDepth; the STL card's Up and units. Only roughLayout was clipped (desktop; at 390 the card is wider and it was not clipped, but on the 4-column grid).
+- 3 PATHS VIEW DARK STREAK: correct cuts, drawn as they are; nothing changed. They are the Contour's passes on a near-vertical wall of the synthetic part: its
+  ridge term `* (u > 0.15)` starts with a 5 mm step at x = 18 mm, which the 72-column mesh crosses in ONE cell (x 16.67-18.33 mm). Every 0.25 mm level's loop
+  runs along that wall: 18 passes (depth 6.75..11 mm) about 0.1 mm apart at y = -22 (.evidence/889 cliff-x.mjs), each its own level, none written twice
+  (0 identical elements of 286), plus the Roughing's terraces there. The SVG is byte-identical before / after this task (md5 6b445ec92a9e953b1674a1a4797abee4,
+  286 paths both).
+- Tests: NEW tests/relief-view-889-node.test.js (12 checks; fail-first: "0 lines for 218 passes"), tests/relief-view-889-live.test.js (desktop Insert STL +
+  phone 390 Open STL; fail-first: desktop Layout clipped, 0 pass lines), tests/fixtures/relief-terrain-889.js (the synthetic relief, generated in the test).
+- Behaviour changes: every stepped band pass (a Contour's levels, from levels or a slope; a slope Roughing cut as Inside / Outside terraces) now draws a thin
+  continuous line per pass in Prepare; Roughing's Layout buttons are field-coloured 12 px, 2 columns (44 px on a phone).
 ## TURN 884 — Keep ShaperHub up to date (Claude Opus subagent, branch agents/autosync-884)
 Owner turns 3591-3597 ("Ok"), advisor heads-up (targets per ticked set), owner ruling turns 3607-3608 (the file name follows the ticked operations).
 - THE SWITCH: the Sync dialog's "Keep ShaperHub up to date" (apps/shaper/index.html #sync-keep-updated, role=switch) + the line under it (#sync-keep-hint, param-hints.js

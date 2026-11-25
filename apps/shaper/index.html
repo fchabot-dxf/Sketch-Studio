@@ -523,9 +523,9 @@
     .cut-row[data-row="boundary"] .cut-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .cut-row[data-row="boundaryTool"] .cut-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .cut-row[data-row="walls"] .cut-presets { grid-template-columns: auto 1fr; }
-    .cut-row[data-row="wallSide"] .cut-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); } /* TASK S2: a Contour's Wall side (Inside, Outside) */
-    .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset, .cut-row[data-row="walls"] .cut-preset, .cut-row[data-row="wallSide"] .cut-preset { font-size: 12px; padding: 0 8px; white-space: nowrap; background: var(--sk-prep-field-bg); }
-    .cut-row[data-row="boundary"] .cut-preset.is-active, .cut-row[data-row="boundaryTool"] .cut-preset.is-active, .cut-row[data-row="walls"] .cut-preset.is-active, .cut-row[data-row="wallSide"] .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
+    .cut-row[data-row="wallSide"] .cut-presets, .cut-row[data-row="roughLayout"] .cut-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); } /* TASK S2: a Contour's Wall side (Inside, Outside); TASK 889: Roughing's Layout (Terraces, Nested), a choice row like them (undeclared, it fell on the 4-column bit grid: "Terraces" cut at the left) */
+    .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset, .cut-row[data-row="walls"] .cut-preset, .cut-row[data-row="wallSide"] .cut-preset, .cut-row[data-row="roughLayout"] .cut-preset { font-size: 12px; padding: 0 8px; white-space: nowrap; background: var(--sk-prep-field-bg); }
+    .cut-row[data-row="boundary"] .cut-preset.is-active, .cut-row[data-row="boundaryTool"] .cut-preset.is-active, .cut-row[data-row="walls"] .cut-preset.is-active, .cut-row[data-row="wallSide"] .cut-preset.is-active, .cut-row[data-row="roughLayout"] .cut-preset.is-active { background: var(--sk-prep-selected-fill); }
     .cut-preset.is-disabled { color: var(--sk-prep-disabled); cursor: not-allowed; }
     /* TASK S2: the OPEN operation's card: its header (its name and shapes; Duplicate), its Shapes (one row per shape with an X that takes it out; the list scrolls
        past 5 rows) and OK / Cancel; 44 px targets on a phone */
@@ -556,7 +556,7 @@
     .cut-boundary-pick[aria-pressed="true"] { color: var(--sk-prep-focus); }
     #prepare-canvas.is-picking { cursor: crosshair; }
     #prepare-canvas.is-adding { cursor: copy; } /* TASK S2: Add shapes mode (a click puts a shape in / takes it out) */
-    @media (max-width: 640px), (pointer: coarse) { .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset, .cut-row[data-row="walls"] .cut-preset, .cut-row[data-row="wallSide"] .cut-preset { height: 44px; } }
+    @media (max-width: 640px), (pointer: coarse) { .cut-row[data-row="boundary"] .cut-preset, .cut-row[data-row="boundaryTool"] .cut-preset, .cut-row[data-row="walls"] .cut-preset, .cut-row[data-row="wallSide"] .cut-preset, .cut-row[data-row="roughLayout"] .cut-preset { height: 44px; } }
     .cut-type-trigger, .cut-shape-trigger, .cut-clear-trigger, .cut-bit-trigger { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; background: var(--sk-prep-field-bg); border-radius: 6px; height: 34px; padding: 0 10px; color: var(--sk-prep-chip-text); font-size: 15px; font-weight: 600; cursor: pointer; }
     .cut-type-trigger.is-open, .cut-shape-trigger.is-open, .cut-clear-trigger.is-open, .cut-bit-trigger.is-open { height: 34px; box-shadow: inset 0 0 0 2px var(--sk-prep-focus); }
     .cut-type-cur { text-transform: lowercase; }

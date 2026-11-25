@@ -2,8 +2,8 @@
 // (owner turn 3703: "2 allow to choose"), on the Shaper node page (tests/helpers/node-app.js):
 //  1. T2: a Fusion selection (fusion-import.js, the `stock` option null) ensures ONE EMPTY Stock operation whose thickness is FROM THE PART ('model'): no number is
 //     written into the declared record; a thicker part added re-reads it; a TYPED Stock thickness survives an add, and the notice says the part is taller (the
-//     stl-import.js rule); a selection that replaces the design (no selection id) gets its own one Stock again. Open STL (the website) makes no Stock row and still
-//     sets the record (its 'part' option).
+//     stl-import.js rule); a selection that replaces the design (no selection id) gets its own one Stock again; the Fusion per-design project saved and opened again
+//     keeps it, resolved from the persisted part thickness. Open STL (the website) makes no Stock row and still sets the record (its 'part' option).
 //  2. The placement (the Stock card's "Sculpted parts sit on": Floor | Top, default Floor; cut-plan.js reliefDrop, the ONE place): a 20 mm relief in a 30 mm stock:
 //     Floor = the part's bottom on the stock's bottom: the Roughing runs 10 .. 30 mm, its first level (10 mm) clears the 10 mm of stock above the part's top, every
 //     other level is Top's 10 mm deeper; Top = the part's top at the stock's top: 1 .. 20 mm, the Shaper SVG byte for byte the one of today (the part in a 20 mm
@@ -26,6 +26,7 @@ import { getSelections } from '../apps/shaper/src/selection-list.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { applyPrepare } from '../apps/shaper/src/shaper-doc.js';
 import { hintLabel, hintText } from '../apps/shaper/src/param-hints.js';
+import { captureFusionProject, applyFusionProject } from '../apps/shaper/src/fusion-bridge.js';
 
 let checks = 0;
 const eq = (a, b, m) => { assert.deepEqual(a, b, m); checks++; };
@@ -75,6 +76,13 @@ try {
     eq(r5.message, 'Replaced with Body E: 1 region', '1: a selection with no id replaces the design');
     eq(stocks().map((o) => [o.geometry.length, o.settings.cutDepth]), [[0, 'model']], '1: the new design: its own ONE EMPTY Stock from the part');
     eq([resolveStock(st).board.thickness, getStock().thickness], [12, 25], '1: board 12 mm from the part; the record untouched');
+    // the Fusion per-design project (fusion-bridge.js): saved and opened again, the Stock is there, still from the part, resolved from the persisted thicknessMm
+    const project = JSON.parse(JSON.stringify(captureFusionProject()));
+    applyFusionProject(null, { controller: app.controller, prepare: app.prepare });
+    eq([stocks().length, resolveStock(st).board.thickness], [0, DEFAULT_STOCK.thickness], '1: (an empty design in between)');
+    applyFusionProject(project, { controller: app.controller, prepare: app.prepare, hasSelection: true });
+    eq(stocks().map((o) => [o.geometry.length, o.settings.cutDepth]), [[0, 'model']], '1: the project opened again: its ONE EMPTY Stock, from the part');
+    eq(resolveStock(st).board, { kind: 'bounds', key: null, thickness: 12, thicknessFrom: 'model' }, "1: resolved at once from the persisted part thickness (12 mm)");
     // the website: Open STL makes no Stock row and sets the record to the part's height (its own 'part' option, as before)
     fresh();
     const o = app.stl.openFile(FRUSTUM, 'frustum.stl');

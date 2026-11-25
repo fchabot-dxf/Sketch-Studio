@@ -18258,8 +18258,8 @@ advisor default Floor). Claude Opus subagent, branch agents/stockT2-898. apps/sh
   Depth is stored never depends on the stock at the time (an import files its regions before its part and its Stock exist).
 - What today did (origin/main): the part's top at the stock's top, always: the levels were read as imported (cut-plan.js:52 recordOf / :130 resolveEntry), a
   Roughing 'model' read the imported depth (:44 modelDepth). = Top now, byte for byte.
-- Tests: new tests/stock-placement-898-node.test.js (44 checks: T2 one EMPTY 'model' Stock, no number in the record, a thicker add re-read, a typed 40 survives an
-  add + the taller note, a replace's own Stock, Open STL unchanged; the declaration; a 20 mm frustum in 30 mm: Floor 10 .. 30 mm, the 10 mm level clears >= 400 mm²
+- Tests: new tests/stock-placement-898-node.test.js (47 checks: T2 one EMPTY 'model' Stock, no number in the record, a thicker add re-read, a typed 40 survives an
+  add + the taller note, a replace's own Stock, the Fusion project saved / opened again keeps it (12 mm from the persisted thicknessMm), Open STL unchanged; the declaration; a 20 mm frustum in 30 mm: Floor 10 .. 30 mm, the 10 mm level clears >= 400 mm²
   over the 20 x 20 top, every other level Top's + 10 mm with the same paths, Top's SVG = the 20 mm stock's byte for byte, the Contour follows, a Pocket on a drawn
   square and a Pocket on the relief's region ignore it, stock == part: Floor and Top byte-identical); new tests/stock-placement-898-live.test.js (the built Fusion
   panel, desktop 1280 x 800 + phone 390 x 844 touch). Updated for the asked behaviour: stock-loop(.test / -node) and cut-offset-types-node (the Stock's second row),

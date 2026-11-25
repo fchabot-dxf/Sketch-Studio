@@ -64,6 +64,14 @@ function startGate(args, extra) {
   return { child, done, seen, out: () => out };
 }
 const killTree = (pid) => spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+// TASK 892: a gate WAITING for the lock is a Git Bash in the library's poll (`sleep $CPU_LOCK_POLL_S`, 30 s): that sleep is an MSYS child no Windows process tree
+// links to, so taskkill /T leaves it, and it holds the gate's output pipe open until it ends (the test waited 30 s there: 50 s in a quiet gate, over the 90 s limit
+// on a loaded PC). killWaitingTake kills, by MSYS process group, the take whose command line names this test's root (cpu_lock_take ... gate:<tier> <root>; the
+// scanning bash's own group is skipped) and prints each group it killed. Builtins only (read, kill): a fork in Git Bash costs tens of ms, more on a loaded PC.
+const gitBash = path.resolve(spawnSync('git', ['--exec-path'], { encoding: 'utf8', windowsHide: true }).stdout.trim(), '..', '..', '..', 'bin', 'bash.exe');
+const KILL_TAKE = 'read -r me < /proc/$$/pgid; for p in /proc/[0-9]*; do { read -r g < "$p/pgid"; } 2>/dev/null || continue; [ "$g" = "$me" ] && continue; c=; '
+  + '{ while IFS= read -r -d "" a; do c+="$a "; done < "$p/cmdline"; } 2>/dev/null; case "$c" in *cpu_lock_take*"$1"*) kill -9 -- "-$g" && echo "killed $g";; esac; done';
+const killWaitingTake = () => spawnSync(gitBash, ['-c', KILL_TAKE, 'bash', root.split(path.sep).join('/')], { encoding: 'utf8', windowsHide: true });
 const deadPid = () => spawnSync(process.execPath, ['-e', '0']).pid;
 
 try {
@@ -83,15 +91,16 @@ try {
   // B. quick while another project's heavy run holds the MAIN lane (a live pid: this test's): quick does not wait for it,
   //    defers the exclusive test (it asks the library's status before each one), exits 0, leaves that lock alone.
   fakeHolder(process.pid);
-  const t0 = Date.now();
   g = startGate(['--tier', 'quick']);
   code = await g.done;
   assert.strictEqual(code, 0, g.out());
   assert.match(g.out(), /DEFERRED tests\/timing\.test\.js \(the shared CPU lock is held: project=bspline what=fake heavy run .*; the merge \/ full tier runs it\)/);
   assert.match(g.out(), /^DEFERRED 1$/m);
   assert.match(g.out(), /GATE tier=quick jobs=\S+ files=1 pass=1 fail=0 deferred=1 elapsed=/);
+  // quick did not wait: it ran in the side lane (the library's lane that never waits for the main holder; free in this test's own lock root) and finished while
+  // the main lane is still held (below). TASK 892: shown by the library's own lines, not by the elapsed time (on a loaded PC it ran past the old 30 s bound)
+  assert.match(g.out(), /cpu_lock: short job running beside the main lane \(sketch: gate:quick /);
   assert.doesNotMatch(g.out(), /EXCLUSIVE|cpu_lock: waiting/);
-  assert.ok(Date.now() - t0 < 30000, 'quick did not wait');
   assert.match(readHolder(lockDir), new RegExp(`^pid=${process.pid}$`, 'm'), "the other project's lock is untouched");
   fs.rmSync(lockDir, { recursive: true });
 
@@ -118,6 +127,8 @@ try {
   assert.match(seenHolder(), new RegExp(`pid=${a.child.pid} `));
   const b = startGate(['--tier', 'live']);
   await b.seen(/cpu_lock: waiting for sketch \(gate:live .*, eta ~\d+min\)/);
+  const killed = killWaitingTake();
+  assert.match(killed.stdout, /^killed \d+\s*$/, `the waiting gate's take (one MSYS process group) is killed: ${killed.stdout}${killed.stderr}`);
   killTree(b.child.pid);
   await b.done;
   assert.match(readHolder(lockDir), new RegExp(`^pid=${a.child.pid}$`, 'm'), 'the waiting gate did not take the lock');

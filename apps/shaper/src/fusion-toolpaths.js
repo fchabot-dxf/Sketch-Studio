@@ -14,13 +14,15 @@
 //   - `frame` is the selection's 3D frame from `selection_data.frame` (`{ units: 'mm', yAxis: 'up', originMm, uAxis, vAxis,
 //     normal, topHeightMm }`), where `originMm` lies on the part's top plane (`z = 0` mm) and each path's `z` is the
 //     cut depth in mm from the part's top (`z >= 0`, going into the part along `-normal`).
+//   - TASK 898: the derived depths are from the STOCK's top; a sculpted part sitting on the Floor of a thicker stock (cut-plan.js reliefDrop) has its top that much
+//     lower, so its paths' z = the derived depth minus it (from the PART's top, the frame's z = 0; the levels that clear the stock above the part: z <= 0).
 //   - TASK 891 (add-in SA-36): a region may carry its OWN frame (a body of a several-body selection: each body is read in its own frame, its own top =
 //     depth 0); a path is in its region's frame, else its selection's, and carries it as `frame` when that is not the message's (`frameByKeyMap`).
 //   - One decimation tolerance (`TOOLPATH_DECIMATE_TOL_MM = 0.05` mm) and one debounce (`TOOLPATHS_DEBOUNCE_MS = 300` ms)
 //     are declared once here.
 
 import { simplifyPath, POCKET_CLEARING, clearingPattern } from '#core/pocket-clearing.js';
-import { planMemberItems, pathsCtx, pathsInputOf, pathsSigOf } from './cut-plan.js';
+import { planMemberItems, pathsCtx, pathsInputOf, pathsSigOf, reliefDrop } from './cut-plan.js'; // TASK 898: reliefDrop (a sculpted part's top below the stock's)
 import { lookup as lookupPaths, resultOf, isOutOfDate, staleOf, isGenerating } from './op-paths.js';
 import { STOCK_TYPE_ID } from './shaper.js';
 import { FUSION_ACTIONS } from './fusion-bridge.js';
@@ -203,6 +205,7 @@ export function buildToolpathsPayload({
   derivedOf,
   selections = [],
   tolMm = TOOLPATH_DECIMATE_TOL_MM,
+  partTopOf = () => 0, // TASK 898: (item) -> the depth of its part's top below the stock's top (base mm; the sync passes cut-plan.js reliefDrop)
 }) {
   const { topFrame, byKey } = frameByKeyMap(selections);
   const topFrameJson = JSON.stringify(topFrame);
@@ -217,10 +220,11 @@ export function buildToolpathsPayload({
     const itemFrame = byKey.get(it.key);
     const frameOverride = itemFrame && JSON.stringify(itemFrame) !== topFrameJson ? itemFrame : null;
     const toolDia = pathToolDia(derived.rec, rec);
+    const partTop = partTopOf(it) || 0;
 
     for (const fp of derived.footprints) {
       if (!fp) continue;
-      const z = pathDepthMm(fp, derived.rec);
+      const z = partTop ? rCoord(pathDepthMm(fp, derived.rec) - partTop) : pathDepthMm(fp, derived.rec); // TASK 898: from the part's top
       const clearing = pathClearing(rec, fp);
 
       if (fp.clearing && fp.clearing.role === 'start' && fp.clearing.point) {
@@ -358,6 +362,7 @@ export function createFusionToolpathsSync({
       derivedOf: (it) => derivedByItem.get(it.id) || null,
       selections: getSelections(),
       tolMm,
+      partTopOf: (it) => reliefDrop(it.rec.cutType, it.key), // TASK 898
     });
     return { pending: false, frame, paths };
   }

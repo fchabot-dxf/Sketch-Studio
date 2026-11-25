@@ -18,7 +18,7 @@ import { importFusionSelection } from '../apps/shaper/src/fusion-import.js';
 import { getSelections } from '../apps/shaper/src/selection-list.js';
 import { clearSelections } from '../apps/shaper/src/selection-edit.js';
 import { storeOps } from '../apps/shaper/src/operations-store.js';
-import { planEntries } from '../apps/shaper/src/cut-plan.js';
+import { planEntries, reliefDrop } from '../apps/shaper/src/cut-plan.js';
 import { roughingWorkGrow } from '#core/stepped-cut.js';
 import { setPathsPort, localPort } from '../apps/shaper/src/op-paths.js';
 
@@ -55,7 +55,8 @@ async function run(payload) {
     const msg = sent.filter((s) => s.action === FUSION_ACTIONS.TOOLPATHS).at(-1);
     ok(msg && msg.payload.paths.length > 0, 'a toolpaths message with paths was sent');
     const roughRec = (planEntries().find((e) => e.rec.cutType === 'roughing') || {}).rec || null;
-    const out = { msg: msg.payload, entry: getSelections().find((e) => e.id === payload.selectionId), ops: storeOps().map((o) => ({ id: o.id, type: o.type })), roughRec };
+    const roughKey = (planEntries().find((e) => e.rec.cutType === 'roughing') || {}).planKey || null;
+    const out = { msg: msg.payload, entry: getSelections().find((e) => e.id === payload.selectionId), ops: storeOps().map((o) => ({ id: o.id, type: o.type })), roughRec, drop: roughKey ? reliefDrop('roughing', roughKey) : 0 };
     clearSelections(app.controller, { prepare: app.prepare }); // the list is module state: the next run starts empty
     return out;
   } finally { await app.close(); }
@@ -63,7 +64,10 @@ async function run(payload) {
 
 // ── 1-3. the two-body payload ──
 {
-  const { msg, entry, ops, roughRec } = await run(PAYLOAD);
+  const { msg, entry, ops, roughRec, drop } = await run(PAYLOAD);
+  // TASK 898: the payload says no stock thickness (several bodies), so the board is the declared 19.05 mm: the relief (12 mm) sits on its Floor (the default), its
+  // top 7.05 mm below the stock's top; its first Roughing level clears the stock above it (a path above the body, by at most that)
+  ok(Math.abs(drop - (19.05 - 11.999998)) < 1e-9, `898: the relief's top ${drop} mm below the stock's top`);
   eq(Object.values(entry.frames || {}).map((f) => f.originMm), [RELIEF.frame.originMm, OUTLINE.frame.originMm], '1. the entry keeps each region\'s frame by plan key');
   eq(msg.frame, PAYLOAD.frame, '2. the message frame is the selection\'s');
   const rough = ops.find((o) => o.type === 'roughing'), outside = ops.find((o) => o.type === 'exterior');
@@ -78,11 +82,12 @@ async function run(payload) {
   const off = [];
   for (const [paths, name] of [[roughPaths, 'Freeform'], [outPaths, 'Box']]) {
     const box = FIXTURE.bodiesMm[name], tol = [across[name] + 5e-4, across[name] + 5e-4, 1e-4]; // + the message's 3-decimal rounding
+    const above = name === 'Freeform' ? drop : 0; // TASK 898: the stock above the relief (its Floor), cleared by its first level
     for (const p of paths) {
       const frame = p.frame || msg.frame;
       for (const pt of p.points) {
         const w = toFusion(frame, pt, p.z);
-        if (w.some((v, i) => v < box[i][0] - tol[i] || v > box[i][1] + tol[i])) { off.push({ name, op: p.op, z: p.z, w }); break; }
+        if (w.some((v, i) => v < box[i][0] - tol[i] || v > box[i][1] + tol[i] + (i === 2 ? above : 0))) { off.push({ name, op: p.op, z: p.z, w }); break; }
       }
     }
   }

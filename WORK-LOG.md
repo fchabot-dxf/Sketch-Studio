@@ -17967,3 +17967,41 @@ A Fusion BODY's RELIEF from the add-in (shaper-addin SA-35: ONE region in sliceS
 - tests/fixtures/fusion-body-relief-887.json: the add-in's own payload (fusion_selection.extract_selection on branch sa-35-relief-orientation, a faceted dome R 12 mm: 49 levels, stock 12 mm, summary 'Body1 · relief').
 - NEW tests/fusion-body-relief-887-node.test.js (21 checks): import -> ONE Roughing with the 49 levels, stock 12; a Contour added with the operations toolbar -> Roughing then Contour; the Shaper SVG has pockets and outside/inside cuts; planReliefItems carve; no STL source; the selection row kind 'body'; Select in Fusion offered. The SAME region in sliceStl's envelope (kind 'stl', no selectionId / summary / frame) -> the same operations and the SAME SVG byte for byte; Select in Fusion not offered for the STL.
 - NEW tests/fusion-body-relief-887-live.test.js (the built Fusion panel, 881's harness): pong -> Add selection -> selection_data -> ONE Roughing (49 levels), notice "Added Body1: 1 region", no STL card -> Contour via the toolbar, OK -> paths generated -> Export: the 3D board built (43,905 triangles, 1,407 levels) -> Generate Shaper SVG: 11 pocket paths, 48 contour cuts. Screenshots .evidence/887/ (local): prepare-body-relief.png, export-3d-body-relief.png, export-3d-body-relief-zoom.png.
+## TURN 890 (DESIGN DOC: one shared STOCK model for the website and the Fusion panel)
+- Wrote docs/STOCK-MODEL-890.md (no code). It covers: the inventory of every stock reader and writer (website, Fusion panel, the add-in's `stock.thicknessMm`, STL, 3D / sim, the SVG page, the stock card, the task 864 Stock tokens), each with file:line; the reviewer's starting point checked line by line (all true; setStockField's one caller is stock-card.js:35, and a stored file can still restore width / height); the model; setups; UI; a T1-T9 task split with tests; 3 owner questions.
+- Decision: the Stock IS the Stock operation, ONE per setup. Empty geometry = the setup's drawingExtent + the declared 6 in margin; one shape = that profile. Its thickness is its `cutDepth`: typed, `'model'` (from the part = the largest `thicknessMm` of the setup's selection entries, re-read in `recordOf`, as Depth 'model' is) or `'unset'` (the declared record). Not stored: `source`, 'fusion-sketch', shapeKey / tokens (they would be second truths). `resolveStock` is EXTENDED (`board` replaces `fromLoop`). No task touches packages/core except the optional width / height removal (T9).
+- Findings (reported, not fixed): F1 an EMPTY Stock op's thickness is never read (cut-plan.js:1091 -> stock.js:36); F2 `reviewSig` carries getStock(), not the resolved stock (shaper-app.js:791); F3 a Stock picked on an imported region stores a number, not 'model' (cut-plan.js:57); F4 the selection entry's `thicknessMm` is persisted but never read; F5 the add-in sends `stock` only for exactly ONE body (shaper-addin fusion_selection.py:1387-1388).
+## TURN 884 — Keep ShaperHub up to date (Claude Opus subagent, branch agents/autosync-884)
+Owner turns 3591-3597 ("Ok"), advisor heads-up (targets per ticked set), owner ruling turns 3607-3608 (the file name follows the ticked operations).
+- THE SWITCH: the Sync dialog's "Keep ShaperHub up to date" (apps/shaper/index.html #sync-keep-updated, role=switch) + the line under it (#sync-keep-hint, param-hints.js
+  keepHubUpToDate): "Each Generate replaces <name> in <place> on ShaperHub." / "Each Generate replaces the file last sent with the operations ticked now: send it once first." /
+  disabled with "Needs a sign-in for this session." Off by default. A DEVICE setting declared once in apps/shaper/src/shaperhub-target.js KEEP_HUB_KEY
+  ('shaper-keep-hub-up-to-date', this browser's localStorage, like Shaper's other device settings shaper-mode / shaper-review-view / shaper-review-look). First put
+  in #core/settings-manager.js, moved out: a packages/core change for a Shaper-only switch (AGENTS shared-file rule) and SHAPER_TOOL_TABLE there is per USER (synced).
+- "Remember login" does not exist since TASK 758 (the app keeps no login; owner turn 2260). So "a login is remembered" = signed in THIS session: a session token AND the
+  login still in the sign-in fields (the fields keep it until the page goes; a replace always carries it, shaper-cloud.js THE REPLACE RULE). A reload, Switch account
+  or a refused login ends it. NOT reintroducing a stored login (would reverse 758).
+- THE TARGETS (shaperhub-target.js): per TICKED-OPERATION SET (export-payload.js tickedSetKey: 'all' when every operation but the Stock is ticked, else the ticked ids
+  sorted), the file + folder of that set's last successful send (targetOfSend: 'sent' / 'replaced'; Keep both = the name the server answered). Kept with the design,
+  the same way in BOTH serialisers (no shared field list exists): shaper-doc.js captureShaperDoc / applyShaperDoc and fusion-bridge.js captureFusionProject /
+  applyFusionProject, field `hubTargets`, written only once something was sent (a design never sent: the same bytes as before). Fusion: notifyProjectChanged after a send.
+- GENERATE (shaper-app.js generateShaperSvg): switch on + a target for the CURRENT set + signed in -> the same SVG REPLACES that target through callShaperHub (the ONE
+  request path; no second fetch), mode UPLOAD_MODES.REPLACE; the status line: "Exported N cuts → <file>. ✓ Replaced <name> in <place>." (sentLine, the dialog's words);
+  a refusal: uploadErrorLines (the dialog's error lines, LOGIN_HINT under a refused password; now shared by the dialog's send). createReplaceQueue: one replace at a
+  time, at most ONE waiting per file (the latest svg). Switch on + target + no sign-in: nothing sent, the line adds "ShaperHub not updated: sign in with Sync to
+  ShaperHub to keep it up to date." No target for the set: nothing (a set never sent stays local until a Send). Nothing else triggers it.
+- FILE NAME (export-payload.js exportFileName, the one rule; Generate, Download, the dialog, the replace): everything ticked = the design's name as before; a subset =
+  "<design> - <type label> <number> - ..." (cut type menuLabel; number = the operation's place in the Operations list = storeOps order, the Stock counted, as op-list.js
+  numbers i + 1; the Stock is never named). Joined by " - " (owner turn 3611 "Dash": a ", " became "_ " through shaperFileName): "bromont - Outside 1 - Outside 2.svg". Reorder / delete before it
+  changes the number (the target key is the ids, so the set keeps its target). The dialog's typed-name memory is now per design AND ticked set.
+- Tests: tests/shaperhub-keep-884-node.test.js (73 checks, fail-first: ERR_MODULE_NOT_FOUND before), tests/shaperhub-keep-884-live.test.js (website desktop + phone 390),
+  tests/shaperhub-keep-884-fusion-live.test.js (the 881 panel build + a fake /api/shaper-upload route on its server).
+- Evidence (.evidence/884, local): desktop-dialog-signed-out da08ce0e955eb8dbb8f61078dfb427fe, desktop-dialog-switch-on 715faabd2ad5dd1685eb7dc58077531e,
+  desktop-dialog-partial-never-sent cdc091a46708c5df8f9fac4eea153e10, desktop-dialog-after-reload 6d88041ecf0b98f471f672ef4c111bba, desktop-status-replaced
+  f7722479b8ba937a84a9ebe46d560168, phone-dialog-signed-out 5c2ee451d965cc0a9b2f66f89ac02125, phone-dialog-switch-on 4a37bdb372bdd060b8c13b38f02916d8,
+  phone-status-replaced a904f2e4c184154af111ea3622885c27, fusion-panel-dialog-switch-on d9b50795570e718993fcd78046b8e15b, fusion-panel-status-replaced 39c1ecc237b7fb633063c45ef454ed4e.
+- Open: the real add-in's server has no /api/shaper-upload yet (881 R1): the panel's Send / replace need that relay to work in Fusion.
+- Gate (worker): gate:quick GATE tier=quick files=592 pass=592 fail=0; shell-smoke 13/13. The merge plan picks 345 of 346 live tests (shaper-doc.js / export-payload.js
+  reach nearly every test's import graph); run one at a time: the 3 new ones + the 41 of the plan that touch Generate / Sync / the export / ticks / sidecars / Fusion
+  projects / saving: all exit 0 (save-as-local-759-live failed once, "it shows the file's one line 2 !== 1" in SketchStudio, then passed on its rerun). The rest is
+  left to the advisor's merge gate.

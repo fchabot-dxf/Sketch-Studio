@@ -12,6 +12,9 @@
 //     STL selection, opened).
 //   • TASK 807: a document entry says `relief: true` (the part is the STL's relief); one saved before 807 (its design was the per-feature import) opens with the
 //     source marked `old`, and the importer slices it again as a relief (stl-import.js reimportOld).
+//   • TASK 897: a source read from an OBJ or a 3MF says its `format` (mesh-formats.js MESH_FORMATS id: the card names it); an STL's says none (a source and a
+//     document entry without one are an STL: an STL design's bytes are unchanged). The mesh is kept as triangles, whatever the file was, so a reopened design is
+//     sliced again from them, never from the file's own format. (This module is the Fusion panel's too: it keeps the id as given and imports no mesh reader.)
 import { meshToBase64, meshFromBase64, STL_UP_SIDES, STL_UNITS, orientationOf, rotationOk } from '#core/stl-slice.js';
 import { dbg } from '#core/debug.js';
 
@@ -37,7 +40,8 @@ function sane(s) {
   // TASK 808: the orientation is ONE stored rotation (3x3, 9 numbers); `up` is its Up side when it is a preset (null for a clicked floor face), `floor` the picked normal
   const o = orientationOf(s);
   return { part: typeof s.part === 'string' && s.part ? s.part : null, name: String(s.name), up: o.up, rotation: o.rotation, floor: Array.isArray(s.floor) ? [...s.floor] : null,
-    unit: s.unit, triangles: s.triangles, sizeMm: { ...s.sizeMm }, key: s.key, ...(s.opened ? { opened: true } : {}), ...(s.old ? { old: true } : {}) };
+    unit: s.unit, triangles: s.triangles, sizeMm: { ...s.sizeMm }, key: s.key, ...(s.opened ? { opened: true } : {}), ...(s.old ? { old: true } : {}),
+    ...(typeof s.format === 'string' && s.format && s.format !== 'stl' ? { format: s.format } : {}) }; // TASK 897: an OBJ / 3MF says so
 }
 
 /** Every source (copies), in the order the parts came. */
@@ -85,7 +89,7 @@ export function setCurrentStl(part) {
 export const captureStl = () => getStlSources();
 export const applyStl = (list) => setStlSources(list || []);
 
-/** The document's part: [{ part, name, up, unit, triangles, sizeMm, mesh, relief, opened? }] or undefined (no STL: nothing is written). */
+/** The document's part: [{ part, name, up, unit, triangles, sizeMm, format?, mesh, relief, opened? }] or undefined (no STL: nothing is written). */
 export function captureStlDoc() {
   if (!SOURCES.length) return undefined;
   return SOURCES.map((s) => {
@@ -108,7 +112,7 @@ function readEntry(d) {
     return null;
   }
   return { part: d.part, name: d.name, up: d.up, rotation: d.rotation, floor: d.floor, unit: d.unit, triangles: tris.length / 9, sizeMm: d.sizeMm || { x: 0, y: 0, z: 0 },
-    key: rememberMesh(tris, d.mesh), opened: d.opened === true, old: d.relief !== true };
+    key: rememberMesh(tris, d.mesh), opened: d.opened === true, old: d.relief !== true, format: d.format };
 }
 /**
  * Restore the document's part (missing: no STL source; an entry that cannot be read is left out). `selections` = the document's selection list (selection-list.js).

@@ -35,6 +35,14 @@ SOFTWARE.
 ## three.js
 
 `packages/ui/vendor/three/` : https://threejs.org : MIT licence. Its licence file is kept beside it: `packages/ui/vendor/three/LICENSE`.
+Besides the library and OrbitControls, Shaper's website carries two of its example loaders (three@0.170.0 `examples/jsm/loaders/OBJLoader.js` and
+`3MFLoader.js`, unmodified, in `addons/loaders/`: task 897, Open / Insert 3D mesh), under the same licence.
+
+## fflate
+
+`packages/ui/vendor/three/addons/libs/fflate.module.js` : fflate 0.8.2 by Arjun Barrett, https://github.com/101arrowz/fflate : MIT licence, as three@0.170.0
+ships it (`examples/jsm/libs/fflate.module.js`, unmodified; its header names the licence: https://github.com/101arrowz/fflate/blob/master/LICENSE). The 3MF
+loader unzips a 3MF package with it.
 
 ## earcut
 

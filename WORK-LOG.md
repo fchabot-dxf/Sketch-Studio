@@ -18141,3 +18141,8 @@ Tests + the gate only (the causes task 892 diagnosed): no app code, FILE_LIMIT_M
   `all checks passed`; import-polish-fit-a 3x `570a: ok`; the other importViaMenu callers once each ok (import-polish-fit-b, import-polish-undo-node,
   penplotter-cosmetics, sketch-import, task-609-live, trace-projects); gate-shared-lock / gate-profile-sweep / gate-pid-match / gate-url-closure /
   gate-start-retry-893 ok. gate:quick `GATE tier=quick jobs=quick=22 files=586 pass=586 fail=0 deferred=11 elapsed=119s` (the advisor's merge gate held the main lane).
+
+## TURN 895 — opselect-806-live waits for its click targets to settle (Claude Sonnet subagent, branch agents/opselectflake-895)
+Test only. Cause: goStage's phone path waited only for the drawer entry's left >= 0 (the slide-in is still running then) and clicked the chevron / header tab with no settle at all; a click on a rect measured mid-slide misses under load, the stage never switches, `review stage visible` times out. Fix: goStage aims every click (chevron, drawer entry, header tab) at settledCentre (tests/helpers/settled-centre.js, task 893); assertions untouched.
+Same pattern (copy of this goStage, same cause, NOT fixed here): tests/selection-mirror-795c-live.test.js:156, tests/stockkeep-864-live.test.js:56.
+Runs: 5x alone ok; 3x beside gate:quick ok; gate:quick `GATE tier=quick jobs=quick=22 files=610 pass=610 fail=0 deferred=11 elapsed=110s`.

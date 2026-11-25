@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from './helpers/cdp-browser.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { settledCentre } from './helpers/settled-centre.js';
 
 const EVIDENCE_DIR = path.resolve('.evidence/806');
 fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -93,10 +94,14 @@ async function run({ width, height, tag }) {
   };
   const goStage = async (tab) => {
     if (width <= 640) {
-      if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) await click('.sk-sidebar-chevron');
-      await waitFor(`(() => { const e = document.querySelector('.sk-sidebar-stage[data-tab="${tab}"]'); return !!e && e.getBoundingClientRect().left >= 0; })()`, 'sidebar drawer settled');
+      if (!await evalJs(`document.querySelector('.sk-sidebar').classList.contains('open')`)) {
+        await settledCentre(cdp, '.sk-sidebar-chevron', 'sidebar chevron');
+        await click('.sk-sidebar-chevron');
+      }
+      await settledCentre(cdp, `.sk-sidebar-stage[data-tab="${tab}"]`, `${tab} drawer entry`);
       await click(`.sk-sidebar-stage[data-tab="${tab}"]`);
     } else {
+      await settledCentre(cdp, `.sk-header-tab[data-tab="${tab}"]`, `${tab} header tab`);
       await click(`.sk-header-tab[data-tab="${tab}"]`);
     }
     await waitFor(`!document.getElementById('view-${tab}').hidden`, `${tab} stage visible`);

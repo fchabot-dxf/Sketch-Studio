@@ -37,7 +37,7 @@ import { createStockCard } from './stock-card.js'; // TASK 583: the Review card'
 import { mountDisclosure, CARET_SVG } from './disclosure.js'; // TASK 880: the Export view's Cuts card folds as the Operations sheet does
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { followDesign, planEntries, planReliefItems, planNotes } from './cut-plan.js'; // SP1j-4: the shared cut-plan store; TASK 839: planNotes = the Review's info lines (stepped, hold, clearing, levels)
-import { exportFileName, exportTickLine, exportWhenGenerated, whenGenerated } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name; TASK 817: made in the background
+import { exportFileName, exportTickLine, exportWhenGenerated, whenGenerated, tickedSetKey } from './export-payload.js';  // SP1j / TASK 718: the ONE exporter call (the download and the 2D preview copy); TASK 743: the preview copy + its operations; TASK 767: the file's name; TASK 817: made in the background
 import { setPathsPort, workerPort } from './op-paths.js'; // TASK 817: the operations' paths are generated in the background (paths-worker.js)
 import { storeSignature } from './operations-store.js'; // TASK 743 / S1: the operations store (the 2D view and the 3D Review rebuild when it changes)
 import { describeOperations } from './operations.js'; // TASK 798: the Export step's line about unticked operations
@@ -45,6 +45,8 @@ import { mountExportPreview } from './export-preview.js'; // TASK 718: the Expor
 import { mountExportSim } from './export-sim.js'; // TASK 801: the Export step's simulation (the Simulate panel over the view), one timeline for the three views
 import { SIM } from './cut-timeline.js'; // TASK 801: its one line under the controls
 import { track } from '#ui/analytics.js'; // TASK 738: the ShaperHub upload, a Fusion selection received
+import { UPLOAD_MODES } from '#core/shaper-cloud.js'; // TASK 884: the replace's mode (the request contract)
+import { keepHubOn, setKeepHub, getHubTarget, setHubTarget, targetOfSend, autoSendDecision, keepSwitchView, createReplaceQueue, folderPlace } from './shaperhub-target.js'; // TASK 884: Keep ShaperHub up to date
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
@@ -193,6 +195,8 @@ export function startShaperApp({
   }
   let generateCall = 0; // TASK S3: a press waiting for out-of-date operations is replaced by a later press (one file after the Recalculate)
   // Generate Shaper SVG (TASK 880: the Export stage's header action): the file downloads, the Export view's status line says what was written
+  // TASK 884: with "Keep ShaperHub up to date" on, a target (the design was sent once) and a sign-in this session, the same file then REPLACES the target on
+  // ShaperHub (hubQueue: one at a time, the latest waiting); its result is the end of the status line (a span of its own). Nothing else sends it.
   async function generateShaperSvg() {
     const status = document.getElementById('simexport-status');
     const call = ++generateCall;
@@ -205,10 +209,21 @@ export function startShaperApp({
     // built from nodes (TASK 767): the file name is the design's, text only
     const file = document.createElement('strong');
     file.textContent = name;
-    const hub = document.createElement('a');
-    Object.assign(hub, { href: SHAPERHUB_FILES_URL, target: '_blank', rel: 'noopener noreferrer', textContent: 'ShaperHub (My Files)' });
-    hub.style.cssText = 'color:var(--sk-selection,#4c9aff); text-decoration:underline;';
-    status.replaceChildren(`Exported ${n} cut${n === 1 ? '' : 's'} → `, file, '. Drop it into ', hub, ' to sync with Origin.');
+    const setKey = tickedSetKey(); // the ticked operations this file holds: only THEIR target is replaced (a set never sent stays local until a Send)
+    const target = getHubTarget(setKey);
+    const decision = autoSendDecision({ on: keepHub(), target, signedIn: signedIn() });
+    if (decision === 'send') {
+      const line = document.createElement('span');
+      status.replaceChildren(`Exported ${n} cut${n === 1 ? '' : 's'} → `, file, '. ', line);
+      sayIn(line)(`Replacing ${target.filename} in ${folderPlace(target.remotePath)}...`);
+      hubQueue.push(setKey, { svg: payload.svg, target, line });
+    } else {
+      const hub = document.createElement('a');
+      Object.assign(hub, { href: SHAPERHUB_FILES_URL, target: '_blank', rel: 'noopener noreferrer', textContent: 'ShaperHub (My Files)' });
+      hub.style.cssText = 'color:var(--sk-selection,#4c9aff); text-decoration:underline;';
+      status.replaceChildren(`Exported ${n} cut${n === 1 ? '' : 's'} → `, file, '. Drop it into ', hub, ' to sync with Origin.');
+      if (decision === 'no-login') status.append(` ${hintText('keepHubSignIn')}`); // the switch is on but this session has no sign-in: the file there is not the new one
+    }
     if (payload.warning) status.append(` ${payload.warning}`); // TASK 803
   }
 
@@ -240,6 +255,9 @@ export function startShaperApp({
   const syncReplaceBtn = document.getElementById('sync-btn-replace');
   const syncKeepBothBtn = document.getElementById('sync-btn-keep-both');
   const syncExistsCancelBtn = document.getElementById('sync-btn-exists-cancel');
+  // TASK 884: "Keep ShaperHub up to date" (index.html #sync-keep-updated) and the line under it
+  const syncKeep = document.getElementById('sync-keep-updated');
+  const syncKeepHint = document.getElementById('sync-keep-hint');
 
 
   const LOGIN_HINT = 'Check the password: your browser may have filled in a saved one.'; // TASK 767: under Shaper's own words when it refuses the sign-in
@@ -270,7 +288,25 @@ export function startShaperApp({
     if (syncRefreshBtn) syncRefreshBtn.hidden = !authed;
     if (syncNewFolderBtn) syncNewFolderBtn.hidden = !authed;
     if (!authed && syncMkdirRow) syncMkdirRow.hidden = true;
+    showKeepSwitch(); // TASK 884: it can be changed only while signed in
   }
+
+  // TASK 884: signed in THIS session = a session token and the login still in the sign-in form (the app keeps no login, TASK 758: the fields hold it until the
+  // page goes; a replace always carries it, shaper-cloud.js THE REPLACE RULE). A reload, Switch account or a refused login ends it.
+  // the device setting (shaperhub-target.js KEEP_HUB_KEY, localStorage like MODE_KEY / REVIEW_VIEW_KEY): storage blocked = off
+  const keepHub = () => { try { return keepHubOn(localStorage); } catch (err) { dbg.warn('shaper', 'KEEP_HUB_KEY read failed', err && err.message); return false; } };
+  const signedIn = () => !!sessionToken && !!(syncEmail && syncEmail.value.trim()) && !!(syncPassword && syncPassword.value);
+  function showKeepSwitch() {
+    if (!syncKeep) return;
+    const v = keepSwitchView({ on: keepHub(), signedIn: signedIn(), target: getHubTarget(tickedSetKey()) }); // the target of the operations ticked now
+    syncKeep.checked = v.checked;
+    syncKeep.disabled = v.disabled;
+    syncKeepHint.textContent = v.hint;
+  }
+  if (syncKeep) syncKeep.addEventListener('change', () => {
+    try { setKeepHub(localStorage, syncKeep.checked); } catch (err) { dbg.warn('shaper', 'KEEP_HUB_KEY write failed', err && err.message); } // shown as it is stored (below)
+    showKeepSwitch();
+  });
 
   function clearSession() {
     sessionToken = null;
@@ -292,8 +328,6 @@ export function startShaperApp({
     pendingQuestion = on ? { path } : null;
     applyNavLock();
   }
-
-  const folderPlace = (path) => (!path || path === '/' ? 'My Files' : `My Files${path.slice(0, -1)}`);
 
   function renderBreadcrumbs() {
     if (!syncBreadcrumbs) return;
@@ -415,6 +449,30 @@ export function startShaperApp({
     }
     return { res, data, sentPassword: !!pass };
   }
+  // the lines of a refused upload (the dialog's error, and TASK 884's replace on Generate): Shaper's words, and the LOGIN_HINT under a refused password
+  const uploadErrorLines = (res, data, sentPassword) => [`Error: ${data.error || `Upload failed with status ${res.status}`}`, ...(data.kind === 'login' && sentPassword ? [LOGIN_HINT] : [])]; // TASK 774: an expired session is not a wrong password
+
+  // TASK 884: the replace of the design's target after a Generate (shaperhub-target.js), through the ONE request path; its result in its own part of the Export
+  // view's status line (`line`): the dialog's own words ("Replaced <name> in <place>", sentLine), or its error lines. One at a time: hubQueue.
+  async function replaceHubTarget({ svg, target, line }) {
+    let res, data, sentPassword;
+    try {
+      ({ res, data, sentPassword } = await callShaperHub({ filename: target.filename, svg, mode: UPLOAD_MODES.REPLACE, remotePath: target.remotePath }));
+    } catch (err) {
+      line.className = 'is-error';
+      line.textContent = `Could not reach the upload service. Check your connection and try again. (${err.message})`;
+      return;
+    }
+    if (!res.ok || data.error) {
+      line.className = 'is-error';
+      line.textContent = uploadErrorLines(res, data, sentPassword).join(' ');
+      return;
+    }
+    track('export:shaperhub'); // TASK 738: an upload to ShaperHub, as the dialog's
+    line.className = '';
+    line.textContent = `✓ ${sentLine(data)}.`;
+  }
+  const hubQueue = createReplaceQueue(replaceHubTarget);
 
   async function openRemoteFolder(path = currentRemotePath) {
     if (navLocked()) return; // TASK 774: a send or the "already in My Files" question is about the folder shown
@@ -504,7 +562,7 @@ export function startShaperApp({
   const syncNameEdits = new Map();
   const designKey = () => {
     const tab = docBuffer ? docBuffer.tabs().find((t) => t.active) : null;
-    return JSON.stringify([tab ? tab.key : null, docBuffer ? docBuffer.designId() : null, docBuffer ? docBuffer.designName() : null]);
+    return JSON.stringify([tab ? tab.key : null, docBuffer ? docBuffer.designId() : null, docBuffer ? docBuffer.designName() : null, tickedSetKey()]); // TASK 884: + the ticked operations (a file of other ticks has its own name)
   };
   syncFilename.addEventListener('input', () => {
     syncNameEdits.set(designKey(), syncFilename.value);
@@ -530,7 +588,7 @@ export function startShaperApp({
     }
     const key = designKey();
     syncFilename.value = syncNameEdits.has(key) ? syncNameEdits.get(key) : designFileName(); // TASK 767: the design's name, or what was typed for it
-    applySessionUi();
+    applySessionUi(); // TASK 884: and the Keep ShaperHub up to date switch, for this design
     renderFolderBrowser();
     showExistsQuestion(false);
     showSyncStatus('');
@@ -560,6 +618,7 @@ export function startShaperApp({
       return;
     }
     const filename = syncFilename.value; // the function applies the name rule (shaper-cloud.js shaperFileName)
+    const setKey = tickedSetKey(); // TASK 884: the ticked operations this file holds (the target this send makes is theirs)
 
     if (!sessionToken) {
       const e = syncEmail ? syncEmail.value.trim() : '';
@@ -592,9 +651,7 @@ export function startShaperApp({
     }
     if (!res.ok || data.error) {
       showExistsQuestion(false);
-      const lines = [`Error: ${data.error || `Upload failed with status ${res.status}`}`];
-      if (data.kind === 'login' && sentPassword) lines.push(LOGIN_HINT); // TASK 774: an expired session is not a wrong password
-      showSyncStatus('is-error', ...lines);
+      showSyncStatus('is-error', ...uploadErrorLines(res, data, sentPassword));
       if (syncSubmitBtn) syncSubmitBtn.disabled = false;
       return;
     }
@@ -608,6 +665,9 @@ export function startShaperApp({
 
     track('export:shaperhub'); // TASK 738
     showExistsQuestion(false);
+    setHubTarget(setKey, targetOfSend(data, remotePath)); // TASK 884: this send is the target of these ticked operations now (Keep both: the name the server answered); saved with the design
+    if (fusionUi) fusionUi.notifyProjectChanged(); // the Fusion design's project (the website's document is saved by its autosave)
+    showKeepSwitch();
     const line = sentLine(data);
     showSyncStatus('is-success', line);
     const expStatus = document.getElementById('simexport-status');

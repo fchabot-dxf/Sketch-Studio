@@ -1,5 +1,5 @@
 // tests/fusion-panel-881-node.test.js — TASK 881: the FUSION PANEL build (scripts/build-site.cjs shaper-fusion) holds Shaper's page WITHOUT the website's own
-// parts, by its module graph (owner turns 3487-3490, 3494, 3503; docs/FUSION-PANEL-881.md). Built into a temp folder, then read the way the browser reads it
+// parts, by its module graph (owner turns 3487-3490, 3494, 3503, 3604; docs/FUSION-PANEL-881.md). Built into a temp folder, then read the way the browser reads it
 // (scripts/site-closure.cjs): every UNUSED module is absent from the panel's graph AND from its folder, while the website's graph has it (so the check can
 // fail); the USED ones are there; the panel's page loads the panel's boot; nothing it references leaves the folder (it works wherever it is served);
 // every reference names a file of the folder with its exact case; the manifest lists exactly the folder's files with their sizes and sha256.
@@ -47,12 +47,16 @@ const UNUSED = [
   'packages/ui/cloud/router-adapter.js',
   'packages/ui/cloud/settings-sync.js',
   'about.html',                       // About (a palette has no browser tab)
+  // TASK 885 (owner turn 3604: "Yes remove it"): no Insert STL in the panel: the STL part is the website's (main.js declares it), so its modules stay out
+  'src/stl-import.js',                // Open / Insert STL, the STL card's importer
+  'src/stl-card.js',                  // the STL card in Prepare (an imported STL's settings)
+  'src/orient-view.js',               // the STL card's Orient view (TASK 808)
 ];
-// USED: the panel's own boot, the shared wiring, the Fusion parts, Prepare (Insert STL kept: owner turn 3503), Export, the Log, the vendored three.js
+// USED: the panel's own boot, the shared wiring, the Fusion parts, Prepare (without Insert STL: TASK 885), Export, the Log, the vendored three.js
 const USED = [
   'index.html', 'src/fusion-main.js', 'src/shaper-app.js', 'src/fusion-bridge.js', 'src/fusion-import.js', 'src/fusion-toolpaths.js', 'src/selection-edit.js',
   'src/shaperhub-login.js', // TASK 886: the remembered ShaperHub login (shaper-app.js, the panel's too); the old login's removal stays the website's (main.js)
-  'src/selection-list.js', 'src/prepare-stage.js', 'src/stl-import.js', 'src/export-payload.js', 'src/export-preview.js', 'src/export-sim.js', 'src/review-view.js',
+  'src/selection-list.js', 'src/prepare-stage.js', 'src/export-payload.js', 'src/export-preview.js', 'src/export-sim.js', 'src/review-view.js',
   'src/paths-worker.js', 'src/op-derive.js', 'styles/main.css', 'packages/ui/app-shell.js', 'packages/ui/app-header.js', 'packages/ui/app-sidebar.js',
   'packages/ui/app-footer.js', 'packages/ui/diagnostic-log.js', 'packages/ui/document-buffer-core.js', 'packages/ui/project-store-core.js',
   'packages/ui/sketch-canvas.js', 'packages/ui/sketcher.css', 'packages/ui/vendor/three/three.module.js', 'packages/ui/vendor/three/addons/controls/OrbitControls.js',

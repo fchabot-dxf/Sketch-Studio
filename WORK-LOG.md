@@ -17961,6 +17961,12 @@ Shaper's Export view has no side panel (owner turn 3484: "remove this sidebar an
   d32faf185257b7a80cf81e140c9d9e20, panel-export.svg, panel-requests.txt, panel-build.txt, fusion-panel.json.
 - Open: R1 Send to ShaperHub offline (/api/shaper-upload is the website's route: 404 on the add-in's server), follow-up task.
 
+## TURN 887
+A Fusion BODY's RELIEF from the add-in (shaper-addin SA-35: ONE region in sliceStl's form, `source.kind: 'body'`) is cut in the panel exactly like an STL relief. NO app code change: the panel already keys every relief behaviour on the region's `levels`, never on source.kind (task C: "if the panel already accepts it, say so with the test, and change nothing").
+- The `kind === 'stl'` sites, each read: selection-edit.js:56 (the row text when a payload has no summary: an STL's file name; a body payload carries summary.text 'Body1 · relief'), selection-edit.js:158 / :175 (drop the STL card's source with its row), stl-import.js:91 (the STL card follows the relief in focus), stl-source.js:119 (the pre-841 STL document migration), fusion-bridge.js:162 isStlOperation (an STL's operation has nothing to select in Fusion). All five mean "the STL card / the STL file", none "a relief": they stay 'stl'. A body relief: no STL card, no STL source, Select in Fusion offered (the body is in Fusion). No shared predicate added (nothing to share).
+- tests/fixtures/fusion-body-relief-887.json: the add-in's own payload (fusion_selection.extract_selection on branch sa-35-relief-orientation, a faceted dome R 12 mm: 49 levels, stock 12 mm, summary 'Body1 · relief').
+- NEW tests/fusion-body-relief-887-node.test.js (21 checks): import -> ONE Roughing with the 49 levels, stock 12; a Contour added with the operations toolbar -> Roughing then Contour; the Shaper SVG has pockets and outside/inside cuts; planReliefItems carve; no STL source; the selection row kind 'body'; Select in Fusion offered. The SAME region in sliceStl's envelope (kind 'stl', no selectionId / summary / frame) -> the same operations and the SAME SVG byte for byte; Select in Fusion not offered for the STL.
+- NEW tests/fusion-body-relief-887-live.test.js (the built Fusion panel, 881's harness): pong -> Add selection -> selection_data -> ONE Roughing (49 levels), notice "Added Body1: 1 region", no STL card -> Contour via the toolbar, OK -> paths generated -> Export: the 3D board built (43,905 triangles, 1,407 levels) -> Generate Shaper SVG: 11 pocket paths, 48 contour cuts. Screenshots .evidence/887/ (local): prepare-body-relief.png, export-3d-body-relief.png, export-3d-body-relief-zoom.png.
 ## TURN 890 (DESIGN DOC: one shared STOCK model for the website and the Fusion panel)
 - Wrote docs/STOCK-MODEL-890.md (no code). It covers: the inventory of every stock reader and writer (website, Fusion panel, the add-in's `stock.thicknessMm`, STL, 3D / sim, the SVG page, the stock card, the task 864 Stock tokens), each with file:line; the reviewer's starting point checked line by line (all true; setStockField's one caller is stock-card.js:35, and a stored file can still restore width / height); the model; setups; UI; a T1-T9 task split with tests; 3 owner questions.
 - Decision: the Stock IS the Stock operation, ONE per setup. Empty geometry = the setup's drawingExtent + the declared 6 in margin; one shape = that profile. Its thickness is its `cutDepth`: typed, `'model'` (from the part = the largest `thicknessMm` of the setup's selection entries, re-read in `recordOf`, as Depth 'model' is) or `'unset'` (the declared record). Not stored: `source`, 'fusion-sketch', shapeKey / tokens (they would be second truths). `resolveStock` is EXTENDED (`board` replaces `fromLoop`). No task touches packages/core except the optional width / height removal (T9).
@@ -17989,6 +17995,28 @@ Shaper's Export view has no side panel (owner turn 3484: "remove this sidebar an
   phone 390 Open STL; fail-first: desktop Layout clipped, 0 pass lines), tests/fixtures/relief-terrain-889.js (the synthetic relief, generated in the test).
 - Behaviour changes: every stepped band pass (a Contour's levels, from levels or a slope; a slope Roughing cut as Inside / Outside terraces) now draws a thin
   continuous line per pass in Prepare; Roughing's Layout buttons are field-coloured 12 px, 2 columns (44 px on a phone).
+## TURN 885 (no Insert STL in the Fusion panel; Claude Opus subagent)
+- Owner turn 3604 ("Yes remove it"; "I dont need to add stl in the fusion addin"). The STL part is now DECLARED by the entry, like createImporter /
+  mountDesignBrowser: startShaperApp takes `createStlImporter(ctx)` (default: null) and `prepareLeadGroups(app)` (default: none). main.js (the website,
+  plain and ?host=fusion) passes stl-import.js's createStlImporter and the Prepare toolbar's INSERT section (insertStlGroup, moved unchanged from
+  shaper-app.js); fusion-main.js passes neither. shaper-app.js no longer imports stl-import.js; no branch on Fusion mode.
+- Without the part: Prepare's toolbar starts with OPERATIONS (no INSERT section / label); no STL card; the restore's reimportOld() runs only with
+  the part (`if (stlImporter)`, like `if (shaperImporter)`); app.stlImporter() is null and nothing in the panel calls it; nameAfterSelection's
+  comment says an opened STL names the design on the website only.
+- Panel folder: src/stl-import.js, src/stl-card.js, src/orient-view.js out (240 files reached, 243 before; 245 files + manifest, 7,655,751 bytes).
+  Kept (shared): stl-source.js, core/stl-slice.js, relief-frame.js. docs/FUSION-PANEL-881.md: rows 78-79, ruling line 152, counts, new section 14.
+- Behaviour change, panel only: a workspace saved by the website-in-Fusion with an inserted STL keeps its relief operations but has no STL card
+  (re-slice / orient) in the panel; a pre-807 STL design is not re-sliced there. The website: none.
+- Tests (fail-first): fusion-panel-881-node: stl-import.js, stl-card.js, orient-view.js UNUSED (reached by the website, not by the panel, not in
+  its folder); failed before the change ("the Fusion panel's graph does not reach src/stl-import.js"), ok after (383 checks).
+  fusion-panel-881-live: the panel's Prepare toolbar = Operations / Recalculate / Tools, no #prepare-insert-stl, no .stl-card; the website
+  (?host=fusion and plain) keeps Insert / Operations / Recalculate / Tools, the button and the card. Failed before (actual 'insert:Insert',
+  insertStl true, stlCard 1), ok after.
+- gate:quick 591/591. Live, one at a time: all 249 the merge plan lists: 245 ok first pass; 4 failed under another project's gate on the
+  shared CPU (drive-folder-browser, op-paths-817 long task 139 ms, opfirst-relief, opfirst-ui-s2) and passed alone on re-run. shell-smoke 13/13.
+- Evidence (.evidence/885/, local): prepare-toolbar-panel-BEFORE.png md5 81bac6f5910ab7b7a5c039353b85f4e3 (INSERT > STL first),
+  prepare-toolbar-panel.png 3c7403252c493d366678335f43b2390a (starts with OPERATIONS), panel-closure-before/after.txt, node-failfirst.txt,
+  live-failfirst.txt, live-after.txt, live-plan-results.txt.
 ## TURN 884 — Keep ShaperHub up to date (Claude Opus subagent, branch agents/autosync-884)
 Owner turns 3591-3597 ("Ok"), advisor heads-up (targets per ticked set), owner ruling turns 3607-3608 (the file name follows the ticked operations).
 - THE SWITCH: the Sync dialog's "Keep ShaperHub up to date" (apps/shaper/index.html #sync-keep-updated, role=switch) + the line under it (#sync-keep-hint, param-hints.js

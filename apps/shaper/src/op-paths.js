@@ -241,7 +241,7 @@ export function onChange(fn) { listeners.add(fn); return () => listeners.delete(
 
 /** TASK 817: the Shaper file made in the background (op-derive.js svgOf + bitCentrePaths with `preview`): `args` = { state, entries, frame, encoding, docUnit, preview }
  *  (the sketch as svgOf takes it). Resolves { svg, bitPaths }. Queued after the paths jobs already asked for (the worker's memo caches are warm from them). */
-export function exportJob({ state, entries, frame = null, encoding, docUnit, preview = false }) {
+export function exportJob({ state, entries, frame = null, encoding, docUnit, preview = false, split = null }) { // TASK 888: `split` = the chunk files' plan (op-derive.js exportFilesOf)
   const ctx = { state, geomSig: geometrySig(state) };
   const sid = sketchRef(ctx), eid = 'e:' + hashText(JSON.stringify(encoding));
   if (!refValues.has(eid)) refValues.set(eid, encoding);
@@ -251,6 +251,6 @@ export function exportJob({ state, entries, frame = null, encoding, docUnit, pre
   usePort();
   return new Promise((resolve, reject) => {
     jobs.set(id, { kind: 'export', resolve, reject, ids });
-    post({ type: 'export', id, args: { state: { $ref: sid }, encoding: { $ref: eid }, entries: packEntries(entries), frame: frame ? packEntries(frame) : null, docUnit, preview } }, ids);
+    post({ type: 'export', id, args: { state: { $ref: sid }, encoding: { $ref: eid }, entries: packEntries(entries), frame: frame ? packEntries(frame) : null, docUnit, preview, split } }, ids);
   });
 }

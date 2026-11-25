@@ -7,6 +7,7 @@ import { cutTypeById, cutTypeHasParam, cutTypeHasField, CUTTER_SHAPES, OFFSET_PR
 import { POCKET_CLEARING, allowanceDefault, finishInLoop } from '#core/pocket-clearing.js'; // TASK 745: the programmed pocket's defaults
 import { CLEARING_REFUSED, CONTOUR_DEFAULTS, pocketToolDia } from './cut-plan.js'; // TASK 810: what a Contour starts with (its tab dots); TASK 852d: V-bit pocket tip width
 import { STEP_DEPTH, STEP_RESOLUTION, ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, CONTOUR_WALL_SIDES, boundaryOf, boundaryCalcOffset, hasLevels } from '#core/stepped-cut.js'; // TASK 810: Roughing's machining boundary; a Contour's walls
+import { SPLIT_FILES, splitModeOf, splitOf } from './split-files.js'; // TASK 888: Split into files
 import { smoothingOf } from '#core/level-smooth.js'; // TASK 809: a Roughing / Contour's Smoothing (its default by operation)
 import { HOLD_PART, holdDefaults, tabsHaveThickness } from '#core/hold-part.js'; // TASK 742: the Hold part choice and its defaults; TASK 775: an On line cut's tabs have no thickness
 import SettingsManager, { docUnit, lengthText, angleText, isPrecisionKey } from '#core/settings-manager.js';
@@ -74,6 +75,8 @@ const boundaryPresets = (hasStock) => ROUGH_BOUNDARY.kinds.map((k) => (k.id === 
   ? { hint: 'boundaryNoStock', label: hintLabel('boundaryNoStock'), value: k.id, disabled: true }
   : { hint: choiceId('boundary', k.id), label: hintLabel(choiceId('boundary', k.id)), value: k.id }));
 const BOUNDARY_TOOL_PRESETS = ROUGH_BOUNDARY.tools.map((t) => ({ hint: choiceId('boundaryTool', t.id), label: hintLabel(choiceId('boundaryTool', t.id)), value: t.id }));
+// TASK 888: a Roughing's / Contour's Split into files (split-files.js SPLIT_FILES: Off | By depth | By levels), as preset buttons (the ONE preset widget)
+const SPLIT_PRESETS = SPLIT_FILES.modes.map((m) => ({ hint: choiceId('splitFiles', m.id), label: hintLabel(choiceId('splitFiles', m.id)), value: m.id }));
 const WALLS_PRESETS = CONTOUR_WALLS.choices.map((w) => ({ hint: choiceId('walls', w.id), label: hintLabel(choiceId('walls', w.id)), value: w.id })); // TASK 810: a Contour's which walls
 // TASK S2 (owner turn 2713): a Contour's own WALL SIDE (#core levelsCutAs `wallSide`), where its shape's model does not say it (a drawn shape)
 const WALL_SIDE_PRESETS = CONTOUR_WALL_SIDES.map((w) => ({ hint: choiceId('wallSide', w.id), label: hintLabel(choiceId('wallSide', w.id)), value: w.id }));
@@ -84,7 +87,7 @@ const CARD_TABS = [
   { id: 'tool', hint: 'tabTool', rows: ['bit', 'toolDia', 'cutterShape'] }, // TASK 842: the Bit pick (the tool table) first
   { id: 'geometry', hint: 'tabGeometry', rows: ['boundary', 'boundaryShape', 'boundaryTool', 'boundaryOffset', 'cutOffset', 'minTerraceWidth', 'walls', 'wallSide'] }, // TASK S2: a Contour's Wall side
   { id: 'heights', hint: 'tabHeights', rows: ['cutDepth', 'topDepth', 'floorAllowance'] }, // TASK S2 (owner turn 2740): 810's Bottom row is gone: the Depth is the one depth
-  { id: 'passes', hint: 'tabPasses', rows: ['roughLayout', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'smoothing'] }, // TASK S2: the Contour row is gone (Contour is an operation type)
+  { id: 'passes', hint: 'tabPasses', rows: ['roughLayout', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'smoothing', 'splitFiles', 'splitEvery'] }, // TASK 888: Split into files // TASK S2: the Contour row is gone (Contour is an operation type)
 ];
 const TAB_OF_ROW = new Map(CARD_TABS.flatMap((t) => t.rows.map((r) => [r, t.id])));
 const tabbedType = (cutType) => Boolean(cutType && cutTypeById(cutType) && cutTypeById(cutType).levelsOp); // Roughing, Contour
@@ -108,6 +111,7 @@ const CHANGED = {
   adaptiveSteps: (rec) => rec.adaptiveSteps === true,
   stepDeviation: (rec) => Number(rec.stepDeviation) > 0 && !near6(rec.stepDeviation, STEP_RESOLUTION.defaultMm),
   finishAllowance: (rec) => Number(rec.finishAllowance) > 0,
+  splitFiles: (rec) => splitModeOf(rec) !== 'off', // TASK 888: Off is what an operation starts with
   smoothing: (rec, op) => rec.smoothing != null && smoothingOf(op, rec.smoothing) !== smoothingOf(op, undefined),
 };
 
@@ -278,6 +282,17 @@ export function createCutPanel(hostEl, opts = {}) {
         </div>
         <div class="cut-presets"></div>
       </div>
+      <div class="cut-row" data-row="splitFiles"><!-- TASK 888: last on the Passes tab -->
+        <button type="button" class="cut-field-label" data-hint="splitFiles"></button>
+        <div class="cut-presets cut-split-modes"></div>
+      </div>
+      <div class="cut-row" data-row="splitEvery">
+        <button type="button" class="cut-field-label" data-hint="splitDepth"></button>
+        <div class="cut-inline cut-box">
+          <input type="text" class="cut-num cut-split-every" inputmode="decimal">
+          <span class="cut-unit-fixed cut-split-unit"></span>
+        </div>
+      </div>
       <div class="cut-row" data-row="holdPart">
         <button type="button" class="cut-field-label" data-hint="holdPart"></button>
         <div class="cut-presets cut-hold-modes"></div>
@@ -357,6 +372,14 @@ export function createCutPanel(hostEl, opts = {}) {
   minTerraceInput.addEventListener('change', () => { const n = parseUnit(minTerraceInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('minTerraceWidth', n); else renderFields(); });
   const smoothingInput = $('.cut-smoothing'); // TASK 809
   smoothingInput.addEventListener('change', () => { const n = parseUnit(smoothingInput.value, docUnit()); if (n != null && Number.isFinite(n) && n >= 0) onSetField('smoothing', n); else renderFields(); });
+  // TASK 888: Split into files: the mode (preset buttons) and its number (By depth: a depth in the document unit, base mm stored; By levels: a count of levels)
+  const splitModesWrap = $('.cut-split-modes'), splitInput = $('.cut-split-every'), splitUnit = $('.cut-split-unit');
+  splitModesWrap.setAttribute('role', 'group');
+  splitInput.addEventListener('change', () => {
+    const mode = splitModeOf(current.record);
+    if (mode === 'depth') { const n = parseUnit(splitInput.value, docUnit()); if (n != null && Number.isFinite(n) && n > 0) onSetField('splitDepth', n); else renderFields(); }
+    else if (mode === 'levels') { const n = Number(splitInput.value.trim()); if (Number.isInteger(n) && n >= 1) onSetField('splitLevels', n); else renderFields(); }
+  });
   // TASK S2 (owner rulings turns 2710-2717): the OPEN operation's card: its header ("Pocket 2 · 3 shapes") with Duplicate, its Shapes (one row each with an X that takes
   // it out), its rows (810's tabs, 813's layout), the note area, OK / Cancel. (TASK S3: with shapes selected and no operation open there is no card: the quick flow's
   // type menu that card held is the operations toolbar now, prepare-stage.js.)
@@ -772,6 +795,15 @@ export function createCutPanel(hostEl, opts = {}) {
     // TASK S2 (owner turn 2740): a Roughing's / Contour's Depth is its ONE depth, a live row: empty = From model (each shape to its own model depth), a value = the cut stops there
     if (heights) { depthInput.value = current.depthFromModel ? '' : fieldText(Number(current.cutDepth)); depthInput.placeholder = Number(current.partDepth) > 0 && current.depthFromModel ? `From model (${fieldText(Number(current.partDepth))})` : 'From model'; } else depthInput.placeholder = 'unset'; // From model: the model's depth beside it when it is known
     place('smoothing', declares('smoothing') && Boolean(current.levels)); // TASK 809: an operation on a part with levels (an STL)
+    // TASK 888: Split into files, on every Roughing / Contour; its number row stays in place, greyed, while it is Off (its label: the mode's number)
+    const splitRow = declares('splitFiles'), splitMode = splitModeOf(current.record), split = splitOf(current.record, docUnit());
+    place('splitFiles', splitRow);
+    place('splitEvery', splitRow ? splitMode !== 'off' || 'Choose By depth or By levels in Split into files to set this.' : false);
+    renderPresets(splitModesWrap, splitRow ? SPLIT_PRESETS : [], 'splitFiles', splitMode);
+    hints.splitDepth.setId(splitMode === 'levels' ? 'splitLevels' : 'splitDepth');
+    splitInput.inputMode = splitMode === 'levels' ? 'numeric' : 'decimal';
+    splitInput.value = !split ? '' : split.mode === 'levels' ? String(split.every) : fieldText(split.every);
+    splitUnit.textContent = splitMode === 'levels' ? 'levels' : docUnit();
     smoothingInput.value = lengthText(fieldBase('smoothing'), { show: 'field', fractions: false }); // 0.05 mm = 0.002 in: a tolerance, always decimals
     place('rasterAngle', clearing ? clearing === 'raster' || 'Only Raster has an angle: choose Raster in Clearing to set this.' : false);
     const choice = CLEARING_CHOICE(clearing || 'freehand');

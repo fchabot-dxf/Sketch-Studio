@@ -11,6 +11,7 @@
 // this table adds their hint. Their id here is `<parameter>:<choice id>` (choiceId below).
 import { CUT_TYPES, CLEARING_CHOICES, CUTTER_SHAPES } from './shaper.js';
 import { HOLD_PART } from '#core/hold-part.js';
+import { SPLIT_FILES } from './split-files.js'; // TASK 888
 import { ROUGH_LAYOUT, ROUGH_BOUNDARY, CONTOUR_WALLS, CONTOUR_WALL_SIDES } from '#core/stepped-cut.js'; // TASK 792: Roughing's layouts; TASK 810: its boundary and tool rule, a Contour's walls
 
 
@@ -41,6 +42,10 @@ const PARAMS = {
   // TASK 792 (owner turn 2604): Roughing's layout, a part with levels (an STL)
   minTerraceWidth: { label: 'Min terrace width', hint: 'Bands of the terrace map thinner than this are left uncut by Roughing (for example to finish them with a Contour). 0 = rough every band.' }, // TASK 792 (owner turns 2605-2607)
   // TASK 809 (owner turns 2655, 2660-2661): Smoothing, a toolpath setting of Roughing and Contour (a part with levels); TASK 810: in the Passes tab
+  // TASK 888 (owner turns 3627-3628): a Roughing's / Contour's Split into files (split-files.js: the chunks and which file holds what)
+  splitFiles: { label: 'Split into files', hint: 'Writes this operation’s levels in several files, top down, to cut one after the other. Every file has the same page: place each with the same anchor. The other operations go in the first file.', items: SPLIT_FILES.modes.map((m) => `splitFiles:${m.id}`) },
+  splitDepth: { label: 'Depth per file', hint: 'How deep each file goes. A level exactly on a boundary is in the file above it.' },
+  splitLevels: { label: 'Levels per file', hint: 'How many levels each file holds, top down; the last file holds what is left.' },
   smoothing: { label: 'Smoothing', hint: 'Fits smooth curves to this operation’s paths, never farther than this from the sliced levels (on either side), so the file is lighter and the bit runs smoothly. Details smaller than it may be smoothed away. 0 = off: the straight segments of the levels. The levels themselves are not changed.' },
   // TASK 810 (owner turns 2657-2658): the tabs of the Roughing and Contour cards (cut-panel.js CARD_TABS); a dot on a tab = one of its settings is not the default
   tabTool: { label: 'Tool', hint: 'The bit: its diameter and its shape. A dot means a setting here is not the default.' },
@@ -181,6 +186,11 @@ const CHOICE_HINTS = {
     inside: 'The walls inside the shape: a hollow, a pocket.',
     outside: 'The walls outside the shape: the outline of a part.',
   },
+  splitFiles: { // TASK 888
+    off: 'One file: this operation is written with the others.',
+    depth: 'A new file every so deep: each file holds the levels of one band of depth.',
+    levels: 'A new file every so many levels.',
+  },
   roughLayout: { // TASK 792 (owner turn 2604)
     terraces: 'Each spot cut once, to its own depth: no passes through air. Best on deep or gentle reliefs.',
     nested: 'One pocket per level over everything that goes at least that deep: fewer, bigger paths. Best on steep or blocky parts.',
@@ -212,6 +222,7 @@ const CHOICE_SOURCES = {
   cutterShape: CUTTER_SHAPES.map((s) => ({ id: s.id, label: s.label })),
   holdPart: HOLD_PART.modes.map((m) => ({ id: m.id, label: m.label })),
   roughLayout: ROUGH_LAYOUT.layouts.map((l) => ({ id: l.id, label: l.label })), // TASK 792: Roughing's layout
+  splitFiles: SPLIT_FILES.modes.map((m) => ({ id: m.id, label: m.label })), // TASK 888: Split into files
   boundary: ROUGH_BOUNDARY.kinds.map((k) => ({ id: k.id, label: k.label })), // TASK 810: Roughing's boundary
   boundaryTool: ROUGH_BOUNDARY.tools.map((t) => ({ id: t.id, label: t.label })), // TASK 810: its tool rule
   walls: CONTOUR_WALLS.choices.map((w) => ({ id: w.id, label: w.label })), // TASK 810: a Contour's which walls

@@ -178,6 +178,11 @@ function datumPolygon(datum) {
 //                                             the app's OPERATION it belongs to, a display grouping); its elements carry data-op="<id>" the
 //                                             same way (the Export step's operations list finds them by it). The file never changes.
 //                                             TASK 745: a programmed pocket's element carries data-clear (clearData) the same way.
+//                keep: (meta) => boolean    → TASK 888: write only the elements whose meta ({ cut, entry }, the `written` item) it keeps (the app's
+//                                             "Split into files": one file per band of an operation's levels). The PAGE and the frame guide's box stay
+//                                             those of every element (the frame's, else `entries`'): each file has the whole file's page. A file that
+//                                             leaves an element out is a PARTIAL file (as a smaller `entries` is): a plan with no Stock gets the frame
+//                                             guide. Without it (the default) the string is byte-identical to before.
 // TASK 742: the PREVIEW copy's data-hold of a held cut (#core/hold-part): "pass" (tabs' pass 1) | "skin" (an onion skin) | "gap k/N" (a gap strip);
 // a refused hold or none: nothing. Never in the downloaded file (previewData only).
 function holdData(hold) {
@@ -278,11 +283,12 @@ export function exportShaperSVG({ state, entries, encoding, docUnit, options = {
     items.unshift(...firstItems); // TASK 774: the exportFirst types (the Stock) before every cut, each list in plan order
     return items;
   };
-  const items = itemsOf(ents);
-  const frameItems = frameEnts ? itemsOf(frameEnts) : items;
+  const every = itemsOf(ents);
+  const frameItems = frameEnts ? itemsOf(frameEnts) : every;
+  const items = typeof options.keep === 'function' ? every.filter((it) => options.keep(it.meta)) : every; // TASK 888: the elements this file keeps (see `options.keep`)
   // TASK 798 (advisor turn 2705): the FRAME GUIDE of a partial file of a plan with no Stock (see `options.frame`); its meta has no cut (the Paths view skips it)
   const guideEnc = enc.find((t) => t && t.exportFirst) || null;
-  if (frameEnts && frameEnts.length > ents.length && guideEnc && !frameItems.some((it) => it.first)) {
+  if (((frameEnts && frameEnts.length > ents.length) || items.length < every.length) && guideEnc && !frameItems.some((it) => it.first)) {
     const box = extentOf(frameItems);
     if (box) items.unshift({ common: colorAttrs(guideEnc) + shaperAttrs({}, guideEnc, docUnit), tag: 'path', a: `d="M ${num(box.minX)} ${num(box.minY)} L ${num(box.maxX)} ${num(box.minY)} L ${num(box.maxX)} ${num(box.maxY)} L ${num(box.minX)} ${num(box.maxY)} Z"`, meta: { cut: null, entry: null, frameGuide: true } });
   }

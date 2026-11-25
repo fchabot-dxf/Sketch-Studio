@@ -49,6 +49,8 @@ const HOLD_PARAMS = ['holdPart', 'tabCount', 'tabWidth', 'holdThickness'];
 // the finish turn in them; the step-downs are the Origin's Pass Depth / AutoPass) and, for Raster, `rasterAngle`.
 // Never written to the export as attributes (shaperAttrs writes only cutDepth / cutOffset / toolDia); the exporter cuts the record through the one
 // derivation (deriveCuts), which writes a programmed pocket as on-line paths + the finish pass (an inside cut, islands as outside cuts).
+// TASK 888: a Roughing's / Contour's "Split into files" (split-files.js SPLIT_FILES: the mode, and each mode's number); export only (the paths never change)
+const SPLIT_PARAMS = ['splitFiles', 'splitDepth', 'splitLevels'];
 const CLEARING_PARAMS = ['clearing', 'stepover', 'finishAllowance', 'loop', 'rasterAngle']; // TASK 750: `loop` = true | false (default off), any programmed pattern; TASK 778: pockets get a start mark
 // TASK 812 (docs/OPERATIONS-MODEL.md 1.5): `fields` = the SETTINGS an operation of this type is made of, in the operation key's order: the ONE declaration of which settings
 // belong to which type (operations.js settingsOf reads it: each field's value is computed there, once; the cut card asks cutTypeHasField). [] = none (the Stock: one per
@@ -84,13 +86,15 @@ export const CUT_TYPES = [
 //  * TASK 809: both declare `smoothing` (a part with levels only): the operation's paths fitted with curves within that tolerance (#core/level-smooth.js).
 //  * TASK 810: Roughing declares its MACHINING BOUNDARY (a part with levels only; #core ROUGH_BOUNDARY): `boundary` (+ the picked `boundaryShape`), `boundaryTool`, `boundaryOffset`;
 //    both declare their HEIGHTS (#core levelsBand): `topDepth`, `bottomDepth`, `floorAllowance`; Contour its WHICH WALLS (#core CONTOUR_WALLS): `walls`.
+//  * TASK 888: both declare SPLIT INTO FILES (split-files.js): `splitFiles` (Off | By depth | By levels), `splitDepth`, `splitLevels`: the export writes the
+//    operation's levels in several files (top down); its paths and every view are unchanged.
   //  * TASK S2: Contour is an operation TYPE of its own, in the type menus (greyed on a shape with no part: cut-plan.js typeRefusal); its memberships are the
   //    PARTS' keys (Prepare names them `contour:<key>`); its card has the fine step (`stepDepth`, #core LEVELS.contourStepMm by default), the bit and the cutter
   //    shape. (Before S2 the Contour row of the part's card added it and set the Roughing's allowance: both gone.)
   // fill / stroke = the pocket's / the outside cut's and declared AFTER them, so classify() (import) never reads them. `opRank`: Roughing ranks as a
   // pocket, Contour after (operations.js ranks a levels operation by the cuts it makes, its finish after).
-  { id: 'roughing', label: 'Roughing', cutType: 'pocket', fill: '#7F7F7F', stroke: 'none', desc: 'Clear the part level by level, leaving an allowance on the walls', targetKind: 'region', menuLabel: 'Roughing', passColor: '#d97706', levelsOp: 'roughing', depthParam: 'levelsDepth', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 13.5V10.5h3v-3h3v-3h3' fill='none' stroke='currentColor' stroke-width='1.4' stroke-linejoin='round'/>", opRank: 2, fields: ['depth', 'offset', 'steps', 'allowance', 'layout', 'minWidth', 'smoothing', 'boundary', 'heights'], params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'roughLayout', 'minTerraceWidth', 'smoothing', 'boundary', 'boundaryTool', 'boundaryOffset', 'topDepth', 'bottomDepth', 'floorAllowance'] },
-  { id: 'contour', label: 'Contour', cutType: 'outside', fill: '#000000', stroke: 'none', desc: 'Finish the sloped walls at a fine step, along the walls', targetKind: 'finish', menuLabel: 'Contour', passColor: '#0284c7', levelsOp: 'contour', depthParam: 'levelsDepth', icon: "<path d='M2.5 15.5h3.2c1.2-3.6 2.4-6.2 3.3-8.2c0.9-2 2.1-4 3.4-4.8h3.1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/><path d='M5.2 12.5h1.6M6.4 9.5h1.6M7.9 6.5h1.6' fill='none' stroke='currentColor' stroke-width='1.2'/>", opRank: 3, fields: ['steps', 'smoothing', 'heights', 'walls'], params: ['cutDepth', 'toolDia', 'stepDepth', 'smoothing', 'topDepth', 'bottomDepth', 'floorAllowance', 'walls', 'wallSide'] }, // TASK S2: its OWN Depth (typed or From model) and Wall side (a drawn shape)
+  { id: 'roughing', label: 'Roughing', cutType: 'pocket', fill: '#7F7F7F', stroke: 'none', desc: 'Clear the part level by level, leaving an allowance on the walls', targetKind: 'region', menuLabel: 'Roughing', passColor: '#d97706', levelsOp: 'roughing', depthParam: 'levelsDepth', icon: "<rect x='2' y='2' width='14' height='14' fill='none' stroke='currentColor' stroke-width='1.5'/><path d='M4.5 13.5V10.5h3v-3h3v-3h3' fill='none' stroke='currentColor' stroke-width='1.4' stroke-linejoin='round'/>", opRank: 2, fields: ['depth', 'offset', 'steps', 'allowance', 'layout', 'minWidth', 'smoothing', 'boundary', 'heights', 'split'], params: ['cutDepth', 'cutOffset', 'toolDia', 'stepDepth', 'adaptiveSteps', 'stepDeviation', 'finishAllowance', 'roughLayout', 'minTerraceWidth', 'smoothing', 'boundary', 'boundaryTool', 'boundaryOffset', 'topDepth', 'bottomDepth', 'floorAllowance', ...SPLIT_PARAMS] },
+  { id: 'contour', label: 'Contour', cutType: 'outside', fill: '#000000', stroke: 'none', desc: 'Finish the sloped walls at a fine step, along the walls', targetKind: 'finish', menuLabel: 'Contour', passColor: '#0284c7', levelsOp: 'contour', depthParam: 'levelsDepth', icon: "<path d='M2.5 15.5h3.2c1.2-3.6 2.4-6.2 3.3-8.2c0.9-2 2.1-4 3.4-4.8h3.1' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/><path d='M5.2 12.5h1.6M6.4 9.5h1.6M7.9 6.5h1.6' fill='none' stroke='currentColor' stroke-width='1.2'/>", opRank: 3, fields: ['steps', 'smoothing', 'heights', 'walls', 'split'], params: ['cutDepth', 'toolDia', 'stepDepth', 'smoothing', 'topDepth', 'bottomDepth', 'floorAllowance', 'walls', 'wallSide', ...SPLIT_PARAMS] }, // TASK S2: its OWN Depth (typed or From model) and Wall side (a drawn shape)
 ];
 
 // TASK 745: the Clearing choices of the Pocket card (#core POCKET_CLEARING.patterns, in its order) with the icon of each pattern (18x18 inner markup in
@@ -155,6 +159,7 @@ export function cutTypeHasField(id, field) {
 export function effectiveCutRecord(rec) {
   if (!rec || !rec.cutType) return rec;
   const out = { ...rec };
+  for (const p of SPLIT_PARAMS) delete out[p]; // TASK 888: Split into files is the export's only, never an input of the paths (changing it leaves them up to date)
   if (!cutTypeHasParam(rec.cutType, 'cutDepth')) out.cutDepth = 'unset';
   if (!cutTypeHasParam(rec.cutType, 'cutOffset')) out.cutOffset = 0;
   if (cutTypeById(rec.cutType) && cutTypeById(rec.cutType).offsetMovesCut === false) out.cutOffset = 0; // preview only: the cut stays centred

@@ -20,6 +20,7 @@ const axes = {
   // TASK 810: Roughing's boundary, the Heights, a Contour's walls (its part's type: `baseType`)
   boundary: [undefined, 'box', 'shape'], boundaryShape: [undefined, 'loop:x'], boundaryTool: [undefined, 'inside'], boundaryOffset: [undefined, 2],
   topDepth: [undefined, 1], bottomDepth: [undefined, 5], floorAllowance: [undefined, 0.3], walls: [undefined, 'all', 'sloped'], baseType: [undefined, 'exterior'],
+  splitFiles: [undefined, 'off', 'depth', 'levels'], splitDepth: [undefined, 5], splitLevels: [undefined, 12], // TASK 888: a Roughing's / Contour's Split into files
 };
 let seed = 812;
 const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
@@ -43,7 +44,7 @@ for (const t of CUT_TYPES) {
   }
   assert.deepStrictEqual([...seen].sort(), [...t.fields].sort(), `${t.id}: every declared field is reached by some record (declared: ${t.fields}; reached: ${[...seen]})`);
 }
-for (const t of CUT_TYPES) for (const f of ['depth', 'offset', 'steps', 'allowance', 'layout', 'minWidth', 'smoothing', 'hold', 'clearing', 'boundary', 'heights', 'walls']) { // TASK 810: + boundary, heights, walls
+for (const t of CUT_TYPES) for (const f of ['depth', 'offset', 'steps', 'allowance', 'layout', 'minWidth', 'smoothing', 'hold', 'clearing', 'boundary', 'heights', 'walls', 'split']) { // TASK 810: + boundary, heights, walls; TASK 888: + split
   assert.strictEqual(cutTypeHasField(t.id, f), t.fields.includes(f), `cutTypeHasField(${t.id}, ${f})`);
 }
 assert.strictEqual(cutTypeHasField(null, 'clearing'), false, 'no type picked: no field');

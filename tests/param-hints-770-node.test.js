@@ -148,6 +148,20 @@ for (const t of CUT_TYPES) ok(seen.has(choiceId('cutType', t.id)), `the cut type
   eq(hintText('cutDepth'), 'One flat depth for every shape. From model: each shape’s own model depth (the deepest point of a sloped shape).', 'a flat type’s Depth');
   seen.add('levelsDepth');
 }
+{ // TASK 888: a Roughing's / Contour's Split into files (Passes tab): the choice and its number row, named by the mode (Depth per file / Levels per file)
+  for (const [mode, id] of [['depth', 'splitDepth'], ['levels', 'splitLevels']]) {
+    panel.update({ mode: 'op', kind: 'loop', title: 'Contour 1 · 1 shape', shapes: [{ key: 'loop:a', label: 'Shape 40 × 40 mm' }], boundary: { hasStock: false, picking: false }, record: { cutType: 'contour', stepDepth: 0.25, cutterShape: 'ballnose', splitFiles: mode } });
+    press(host.querySelector('.cut-tab[data-tab="passes"]'));
+    const els = [...host.querySelectorAll('[data-hint]')].filter(visible);
+    for (const h of ['splitFiles', 'splitFiles:off', 'splitFiles:depth', 'splitFiles:levels', id]) {
+      const el = els.find((e) => e.dataset.hint === h);
+      ok(el, `the Contour card (${mode}) shows ${h}`);
+      eq(hintFor(el), hintText(h), `${h}: its tooltip is its hint`);
+      eq(el.textContent, hintLabel(h), `${h}: its name is the table's`);
+      seen.add(h);
+    }
+  }
+}
 
 // ── 3. every entry is rendered somewhere ──
 const html = fs.readFileSync(new URL('../apps/shaper/index.html', import.meta.url), 'utf8');

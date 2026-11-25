@@ -19,10 +19,10 @@ import { UNTITLED } from '#ui/document-buffer-core.js'; // TASK 881: the autosav
 // before it changes the number (and so the name of a partial file).
 const leavable = (ops) => ops.map((op, i) => ({ op, n: i + 1 })).filter(({ op }) => op.type !== STOCK_TYPE_ID);
 /** TASK 884: the ticked part of a file's name: '' when every operation is ticked (the full file), else each ticked operation's type label (the Operations list's,
- *  cut type menuLabel) and its number there, in list order, joined by ", " ("Outside 1, Outside 2"). `ops` = the stored operations in list order. */
+ *  cut type menuLabel) and its number there, in list order, joined by " - " ("Outside 1 - Outside 2": owner turn 3611, a dash survives shaperFileName where a comma became _). `ops` = the stored operations in list order. */
 export function tickedNamePart(ops = storeOps()) {
   const all = leavable(ops), on = all.filter(({ op }) => isTicked(op));
-  return on.length === all.length ? '' : on.map(({ op, n }) => `${(cutTypeById(op.type) || {}).menuLabel || op.type} ${n}`).join(', ');
+  return on.length === all.length ? '' : on.map(({ op, n }) => `${(cutTypeById(op.type) || {}).menuLabel || op.type} ${n}`).join(' - ');
 }
 /** TASK 884: the key of the ticked set (the ShaperHub targets are kept per set: shaperhub-target.js): 'all' when every operation is ticked, else the ticked
  *  operations' ids, sorted (a reorder keeps the key; the name's numbers may change). */
@@ -34,7 +34,7 @@ export function tickedSetKey(ops = storeOps()) {
 /** TASK 767: THE name of every file the Export step produces (Generate Shaper SVG, the sidebar Download, the Sync to ShaperHub dialog's file name, TASK 884's
  *  replace on Generate), declared once: the design's name (the document tab's name; in Fusion mode the imported selection's name, main.js) cleaned by
  *  shaperFileName, + .svg. An Untitled design (or none) gets the default name (shaper-cloud.js SHAPER_DEFAULT_NAME + .svg). TASK 884: a file of SOME of the
- *  operations (`ops`, the stored operations in list order: some unticked) is "<design name> - <tickedNamePart>.svg" ("bromont - Outside 1.svg"); every one
+ *  operations (`ops`, the stored operations in list order: some unticked) is "<design name> - <tickedNamePart>.svg" ("bromont - Outside 1.svg", "bromont - Outside 1 - Outside 2.svg"); every one
  *  ticked: the design's name alone, as before. */
 export function exportFileName(designName, ops = storeOps()) {
   const base = !designName || designName === UNTITLED ? '' : designName;

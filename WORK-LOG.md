@@ -17981,8 +17981,8 @@ Owner turns 3591-3597 ("Ok"), advisor heads-up (targets per ticked set), owner r
   time, at most ONE waiting per file (the latest svg). Switch on + target + no sign-in: nothing sent, the line adds "ShaperHub not updated: sign in with Sync to
   ShaperHub to keep it up to date." No target for the set: nothing (a set never sent stays local until a Send). Nothing else triggers it.
 - FILE NAME (export-payload.js exportFileName, the one rule; Generate, Download, the dialog, the replace): everything ticked = the design's name as before; a subset =
-  "<design> - <type label> <number>, ..." (cut type menuLabel; number = the operation's place in the Operations list = storeOps order, the Stock counted, as op-list.js
-  numbers i + 1; the Stock is never named). Through shaperFileName, whose rule turns "," into "_": "bromont - Outside 1_ Outside 2.svg". Reorder / delete before it
+  "<design> - <type label> <number> - ..." (cut type menuLabel; number = the operation's place in the Operations list = storeOps order, the Stock counted, as op-list.js
+  numbers i + 1; the Stock is never named). Joined by " - " (owner turn 3611 "Dash": a ", " became "_ " through shaperFileName): "bromont - Outside 1 - Outside 2.svg". Reorder / delete before it
   changes the number (the target key is the ids, so the set keeps its target). The dialog's typed-name memory is now per design AND ticked set.
 - Tests: tests/shaperhub-keep-884-node.test.js (73 checks, fail-first: ERR_MODULE_NOT_FOUND before), tests/shaperhub-keep-884-live.test.js (website desktop + phone 390),
   tests/shaperhub-keep-884-fusion-live.test.js (the 881 panel build + a fake /api/shaper-upload route on its server).

@@ -74,13 +74,13 @@ const OPS = [op('op-1', 'exterior'), op('op-2', 'exterior'), op('op-3', 'pocket'
 const tick = (ops, offIds) => ops.map((o) => ({ ...o, on: !offIds.includes(o.id) }));
 eq(exportFileName('bromont', OPS), 'bromont.svg', 'name: everything ticked = the design\'s name, as before');
 eq(exportFileName('bromont', tick(OPS, ['op-2', 'op-3'])), 'bromont - Outside 1.svg', 'name: one ticked = the design name - its type label and number');
-eq(tickedNamePart(tick(OPS, ['op-3'])), 'Outside 1, Outside 2', 'name: two ticked, joined by ", " in list order');
-eq(exportFileName('bromont', tick(OPS, ['op-3'])), 'bromont - Outside 1_ Outside 2.svg', 'name: two ticked, through shaperFileName (its existing rule makes the comma _)');
+eq(tickedNamePart(tick(OPS, ['op-3'])), 'Outside 1 - Outside 2', 'name: two ticked, joined by " - " in list order (owner turn 3611)');
+eq(exportFileName('bromont', tick(OPS, ['op-3'])), 'bromont - Outside 1 - Outside 2.svg', 'name: two ticked, through shaperFileName unchanged (the dash is kept)');
 eq(exportFileName('bromont', tick(OPS, ['op-1', 'op-2'])), 'bromont - Pocket 3.svg', 'name: the number is the operation\'s place in the Operations list');
 const withStock = [op('op-9', 'stock'), ...OPS];
 eq(exportFileName('bromont', tick(withStock, ['op-2', 'op-3'])), 'bromont - Outside 2.svg', 'name: the Stock (always in the file) is never named, but counts in the list numbers');
 eq(exportFileName('bromont', withStock), 'bromont.svg', 'name: the Stock and every operation ticked = the full name');
-eq(exportFileName('Untitled', tick(OPS, ['op-1'])), 'shaper-export - Outside 2_ Pocket 3.svg', 'name: an Untitled design\'s partial file');
+eq(exportFileName('Untitled', tick(OPS, ['op-1'])), 'shaper-export - Outside 2 - Pocket 3.svg', 'name: an Untitled design\'s partial file');
 eq(exportFileName(null), 'shaper-export.svg', 'name: no operations (the store empty) = as before');
 eq(tickedSetKey(OPS), 'all', 'key: everything ticked = all');
 eq(tickedSetKey(withStock), 'all', 'key: the Stock is not a choice');

@@ -57,6 +57,9 @@ await (async () => {
       assert.ok(intro.noscript && intro.noscript.h > 10 && intro.noscript.below, `${app.id}: with JavaScript off the <noscript> line shows under the description (${JSON.stringify(intro.noscript)})`);
       assert.ok(intro.noscript.text.startsWith(`${app.name} is a free web app`), `${app.id}: the <noscript> line names the app`);
       assert.strictEqual(await evalJs(`document.title`), app.seoTitle, `${app.id}: the static page's <title> is the seoTitle (before the app runs)`);
+      // TASK 893: the boxes are compared once the page's web fonts have loaded (a label is 17 px tall in the fallback font, 20 px in the web font:
+      // a first snapshot taken while the font still loaded was a shift the intro never caused). A layout is forced first so every used font is asked for.
+      await cdp.waitFor(`(document.body.getBoundingClientRect(), document.fonts.ready.then(() => document.fonts.status === 'loaded'))`, `${app.id}: the page's web fonts to load`);
       const withIntro = await boxes();
       await evalJs(`document.getElementById('${SEO_INTRO_ID}').style.display = 'none'`);
       const without = await boxes();

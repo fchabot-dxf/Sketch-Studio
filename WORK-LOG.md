@@ -18114,3 +18114,30 @@ Test timing only: no app code, FILE_LIMIT_MS / QUICK_JOBS untouched, ~/.shared-c
   live flakes first-click-771 (toast action clicked mid slide-in), import-polish-fit-a (fixed 350 ms after opening the sidebar), sidebar-drive (fixed 800 ms
   after Check Drive), site-identity-829 (first box snapshot before the web font loaded): all timing under load (REPORT 892 has the fixes proposed).
 - Evidence (local) .evidence/892/: before-/after-*.log (check counts), msgs-before.txt / msgs-after-3.txt, alone-*.txt, gate-quick-after-*.txt, timings-after.json.
+## TURN 893 — the 4 live tests that flaked under load wait for the real event; the gate survives a helper process that did not start (Claude Opus subagent, branch agents/flakes-893)
+Tests + the gate only (the causes task 892 diagnosed): no app code, FILE_LIMIT_MS / jobs untouched, no assertion changed (the same values, only WHEN they are read), ~/.shared-cpu untouched.
+- tests/helpers/settled-centre.js (new, ONE place): settledCentre(cdp, sel, what) waits until the element is shown, inside the viewport, no animation / transition runs
+  on it or an ancestor (document.getAnimations()), and its rect is equal across two animation frames; resolves its centre.
+  * first-click-771-live: steps 3 and 4 measured the toast / its action button during the 0.3 s slide-in (step 3 behind a fixed sleep(350), step 4 with none):
+    both now click settledCentre.
+  * tests/helpers/import-via-menu.js (import-polish-fit-a and the 6 other callers): the drawer's Import entry was clicked a fixed 350 ms after the sidebar button;
+    both clicks now aim at settledCentre (the entry's label is read once it has settled).
+- sidebar-drive: Check Google Drive connection was read a fixed 800 ms after the click; now read once the check FINISHED (the button enabled again, 5 rows, none
+  running / pending; 30 s deadline), the same assertions after.
+- site-identity-829-live: the first box snapshot (JS off) now waits for the page's web fonts (a forced layout, then document.fonts.ready + status 'loaded'). Probe
+  (.evidence/893/fonts-probe.txt): sketchstudio right after the load event `{"status":"loading", ... "Inter:loading" ...}`, after the wait `"status":"loaded"`
+  (shaper / penplotter / trace use no web font: `{"status":"loaded","faces":[]}`). That is the 17 -> 20 px label height 892 saw.
+- scripts/gate.cjs: ONE retry rule for the helper processes it starts (spawnSyncRetryOnce / spawnRetryOnce): a start that exits 0xC0000142 (3221225794,
+  STATUS_DLL_INIT_FAILED: the Git Bash could not start under load) or a spawnSync timeout (the PowerShell browser counts, 15 s unchanged) is started ONCE more after
+  2 s, printing `gate: <exe> <why>; starting it once more in 2 s`; a second failure and every other exit are reported as before. Used by the lock's take / release
+  / status (Git Bash) and the two PowerShell scans; the take also retries once its pid-collision exit (PID_COLLISION_EXIT = 3, TAKE_BODY's own: cpu_lock_take
+  never exits non-zero), so "pid N is also an MSYS pid" fails the run only if it happens twice. Test files are never retried (runFile untouched).
+  cleanupAfter(err, cleanup): the lock's release in main's finally and in the last catch no longer replaces the run's own error: the release error is printed
+  (`gate: the cleanup failed too (the run's own error follows): ...`), the original error goes on; with no earlier error a release error throws as before.
+- tests/gate-start-retry-893.test.js (quick, new): REAL node children: exit 0xC0000142 once then 0 -> started twice, status 0; twice -> two starts, 0xC0000142
+  returned; exit 1 / 3 never retried; a hanging first start (8 s timeout) retried once; async: 0xC0000142 once, collision exit only with the take's reason, a second
+  collision reported; cleanupAfter prints a release error after a real EPERM and main()'s try/catch/finally shape rejects with the REAL error.
+- Runs (alone, after the change, .evidence/893/): first-click-771-live 3x ok (7, 7, 4 s); site-identity-829-live 3x `4 apps OK` (20, 17, 18 s); sidebar-drive 3x
+  `all checks passed`; import-polish-fit-a 3x `570a: ok`; the other importViaMenu callers once each ok (import-polish-fit-b, import-polish-undo-node,
+  penplotter-cosmetics, sketch-import, task-609-live, trace-projects); gate-shared-lock / gate-profile-sweep / gate-pid-match / gate-url-closure /
+  gate-start-retry-893 ok. gate:quick `GATE tier=quick jobs=quick=22 files=586 pass=586 fail=0 deferred=11 elapsed=119s` (the advisor's merge gate held the main lane).

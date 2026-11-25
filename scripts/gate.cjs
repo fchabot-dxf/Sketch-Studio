@@ -249,6 +249,46 @@ const SIDE_LANE_MAX_MIN = 5; // the library's CPU_LOCK_SHORT_MIN: a take whose e
 
 const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
+// A HELPER PROCESS THAT DID NOT START (TASK 893). Under load on this PC a Git Bash can fail before it runs a line: it exits 0xC0000142
+// (STATUS_DLL_INIT_FAILED), and a PowerShell can overrun its 15 s timeout. ONE rule for the helper processes the gate starts (the lock's Git Bash,
+// the browser-count PowerShell): such a start is retried ONCE after RETRY_PAUSE_MS; a second failure, and every other exit, is reported exactly
+// as before. A test file is never retried (runFile does not use these), no timeout is raised.
+const DLL_INIT_FAILED = 0xC0000142; // Node reports it as the status 3221225794
+const RETRY_PAUSE_MS = 2000;
+// why this result is a start that may be retried once, or null. r = a spawnSync result, or { status, signal } of an async spawn
+const startFailure = (r) => (r.status === DLL_INIT_FAILED ? 'exited 0xC0000142 (it could not start)'
+  : r.error && r.error.code === 'ETIMEDOUT' ? 'timed out' : null);
+function spawnSyncRetryOnce(cmd, args, opts, why = startFailure) {
+  const r = spawnSync(cmd, args, opts);
+  const reason = why(r);
+  if (!reason) return r;
+  console.log(`gate: ${path.basename(cmd)} ${reason}; starting it once more in ${RETRY_PAUSE_MS / 1000} s`);
+  sleepSync(RETRY_PAUSE_MS);
+  return spawnSync(cmd, args, opts);
+}
+// the async form (a child that may run for minutes): resolves { status, signal }, rejects only on a spawn 'error'
+function spawnRetryOnce(cmd, args, opts, why = startFailure) {
+  const attempt = () => new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, opts);
+    child.on('error', reject);
+    child.on('close', (status, signal) => resolve({ status, signal }));
+  });
+  return attempt().then((r) => {
+    const reason = why(r);
+    if (!reason) return r;
+    console.log(`gate: ${path.basename(cmd)} ${reason}; starting it once more in ${RETRY_PAUSE_MS / 1000} s`);
+    return new Promise((res) => setTimeout(res, RETRY_PAUSE_MS)).then(attempt);
+  });
+}
+// A cleanup run after an error (the lock's release in the finally / the last catch) must not replace that error (TASK 893: a release whose bash
+// did not start hid the real EPERM): the cleanup's own error is printed, the original error goes on. With no earlier error a cleanup error throws.
+function cleanupAfter(err, cleanup) {
+  try { cleanup(); } catch (c) {
+    if (!err) throw c;
+    console.error(`gate: the cleanup failed too (the run's own error follows): ${c.stack || c.message}`);
+  }
+}
+
 // Git for Windows' bash (the library is a bash file; bash is not on a PowerShell / cmd PATH): <git>/mingw64/libexec/git-core -> <git>/bin/bash.exe
 let bashPath = null;
 function gitBash() {
@@ -266,31 +306,33 @@ const cpuLockSpawnArgs = (body, args) => [gitBash(), ['-c', `source "$1" && ${bo
   { env: { ...process.env, CPU_LOCK_PID: String(process.pid) }, windowsHide: true }];
 // The library records pid=$(cat /proc/$CPU_LOCK_PID/winpid || echo $CPU_LOCK_PID): an MSYS pid is mapped to ITS Windows pid. This gate's pid is a
 // Windows pid; if an MSYS process has the same number, the library would record that process instead: refuse loudly rather than hold a wrong record.
-const TAKE_BODY = '{ [ ! -e "/proc/$CPU_LOCK_PID" ] || { echo "gate: pid $CPU_LOCK_PID is also an MSYS pid: the shared CPU lock would record that process, not this gate; run the gate again" >&2; exit 3; }; } && cpu_lock_take "$2" "$3" "$4"';
+// The collision exits PID_COLLISION_EXIT (cpu_lock_take itself never exits non-zero: it loops until granted). A collision with a short-lived MSYS
+// process passes: the take is started once more after a pause (TASK 893); a second collision fails the run.
+const PID_COLLISION_EXIT = 3;
+const TAKE_BODY = `{ [ ! -e "/proc/$CPU_LOCK_PID" ] || { echo "gate: pid $CPU_LOCK_PID is also an MSYS pid: the shared CPU lock would record that process, not this gate" >&2; exit ${PID_COLLISION_EXIT}; }; } && cpu_lock_take "$2" "$3" "$4"`;
+const takeRetryReason = (r) => startFailure(r) || (r.status === PID_COLLISION_EXIT ? 'found its pid is also an MSYS pid' : null);
 
 let cpuLockTaking = false; // a take has started in this run: release on every exit path (the release also clears this project's waiting mark)
 // blocks until the library grants the lock (main lane, or its side lane for an eta <= SIDE_LANE_MAX_MIN); the library's lines go to our stdout
 function takeCpuLock(what, eta) {
   cpuLockTaking = true;
   const [bash, args, opts] = cpuLockSpawnArgs(TAKE_BODY, [CPU_LOCK_PROJECT, what, eta]);
-  return new Promise((resolve, reject) => {
-    const child = spawn(bash, args, { ...opts, stdio: ['ignore', 'inherit', 'inherit'] });
-    child.on('error', reject);
-    child.on('close', (code, signal) => (code === 0 ? resolve() : reject(new Error(`gate: cpu_lock_take ended with ${signal || `exit ${code}`}`))));
+  return spawnRetryOnce(bash, args, { ...opts, stdio: ['ignore', 'inherit', 'inherit'] }, takeRetryReason).then(({ status, signal }) => {
+    if (status !== 0) throw new Error(`gate: cpu_lock_take ended with ${signal || `exit ${status}`}`);
   });
 }
 function releaseCpuLock() {
   if (!cpuLockTaking) return;
   cpuLockTaking = false;
   const [bash, args, opts] = cpuLockSpawnArgs('cpu_lock_release "$2"', [CPU_LOCK_PROJECT]);
-  const r = spawnSync(bash, args, { ...opts, stdio: ['ignore', 'inherit', 'inherit'] });
+  const r = spawnSyncRetryOnce(bash, args, { ...opts, stdio: ['ignore', 'inherit', 'inherit'] });
   if (r.error) throw r.error;
   if (r.status !== 0) throw new Error(`gate: cpu_lock_release exited ${r.status}`);
 }
 // the library's status: its main-lane holder line (`project=.. what=.. start=.. eta=.. pid=.. host=..`) when ANOTHER run holds the main lane, else null
 function otherMainHolder() {
   const [bash, args, opts] = cpuLockSpawnArgs('cpu_lock_status', []);
-  const r = spawnSync(bash, args, { ...opts, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const r = spawnSyncRetryOnce(bash, args, { ...opts, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   if (r.error) throw r.error;
   if (r.status !== 0) throw new Error(`gate: cpu_lock_status exited ${r.status}: ${r.stderr}`);
   const first = r.stdout.split(/\r?\n/)[0];
@@ -406,7 +448,7 @@ function runSmoke() {
 function countHeadless(smokePid) {
   const pattern = `sk-shell-smoke-${smokePid}(?=[\\\\/"''\\s]|$)`;
   const psScript = `$all = Get-CimInstance Win32_Process -Filter "name = 'msedge.exe'" | Where-Object { $_.CommandLine -match 'sk-shell-smoke' -and $_.CommandLine -notmatch '--type=' }; $mine = ($all | Where-Object { $_.CommandLine -match '${pattern}' } | Measure-Object).Count; $other = ($all | Where-Object { $_.CommandLine -notmatch '${pattern}' } | Measure-Object).Count; Write-Output "$mine,$other"`;
-  const psRes = spawnSync('powershell', ['-NoProfile', '-Command', psScript], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, timeout: 15000 });
+  const psRes = spawnSyncRetryOnce('powershell', ['-NoProfile', '-Command', psScript], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, timeout: 15000 });
   if (psRes.error) throw psRes.error;
   if (psRes.status !== 0 || !psRes.stdout) throw new Error(`gate: headless count failed: ${psRes.stderr}`);
   const parts = psRes.stdout.trim().split(',');
@@ -429,7 +471,7 @@ const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function getRunningBrowserCommandLines() {
   if (process.platform === 'win32') {
     const psScript = "Get-CimInstance Win32_Process -Filter \"name = 'msedge.exe' or name = 'chrome.exe' or name = 'chromium.exe'\" | Where-Object { $_.CommandLine } | ForEach-Object { $_.CommandLine }";
-    const psRes = spawnSync('powershell', ['-NoProfile', '-Command', psScript], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, timeout: 15000 });
+    const psRes = spawnSyncRetryOnce('powershell', ['-NoProfile', '-Command', psScript], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, timeout: 15000 });
     if (psRes.error) throw psRes.error;
     if (psRes.status !== 0) throw new Error(`gate: browser process scan failed: ${psRes.stderr}`);
     return (psRes.stdout || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -523,6 +565,7 @@ async function main() {
   let counts = null;
   let sweep = null;
   const deferred = []; // exclusive tests not run because another run held the shared lock's main lane
+  let runError = null; // the run's own error: the release in the finally must not replace it (cleanupAfter)
   try {
     if (wantQuick) {
       const q = splitExclusive(tiers.quick);
@@ -542,8 +585,11 @@ async function main() {
     } catch (e) {
       console.warn(`gate: profile sweep failed: ${e.message}`);
     }
+  } catch (e) {
+    runError = e;
+    throw e;
   } finally {
-    releaseCpuLock();
+    cleanupAfter(runError, releaseCpuLock);
   }
 
   const failed = results.filter(r => !r.ok);
@@ -569,8 +615,8 @@ async function main() {
   process.exit(passed ? 0 : 1);
 }
 
-module.exports = { isProfileDirName, isProfileInUse, shouldSweepProfileDir, sweepProfiles, getRunningBrowserCommandLines };
+module.exports = { isProfileDirName, isProfileInUse, shouldSweepProfileDir, sweepProfiles, getRunningBrowserCommandLines, spawnSyncRetryOnce, spawnRetryOnce, cleanupAfter, DLL_INIT_FAILED };
 
 if (require.main === module) {
-  main().catch((e) => { releaseCpuLock(); console.error(e.stack || e.message); process.exit(2); });
+  main().catch((e) => { cleanupAfter(e, releaseCpuLock); console.error(e.stack || e.message); process.exit(2); });
 }

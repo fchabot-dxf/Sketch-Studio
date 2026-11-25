@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { launchBrowser, sleep } from './helpers/cdp-browser.js';
 import { pressRibbonTool } from './helpers/ribbon-tool.js';
 import { resetBufferLive } from './helpers/reset-buffer.js';
+import { settledCentre } from './helpers/settled-centre.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN_TAG = '<script type="module" src="src/main.js"></script>';
@@ -72,15 +73,13 @@ await (async () => {
     await waitFor(`document.getElementById('design-canvas')?.dataset.docReady === '1' && !!document.getElementById('tool-line')`, 'Shaper ready (run 3)');
     await pressRibbonTool(evalJs, click, 'tool-line');
     await evalJs(`window.ug.notify('Close path: click an open outline to close it.', 'info')`);
-    await waitFor(`!!document.querySelector('#notification-container [data-level="info"]')`, 'info toast shown');
-    await sleep(350); // let the 0.3s slide-in transition settle
-    const toastCentre = await evalJs(`(() => { const r = document.querySelector('#notification-container [data-level="info"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    // TASK 893: a toast slides in for 0.3 s; it is measured once it has stopped moving (a fixed sleep was a guess, short on a loaded PC)
+    const toastCentre = await settledCentre(cdp, '#notification-container [data-level="info"]', 'info toast shown');
     await click(toastCentre);
     await waitFor(`!!${ST}.active`, '3: clicking over passive info toast still starts the Line tool on the canvas');
 
     await evalJs(`(() => { window.__t771Action = 0; window.ug.notify('Open outlines found', 'info', 10000, { action: { label: 'Close them', onClick: () => { window.__t771Action++; } } }); })()`);
-    await waitFor(`!!document.querySelector('#notification-container .notif-action-btn')`, 'action button rendered');
-    const actBtn = await evalJs(`(() => { const r = document.querySelector('#notification-container .notif-action-btn').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    const actBtn = await settledCentre(cdp, '#notification-container .notif-action-btn', 'action button rendered');
     await click(actBtn);
     await waitFor(`window.__t771Action === 1`, '4: clicking interactive toast action button still fires onClick');
 

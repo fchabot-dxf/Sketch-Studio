@@ -11,8 +11,9 @@ import { attachStepper } from './number-stepper.js';
 // TASK 730: the thickness field's − / + step (document unit; a size: any value above 0, never 0, as typing 0 is refused too)
 const THICKNESS_STEPPER = { step: { mm: 1, in: 1 / 16 }, positive: true };
 
-/** What the 3D board is: 'loop-set' (the Stock loop, its thickness set in Prepare), 'loop-unset' (the Stock loop, the default thickness) or 'bounds' (no Stock loop: the design bounds + margin). */
-export const boardOf = (loop) => (loop ? (loop.thicknessSet ? 'loop-set' : 'loop-unset') : 'bounds');
+/** What the 3D board is: 'loop-set' (the Stock loop, its thickness set in Prepare), 'loop-unset' (the Stock loop, the default thickness) or 'bounds' (no Stock loop: the design bounds + margin).
+ *  TASK 894: read from resolveStock's `board` (null before the controller exists: 'bounds'). */
+export const boardOf = (board) => (board && board.kind === 'profile' ? (board.thicknessFrom === 'default' ? 'loop-unset' : 'loop-set') : 'bounds');
 
 /** createStockCard({ input, getController, onChange, onBoard }) -> { show }. getController(): the Design sketch controller (null before it exists). onChange(): after a typed value.
  *  onBoard(board): at every show(), what the board is now (boardOf). */
@@ -20,10 +21,10 @@ export function createStockCard({ input: thick, getController, onChange = () => 
   let stepper = null; // set below; show() keeps its buttons' disabled state with the field's
   const show = () => {
     const designController = getController();
-    const loop = designController ? resolveStock(designController.state).fromLoop : null; // TASK 472: with a Stock loop the thickness is set on that loop in Prepare
-    thick.value = lengthText(loop ? loop.thickness : getStock().thickness); // the one length-format decider (no unit beside this box: an inch fraction carries its mark)
-    thick.disabled = !!loop;
-    onBoard(boardOf(loop));
+    const board = designController ? resolveStock(designController.state).board : null; // TASK 472: with a Stock loop the thickness is set on that loop in Prepare
+    thick.value = lengthText(board ? board.thickness : getStock().thickness); // the one length-format decider (no unit beside this box: an inch fraction carries its mark)
+    thick.disabled = !!board && (board.kind === 'profile' || board.thicknessFrom !== 'default'); // TASK 894: the field edits the declared record, so only while the board reads it (an EMPTY Stock with its own thickness: set in Prepare)
+    onBoard(boardOf(board));
     if (stepper) stepper.refresh();
   };
   show();

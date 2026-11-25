@@ -134,10 +134,10 @@ const areaL = 60 * 30 + 30 * 30, areaHole = 14 * 14;
   assert.ok(planReliefItems(st, plan).every((i) => i.key !== keyOf('profile', prof.id)), 'a Stock loop is not a cut item');
   // resolveStock: the loop form carries the profile + thickness; with no Stock loop it is the declared record
   const rs = resolveStock(st, plan);
-  assert.strictEqual(rs.fromLoop.thickness, 20); assert.ok(rs.stock.profile && rs.stock.profile.holes.length === 1);
+  assert.strictEqual(rs.board.thickness, 20); assert.strictEqual(rs.board.kind, 'profile'); assert.ok(rs.stock.profile && rs.stock.profile.holes.length === 1); // TASK 894: `board` replaces `fromLoop`
   V2_PLAN.load([[keyOf('loop', la.id), { cutType: 'pocket', cutDepth: 5 }]]);
   const none = resolveStock(st);
-  assert.strictEqual(none.fromLoop, null); assert.strictEqual(none.stock.profile, undefined); assert.strictEqual(none.stock.thickness, DEFAULT_STOCK.thickness);
+  assert.strictEqual(none.board.kind, 'bounds'); assert.strictEqual(none.board.key, null); assert.strictEqual(none.stock.profile, undefined); assert.strictEqual(none.stock.thickness, DEFAULT_STOCK.thickness);
   // ONE stock: a second Stock record does not make two boards (the first in the plan wins)
   const two = new Map([[keyOf('loop', la.id), { cutType: 'stock', cutDepth: 10 }], [keyOf('loop', loopAt(st, 100, 0).id), { cutType: 'stock', cutDepth: 30 }]]);
   V2_PLAN.load([...two]);

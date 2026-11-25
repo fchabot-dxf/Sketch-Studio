@@ -32,7 +32,7 @@ import { removeSelection, clearSelections } from './selection-edit.js'; // TASK 
 import { importFusionSelection } from './fusion-import.js'; // TASK 664: Fusion selection_data -> sketch + the plan + stock
 import { dbg } from '#core/debug.js';
 import { mountReviewView, LOOKS, normaliseLook } from './review-view.js';   // TASK 459: the 3D Review (three loads only when the tab first opens)
-import { getStock, resolveStock } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460)
+import { resolveStock, stockSig } from './stock.js'; // TASK 459: the declared stock (persisted by shaper-doc.js, TASK 460); TASK 894: reviewSig carries the RESOLVED stock (F2)
 import { createStockCard } from './stock-card.js'; // TASK 583: the Review card's stock thickness field, declared once (the node test kit calls it too)
 import { mountDisclosure, CARET_SVG } from './disclosure.js'; // TASK 880: the Export view's Cuts card folds as the Operations sheet does
 import { bindTemplateTokens } from '#ui/style-templates.js';
@@ -874,7 +874,7 @@ export function startShaperApp({
     // origin: a part far from its arcs' centres made a board from the origin to the part). TASK 757: an EMPTY design (nothing drawn) has none, so no board.
     return { stock: resolveStock(st).stock, items: planReliefItems(st, TICKED), bounds: drawingExtent(st), notes: planNotes(st, TICKED) }; // TASK 798: the ticked operations // TASK 714: notes = the stepped cuts' steps / undercuts; TASK 742: the held cuts' passes / gaps; TASK 745: the programmed pockets' clearing; TASK 839: assembled in ONE place (cut-plan.js planNotes: a line the same for every operation once)
   };
-  const reviewSig = (st) => JSON.stringify([storeSignature(), getStock(), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(),
+  const reviewSig = (st) => JSON.stringify([storeSignature(), stockSig(st), [...st.joints.values()].map((j) => [j.x, j.y]), docUnit(),
     SettingsManager.get('LENGTH_PRECISION'), SettingsManager.get('ANGLE_PRECISION'), SettingsManager.get('TRAILING_ZEROS'), SettingsManager.get('INCH_DISPLAY'), SettingsManager.get('LENGTH_FRACTION')]); // TASK 714 / 743 / 770: rebuilds on doc unit, precision or trailing-zeros change
   // TASK 718: the Export step's view: '3d' (the board above), '2d' (the exported file, export-preview.js) or (TASK 793) 'paths' (every path written + the bit-centre
   // paths, the same module), remembered per app like the stage (MODE_KEY)

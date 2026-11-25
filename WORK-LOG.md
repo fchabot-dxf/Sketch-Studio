@@ -18236,3 +18236,6 @@ TURN 895 (advisor follow-up): goStage moved to ONE helper, tests/helpers/go-stag
   540,029,216 triangles ...".
 - Evidence (.evidence/897/, local): desktop-1-card-obj.png, desktop-2-card-3mf.png, desktop-3-prepare.png, phone-1-card-obj.png, phone-2-card-3mf.png,
   phone-3-prepare.png, failfirst.txt, stl-doc-identical.txt.
+
+## TURN 899 — drive-rename-live waits for what it reads (Claude Sonnet subagent, branch agents/driveflake-899)
+Test only. Cause: the tab label was read once right after pagehide + flushDrive (no wait for the tab update), and the drawer / doc entry clicks aimed at a rect measured while the sidebar slid. Fix: clickSel uses tests/helpers/settled-centre.js; the label is waitFor'd (20 s) before the unchanged assertion. 5x alone ok, 3x beside gate:quick ok, gate:quick pass=607 fail=0.

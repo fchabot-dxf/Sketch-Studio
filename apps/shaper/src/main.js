@@ -1,7 +1,8 @@
 // Shaper — the WEBSITE's boot (index.html loads this module): Shaper's page wiring (shaper-app.js, declared once, TASK 881) with the website's own parts.
 // The same page opens in Fusion's palette with ?host=fusion (the add-in in users' hands): Fusion mode, decided here once from the page's address.
 // What only the website has, declared below and passed to startShaperApp: the project drawer (#ui/app-chrome.js: documents, Google Drive, the account),
-// the page's shared store (or, for the SA-19 add-in, ?host=fusion&project=design, an in-memory one), the drawer's Open / Insert STL, Download, the Fusion
+// the page's shared store (or, for the SA-19 add-in, ?host=fusion&project=design, an in-memory one), the STL part (the drawer's Open / Insert STL, the
+// Prepare toolbar's INSERT section, the STL card: TASK 885), Download, the Fusion
 // add-in download, Settings (the style panel, also the footer's gear), the SVG / DXF import, the SKETCHES browser, the Google session probe, the old
 // ShaperHub login's removal and, in Fusion mode, the one-time offer of the browser's pre-855 work. The Fusion PANEL build (fusion-main.js) passes none of them.
 
@@ -18,11 +19,11 @@ import { forgetOldLogin } from './shaperhub-login.js'; // TASK 758: the app keep
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: probe the server session once at start (signing in syncs nothing)
 import { createShaperImporter } from './cut-import.js'; // TASK 583 / 610: Shaper's SVG / DXF import (options, the menu entry, the drop), declared once
-import { STL_ICON, STL_INSERT_ICON } from './stl-import.js'; // TASK 790: Open STL (sliced into the Fusion selection payload); TASK 841: Insert STL
+import { createStlImporter, STL_ICON, STL_INSERT_ICON, STL_INSERT_MARKUP } from './stl-import.js'; // TASK 790: Open STL (sliced into the Fusion selection payload), the STL card; TASK 841: Insert STL
 import { fusionAddinAction, fusionAddinView, ADDIN_VIEW_ID } from './addin-download.js'; // TASK 733: the sidebar's Fusion add-in download (hidden in Fusion mode)
 import { mountShaperBrowser } from './shaper-browser.js'; // task 586 / 610: the floating SKETCHES browser over the Design canvas
 import { isFusionMode, isPerDesignProject, LEGACY_FUSION_OFFERED_KEY } from './fusion-bridge.js'; // TASK 663: Fusion mode & palette bridge
-import { hintLabel, hintText } from './param-hints.js'; // TASK 770: THE table of labels and hints (the drawer's Download, Open / Insert STL)
+import { hintLabel, hintText } from './param-hints.js'; // TASK 770: THE table of labels and hints (the drawer's Download, Open / Insert STL, the toolbar's Insert STL)
 
 export { currentReviewView, currentExportSim } from './shaper-app.js'; // read by the live tests through this module
 
@@ -44,6 +45,18 @@ function stlAction({ id, label, tooltip, icon, pick, after = () => {} }) {
       if (res.imported) after(res);
     } catch (e) { chrome.sidebar.notify(e.message || String(e), 'error'); }
   } };
+}
+
+// TASK 841: the Prepare toolbar's INSERT section, first: STL = Insert STL (the drawer's entry, the same import); a file that is not a readable STL is said in
+// Prepare's notice (TASK 885: moved here from shaper-app.js, unchanged: the website declares it, the Fusion panel has none)
+function insertStlGroup(app) {
+  return { label: 'Insert', buttons: [{ id: 'prepare-insert-stl', label: hintLabel('insertStlTool'), hint: hintText('insertStlTool'),
+    svg: `<svg class="sk-ribbon-ic" viewBox="0 0 18 18" fill="none" aria-hidden="true">${STL_INSERT_MARKUP}</svg>`, onClick: async () => {
+      try {
+        const res = await app.stlImporter().pickAndInsert();
+        if (res && !res.ok) app.prepare().notice(res.message, true); // cancelled (null): nothing; not a readable STL: the design is unchanged
+      } catch (e) { app.prepare().notice(e.message || String(e), true); }
+    } }] };
 }
 
 // TASK 855: in Fusion mode, the one-time offer of the work an earlier panel kept in this browser (before the workspace lived in the Fusion design)
@@ -130,5 +143,7 @@ startShaperApp({
     return stylePanel;
   },
   mountDesignBrowser: ({ state, engine }) => mountShaperBrowser({ state, engine }), // shaper-browser.js
+  createStlImporter, // TASK 790 / 885: stl-import.js (the STL card in Prepare; the drawer's Open / Insert STL and the toolbar's Insert STL call it)
+  prepareLeadGroups: (app) => [insertStlGroup(app)], // TASK 841 / 885: the Prepare toolbar's INSERT section
   onDesignContext: (ctx, app) => maybeOfferLegacyBrowserWork(ctx, app),
 });

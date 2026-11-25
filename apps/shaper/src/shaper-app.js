@@ -3,8 +3,9 @@
 // in Fusion mode, the Fusion bar, the palette bridge and the live toolpaths. What differs between the pages that run it comes in DECLARED
 // (startShaperApp's arguments), never as a branch on where the page is:
 //   apps/shaper/src/main.js         the website (Shaper's own site, and the same page in a Fusion palette with ?host=fusion): the project drawer
-//                                   (#ui/app-chrome.js), the page's shared store, Settings, Download, Open / Insert STL, the add-in download, the SVG / DXF
-//                                   import, the SKETCHES browser, the Google session probe, the old ShaperHub login's removal, the pre-855 work offer;
+//                                   (#ui/app-chrome.js), the page's shared store, Settings, Download, the STL part (Open / Insert STL, the Prepare toolbar's
+//                                   INSERT section, the STL card: TASK 885), the add-in download, the SVG / DXF import, the SKETCHES browser, the Google
+//                                   session probe, the old ShaperHub login's removal, the pre-855 work offer;
 //   apps/shaper/src/fusion-main.js  the Fusion PANEL build (scripts/build-site.cjs shaper-fusion, carried offline by the add-in): the plain drawer
 //                                   (#ui/app-shell.js) with Log only, an in-memory store, Fusion mode always; none of the website's own parts is loaded.
 
@@ -46,7 +47,6 @@ import { SIM } from './cut-timeline.js'; // TASK 801: its one line under the con
 import { track } from '#ui/analytics.js'; // TASK 738: the ShaperHub upload, a Fusion selection received
 import { SIDEBAR_ICONS } from '#ui/app-sidebar.js';
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
-import { createStlImporter, STL_INSERT_MARKUP } from './stl-import.js'; // TASK 790: the STL card in Prepare; TASK 841: Insert STL (the Prepare toolbar's; the website's drawer adds Open / Insert STL)
 import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
 import { createGroupStatus } from './group-status.js'; // TASK 610: the one-line status toast over the Design view
 import { hintLabel, hintText } from './param-hints.js'; // TASK 770: THE table of labels and hints (the Export step's cards)
@@ -67,6 +67,8 @@ export const currentReviewView = () => shown.reviewView();
  *   menu(app)             -> the drawer's entries (app: what they call on this page, incl. app.logAction)
  *   beforeChrome()        the page's own start, before the header; afterChrome(chrome): its drawer views
  *   createImporter(ctx)   -> the SVG / DXF importer (cut-import.js) or null; mountDesignBrowser({ state, engine }) -> the SKETCHES browser or null
+ *   createStlImporter(ctx) -> the STL importer (stl-import.js: the STL card in Prepare, Open / Insert STL) or null (TASK 885: the Fusion panel has none)
+ *   prepareLeadGroups(app) -> the Prepare toolbar's own sections at its start (the website: INSERT, Insert STL; TASK 841) or none
  *   createSettingsPanel() -> the Settings panel (the drawer's and the footer's gear) or null
  *   onDesignContext(ctx, app)  Fusion mode: the page's own work when Fusion names the current design
  */
@@ -80,6 +82,8 @@ export function startShaperApp({
   afterChrome = () => {},
   createImporter = () => null,
   mountDesignBrowser = () => null,
+  createStlImporter = () => null,
+  prepareLeadGroups = () => [],
   createSettingsPanel = () => null,
   onDesignContext = () => {},
 }) {
@@ -652,9 +656,7 @@ export function startShaperApp({
     getController: () => designController, getMode: () => modes.current(), history,
     panelEl: document.getElementById('prepare-panel'), canvasEl: document.getElementById('prepare-canvas'), noticeEl: document.getElementById('prepare-notice'), opsEl: document.getElementById('prepare-ops'), ribbonEl: document.getElementById('prepare-ribbon'), // TASK 743: the operations list; TASK S3: the operations toolbar
     ensureSketch, onViewChange: (v) => { window.__prepareView = v; }, // the page's dev / test seam
-    // TASK 841: the toolbar's INSERT section, first: STL = Insert STL (the drawer's entry, the same import); a file that is not a readable STL is said in Prepare's notice
-    leadGroups: [{ label: 'Insert', buttons: [{ id: 'prepare-insert-stl', label: hintLabel('insertStlTool'), hint: hintText('insertStlTool'),
-      svg: `<svg class="sk-ribbon-ic" viewBox="0 0 18 18" fill="none" aria-hidden="true">${STL_INSERT_MARKUP}</svg>`, onClick: () => insertStlFromToolbar() }] }],
+    leadGroups: prepareLeadGroups(app), // TASK 841 / 885: the page's sections first (the website: INSERT, Insert STL); none: the toolbar starts with Operations
     openToolTable: () => toolTableWindow.open(), // TASK 842: the cut card's "Edit tool table..."
     onPlanChange: () => { if (fusionToolpaths) fusionToolpaths.notify(); if (fusionUi) fusionUi.notifyProjectChanged(); }, // TASK 799 / 855: automatic Fusion toolpath & project sync
     ...(fusionMode ? {
@@ -662,12 +664,6 @@ export function startShaperApp({
       showSelectInFusion: (op) => Boolean(fusionUi && fusionUi.canSelectForOperation(op)),
     } : {}),
   });
-  async function insertStlFromToolbar() {
-    try {
-      const res = await stlImporter.pickAndInsert();
-      if (res && !res.ok) prepare.notice(res.message, true); // cancelled (null): nothing; not a readable STL: the design is unchanged
-    } catch (e) { prepare.notice(e.message || String(e), true); }
-  }
   // TASK 664 / 790: what the page refreshes after a selection replaced the design (a Fusion selection, an STL): the Review card's thickness, the panels, the history buttons, the Review
   const afterSelectionImport = () => {
     showStockThickness();
@@ -678,6 +674,7 @@ export function startShaperApp({
     if (fusionUi) fusionUi.notifyProjectChanged();
   };
   // TASK 790: Open STL (the drawer entry above) and the STL card at the top of Prepare's right column (stl-import.js, declared once: the node test kit calls it too)
+  // TASK 885: the page's STL part (the website's; null on a page without STL: the Fusion panel)
   const stlImporter = createStlImporter({ ensureSketch, getController: () => designController, prepare, panelEl: document.getElementById('prepare-panel'),
     showPrepare: () => modes.showMode('prepare'), afterImport: afterSelectionImport, notice: (text, isError) => prepare.notice(text, isError),
     getView: () => (modes.current() === 'prepare' && prepare.view() ? prepare.view().view : designController.state.view) }); // TASK 841: an inserted STL lands in the view the user is looking at
@@ -749,7 +746,7 @@ export function startShaperApp({
       // re-mount Prepare if it is the visible mode so it shows the restored geometry + cuts
       afterSidecar: (restore) => {
         prepare.afterRestore(restore); // TASK 741: + the one-time notice of a document that had V-carve regions
-        stlImporter.reimportOld(); // TASK 807: a design saved with an STL before 807 is sliced again as a relief
+        if (stlImporter) stlImporter.reimportOld(); // TASK 807: a design saved with an STL before 807 is sliced again as a relief (TASK 885: on a page with the STL part)
         showStockThickness();
         if (modes.current() === 'review') enterReview(designController.state);
       },
@@ -940,7 +937,7 @@ export function startShaperApp({
   shown.reviewView = () => reviewView;
 
   ensureSketch(); // TASK 605: the document buffer (and so the tab strip) exists from the first paint, whichever mode the page opens on
-  // TASK 767: in Fusion mode the design IS the imported selection (TASK 712: it replaces the design), so the design takes the selection's name (TASK 790: an opened STL's too: the file name without .stl)
+  // TASK 767: in Fusion mode the design IS the imported selection (TASK 712: it replaces the design), so the design takes the selection's name (TASK 790: on the website, an opened STL's too: the file name without .stl, main.js's Open STL)
   // (fusion-import.js selectionDesignName, TASK 774: the Fusion DOCUMENT's name, e.g. "06-countersink"; the body's, "Body1", only when the payload has none) and the export file names follow (designFileName). A stored design keeps its own name.
   function nameAfterSelection(name) {
     if (docBuffer.isStored()) return;

@@ -186,7 +186,7 @@ async function phase(label) {
   const firstSvg = uploads[uploads.length - 1].svg;
   assert.deepStrictEqual(await hubTarget(), TARGET, label + ': the target is the file and the folder of that send');
   await waitFor(`!document.getElementById('shaper-sync-modal').open`, label + ': the dialog closes after the send (TASK 758)');
-  assert.strictEqual((await toasts()).length, t1, label + ': the dialog's own Send shows no toast (TASK 886: its result is in the dialog)');
+  assert.strictEqual((await toasts()).length, t1, label + ': the Send of the dialog shows no toast (TASK 886: its result is in the dialog)');
 
   // ── the dialog again: the switch enabled and on (the default), the hint names the file and folder; turned OFF (Generate sends nothing), then ON ──
   await openDialog();

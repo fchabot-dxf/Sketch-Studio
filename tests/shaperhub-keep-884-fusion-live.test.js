@@ -157,7 +157,7 @@ try {
   const firstSvg = uploads[uploads.length - 1].svg;
   assert.deepStrictEqual(await hubTarget(), TARGET, 'the target: that file in My Files');
   await waitFor(`!document.getElementById('shaper-sync-modal').open`, 'the dialog closes after the send');
-  assert.deepStrictEqual(await toasts(), [], 'the dialog's own Send shows no toast (TASK 886)');
+  assert.deepStrictEqual(await toasts(), [], 'the Send of the dialog shows no toast (TASK 886)');
   await waitFor(`window.adsk._sent.some((m) => m.action === 'save_project' && JSON.parse(m.data).project.hubTargets)`, 'the design\'s project saved with the target (debounced)', 15000);
   const saved = (await sentOf('save_project')).filter((m) => m.project.hubTargets).pop();
   assert.strictEqual(saved.docToken, 'tok-A', 'saved into design A');

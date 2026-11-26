@@ -1384,6 +1384,69 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `solver`
 - **History:** found in `1000` (`UX-07`), `1000B` (`B-5`), `1003` (`D-21`) -> fixed in task `1007` (removed duplicate loop)
 
+### BUG-096
+- **Date / turn:** 2026-11-26 (task 1009; `NEW-11` from task 875 / `1000`)
+- **Reported by:** coverage audit (`NEW-11`) / solver UX audit `1000`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, `packages/core/fillet.js`)
+- **Report:** `"fillet arcs are created with no sweep (fillet.js ~:520, sweep undefined)"` (`NEW-11`: fillet arc midpoint near 180 deg flips shortest-way on bite jitter; mirrored fillet inherits `sweep: undefined`).
+- **What was wrong:** Fillet arcs stored no `sweep` direction boolean, so `arcSweepInfo` defaulted to the shortest arc between endpoints near 180 deg, causing bite jitter flips in `coverage-matrix` (`NEW-11`, 6 cells) and missing `sweep` on mirrored fillets (`mirror.js:37`).
+- **Cause:** `packages/core/fillet.js:520` (`applyFillet`) called `makeArc(...)` without assigning `arcShape.sweep`.
+- **Task id(s):** `1009`
+- **Fix merge sha:** pending merge of `agents/arcsweep-1009`
+- **Guarding test file(s):** `tests/fillet-sweep-1009.test.js`, `tests/coverage-matrix.test.js` (`NEW-11` removed from `KNOWN`)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-060, BUG-098
+- **History:** `NEW-11` recorded in `coverage-matrix` -> fixed in `packages/core/fillet.js:522` (`arcShape.sweep = arcSweepInfo(centerPt, tA, tB).dir > 0`), `NEW-11` removed from `KNOWN` (`2026-11-26`)
+
+### BUG-097
+- **Date / turn:** 2026-11-26 (task 1009; `UX-03` from `1000` / `1000B`)
+- **Reported by:** solver UX audits `1000` / `1000B`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, `packages/ui/input-manager.js`)
+- **Report:** `"UX-03: dragging an arc's end onto its own start snaps and adds coincident:e,s, collapsing the arc to zero sweep permanently."`
+- **What was wrong:** Dragging an arc's endpoint onto its own opposite endpoint snapped onto it and created `coincident` on release, permanently collapsing the arc to zero sweep (even though the Coincident tool refused `(s, e)`).
+- **Cause:** `packages/ui/input-manager.js:451` (`updateSnapTarget`) only excluded `state.drag.jointIds` when calling `toolSnap` -> `findSnap` and checking `j_origin`, so an arc's own opposite endpoint (and `j_origin` when coincident with it) remained a snap candidate.
+- **Task id(s):** `1009`
+- **Fix merge sha:** pending merge of `agents/arcsweep-1009`
+- **Guarding test file(s):** `tests/arc-no-self-weld-1009-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-099
+- **History:** reported in `1000` (`DR4.1`) / `1000B` -> fixed in one place at `packages/ui/input-manager.js:451-462` (`2026-11-26`)
+
+### BUG-098
+- **Date / turn:** 2026-11-26 (task 1009; `UX-05` / `B-12a` from `1000` / `1000B`)
+- **Reported by:** solver UX audits `1000` (`DR4.2b`) / `1000B` (`6d`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, `packages/core/fillet.js` + `packages/core/solver/engine.js`)
+- **Report:** `"UX-05 = B-12a: dragging a corner far folds the fillet arc inside-out (centre jumps past the edge, a cusp)."`
+- **What was wrong:** Without `arc.sweep` (`BUG-096`) and without checking smooth tangent orientation during drags, dragging a filleted corner past 180 deg or shrinking a free-radius fillet folded the arc into a cusp (`filletTravel <= 0`, e.g., `6d` center jumping into a cusp). Fusion live check `(a)` (L1 `(-6,0)-(-2,0)`, L2 `(-2,0)-(-2,4)`, `r=0.6`, L2 far end dragged past straight to lower right): the fillet stays tangent on its original side and its sweep grows smoothly past 180 deg to `358.85 deg` (`r=3.079`), with no cusp and no flip.
+- **Cause:** `packages/core/fillet.js:520` omitted `arcShape.sweep`, and `packages/core/solver/engine.js` (`NewtonSolver.solve`) accepted `hasSpring` drag steps that turned a fillet's shared tangent transitions (`filletTravel`) to `<= 0` (`cusp`). (Note: parked `847-B` applied `_filletTurnedOut` to non-drag constraint solves too, breaking 5 `coverage-matrix` + 9 `fusion-oracle` graded cells; scoping `_keepsFillets` strictly to `hasSpring` drags preserves all Fusion-oracle and coverage-matrix green cells.)
+- **Task id(s):** `1009`
+- **Fix merge sha:** pending merge of `agents/arcsweep-1009`
+- **Guarding test file(s):** `tests/fillet-no-cusp-drag-1009.test.js`
+- **Status:** fixed (drag fold); see `BUG-060` for parked non-drag `847-B` dim-edit case
+- **Family:** `solver`
+- **Related:** BUG-060, BUG-096, BUG-099
+- **History:** reported in `1000` / `1000B` -> confirmed against Fusion LIVE `(a)` (`358.85 deg`, `r=3.079`) -> fixed in `fillet.js:522` + `engine.js` `_keepsFillets` (`hasSpring` drags only) (`2026-11-26`)
+
+### BUG-099
+- **Date / turn:** 2026-11-26 (task 1009; `B-12b` / `EA-4` from `1000B` / task `531`)
+- **Reported by:** extreme-arcs coverage (`EA-4`) & solver UX audit `1000B` (`6f`), Fusion LIVE checked `2026-11-26`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, `packages/core/solver/engine.js`)
+- **Report:** `"B-12b / EA-4: a 10 degree arc whose end is dragged past its start wraps to ~352 degrees."`
+- **What was wrong:** Dragging the endpoint of a short arc (`10 deg` in `6f`, `0.1 deg` in `EA-4` `s0.1ccw`) past its start wraps the arc to `~352-355 deg`.
+  - **Fusion LIVE fact `(a)` (fillet):** L1 `(-6,0)-(-2,0)`, L2 `(-2,0)-(-2,4)` with fillet `r 0.6`, L2 far end dragged past straight to lower right -> fillet stays tangent on its original side, sweep grows smoothly to `358.85 deg` (`r=3.079`), no cusp, no flip.
+  - **Fusion LIVE fact `(b)` (short arc):** `10 deg` arc (centre `(-4.5, 2.5)`, `r 1.2`), end dragged `~35 deg` past start -> arc stays short (`6.97 deg`), centre and radius re-solve to centre `(0.476, 1.207)`, `r 3.991` (no `~352 deg` wrap).
+  - **Task 1009 finding (`extreme-arcs.test.js`):** once `fillet.js` sets `arc.sweep`, `f179r10` (`179 deg` corner = `1 deg` fillet) matches Fusion `(a)` (`-358.873 deg` smooth reflex loop), but `tests/harness/coverage/arcs-rows.js:129` (`Math.abs(g1.span - g0.span) > Math.PI`) still labels those 16 `f179r10` cells `EA-4`; meanwhile a Cartesian LM min-sweep clamp does not match Fusion `(b)` (which re-solves centre across the chord). `EA-4` and `EA-5` stay in `KNOWN` and `arcs-rows.js` stays unchanged pending dedicated `B-12b` solver design.
+- **Cause:** Cartesian joint LM solver (`engine.js`) updates joint positions incrementally on one side of `s..e`, wrapping `arcSweepInfo` across `0 deg` to `~352 deg` instead of re-solving centre/radius across the chord as Fusion `(b)` does.
+- **Task id(s):** open (deferred from `1009`)
+- **Fix merge sha:** open
+- **Guarding test file(s):** `tests/extreme-arcs.test.js` (`KNOWN['EA-4']`, `KNOWN['EA-5']`)
+- **Status:** open, waiting for Fusion `(b)` centre-flip / `extreme-arcs` design
+- **Family:** `solver`
+- **Related:** BUG-097, BUG-098
+- **History:** `EA-4` logged in task `531` -> Fusion LIVE `(a)` & `(b)` measured and `f179r10` vs `arcs-rows.js:129` interaction documented in task `1009` (`2026-11-26`); deferred to its own task
+
 ---
 
 ## Family index
@@ -1399,14 +1462,14 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
 | `storage-lifecycle` | BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---

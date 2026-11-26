@@ -1294,8 +1294,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
                 if (pc && !pc.isDriven && !pc.driven) {
                     try {
                         const svgEl = canvasSvg || inputCtx.getCanvasSvg?.() || (typeof document !== 'undefined' ? (document.getElementById('svgCanvas') || document.querySelector('svg')) : null);
-                        anchorPlacingDimension(svgEl, state);
-                        showEditInput(svgEl, state, pc, e.key);
+                        anchorPlacingDimension(svgEl, state, e.key);
                     } catch(_){ }
                     e.preventDefault();
                     return;
@@ -1519,10 +1518,18 @@ export function toggleFixedSelection(state) {
 // Re-export showDimInput so higher-level modules (e.g. main.js) can open the dim editor
 export const showDimInput = showEditInput;
 
-// Helper: Switch the active tool programmatically with UI update fallback
-export function switchToTool(state, toolName) {
+// Shared exit cleanup when switching tools (both switchToTool and tool-ribbon's host-owned onToolClick path).
+export function leaveActiveTool(state, nextTool) {
     commitTextEditor(); // TASK 845: another tool (its button or its key) keeps the text being edited, as a press outside the editor does
     state.closeDrawStep(); // TASK 549: picking another tool in the middle of a draw cancels it (the ribbon button does the same)
+    // TASK 1004 (B-7/D-20, D-6): leaving Dimension mid-placement or mid-pick cancels it like Esc (a new dim removed, an existing one kept).
+    // Re-clicking Dimension or pressing its key keeps an active placement / pick (owner tool rule).
+    if (nextTool !== TOOL_MODES.DIMENSION) resetDimensionState(state);
+}
+
+// Helper: Switch the active tool programmatically with UI update fallback
+export function switchToTool(state, toolName) {
+    leaveActiveTool(state, toolName);
     // Primary path: let the host's toolbar handle the switch (default = SketchStudio's #tool-<name> button click +
     // active-state sync). Returns true when handled; a host without a toolbar omits it -> we fall through.
     if (inputCtx.setActiveTool && inputCtx.setActiveTool(toolName)) return;

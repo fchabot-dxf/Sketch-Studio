@@ -16,6 +16,7 @@ import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { toggleDriving } from '#core/dimension-seams.js';
+import { isJointLocked, lockTargets } from '#core/lock-state.js';
 import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/context-menu.js';
 
 import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
@@ -1390,59 +1391,35 @@ function openContextMenuFor(e, svg, state, { touch = false } = {}) {
     return true;
 }
 
-// The joints the lock acts on: the selected joints plus the joints of the selected shapes (the hovered shape when
-// nothing is selected, unless `selectionOnly`).
-function lockTargets(state, selectionOnly) {
-    const targets = new Set();
-
-    if (state.selectedJoints && state.selectedJoints.size) {
-        for (const jid of state.selectedJoints) targets.add(jid);
-    }
-
-    if (state.selectedShapes && state.selectedShapes.size) {
-        for (const sid of state.selectedShapes) {
-            const s = state.shapes.find(x => x.id === sid);
-            if (s && s.joints) s.joints.forEach(jid => targets.add(jid));
-        }
-    }
-
-    // Fallback: hovered shape
-    if (!selectionOnly && targets.size === 0 && state.hoveredShape) {
-        const s = state.shapes.find(x => x.id === state.hoveredShape);
-        if (s && s.joints) s.joints.forEach(jid => targets.add(jid));
-    }
-    return Array.from(targets);
-}
-
-// { has, locked }: is there anything to lock, and is all of it already locked (the origin always counts as locked).
+// { has, locked }: is there anything to lock, and is all of it already locked?
+// Uses #core/lock-state.js (the one source of truth shared with toggleFixedSelection and svg-renderer).
 export function selectionLockState(state, selectionOnly = true) {
-    const ids = lockTargets(state, selectionOnly);
-    const locked = ids.length > 0 && ids.every(id => {
-        if (id === 'j_origin') return true;
-        const j = state.joints.get(id);
-        return !!(j && j.fixed);
-    });
-    return { has: ids.length > 0, locked };
+    const { joints, circles } = lockTargets(state, selectionOnly);
+    const has = joints.length > 0 || circles.length > 0;
+    const locked = has
+        && joints.every((id) => isJointLocked(state.joints, id))
+        && circles.every((s) => s.fixed === true);
+    return { has, locked };
 }
 
 // The one Lock / Unlock: the F key, the ribbon Lock button and the context menu all call this.
-// TASK 1006 (UX-08 / B-4): a Lock / Unlock that changes a point is ONE undo step (recordUndo before the change).
+// TASK 1006 (UX-08 / B-4): a Lock / Unlock that changes a point or circle is ONE undo step (recordUndo before the change).
+// TASK 1012 (UX-06 / B-1, UX-26): fixes both centre and radius on circles, and honours filleted locked lines' virtual sharps.
 export function toggleFixedSelection(state) {
-    const ids = lockTargets(state, false);
-    if (ids.length === 0) return false;
+    const { joints, circles } = lockTargets(state, false);
+    if (joints.length === 0 && circles.length === 0) return false;
 
-    const allFixed = ids.every(id => {
-        if (id === 'j_origin') return true;
-        const j = state.joints.get(id);
-        return !!(j && j.fixed);
-    });
+    const allFixed = joints.every((id) => isJointLocked(state.joints, id))
+        && circles.every((s) => s.fixed === true);
 
     const nextFixed = !allFixed;
-    const changed = ids.filter(id => { const j = id === 'j_origin' ? null : state.joints.get(id); return j && !!j.fixed !== nextFixed; });
-    if (changed.length) recordUndo(state, nextFixed ? 'lock' : 'unlock');
-    for (const id of changed) state.joints.get(id).fixed = nextFixed;
+    const changedJoints = joints.filter((id) => { const j = id === 'j_origin' ? null : state.joints.get(id); return j && !!j.fixed !== nextFixed; });
+    const changedCircles = circles.filter((s) => !!s.fixed !== nextFixed);
+    if (changedJoints.length || changedCircles.length) recordUndo(state, nextFixed ? 'lock' : 'unlock');
+    for (const id of changedJoints) state.joints.get(id).fixed = nextFixed;
+    for (const s of changedCircles) s.fixed = nextFixed;
 
-    try { dbg.log('debug', '[fixed] toggle', { ids, fixed: nextFixed }); } catch(_) {}
+    try { dbg.log('debug', '[fixed] toggle', { ids: joints, circles: circles.map((s) => s.id), fixed: nextFixed }); } catch(_) {}
     try { if (state.engine) state.engine.solve(SolverConfig.ITERATIONS || 500); } catch(_) {}
 
     return true;

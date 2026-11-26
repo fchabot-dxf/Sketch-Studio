@@ -2665,7 +2665,6 @@ switch(c.type){
           const edgeX = center.x + Math.cos(angle) * radius;
           const edgeY = center.y + Math.sin(angle) * radius;
 
-          out.push(`<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}" data-constraint-idx="${cIdx}"/>`);
 
           // TASK 448: on an ARC, a leader outside the arc's sweep still meets the arc's CIRCLE at that angle; a thin dashed
           // EXTENSION of the circle runs from the nearest arc end to that point (inside the sweep: none; circle: none).
@@ -2700,11 +2699,15 @@ switch(c.type){
           const isSelected = selectedConstraints && selectedConstraints.has(c);
           const labelStrokeColor = isHovered ? HOVER_COLOR : isSelected ? '#1e40af' : '#2563eb';
           const labelStrokeWidth = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
+          // The leader runs from the rim to the EDGE of the value's text (radialLead), never into it.
+          const placedRad = placeDimLabel(labelX, labelY, Math.cos(angle), Math.sin(angle), displayVal, scale(50), false, labelStrokeColor);
+          const leader = radialLead({ x: edgeX, y: edgeY }, placedRad.rect, scale(DIM_LEAD_MIN_PX));
+          if (leader) out.push(`<line x1="${leader.x1}" y1="${leader.y1}" x2="${leader.x2}" y2="${leader.y2}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}" data-constraint-idx="${cIdx}"/>`);
           
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">${dimensionNameTitle(c)}
             ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
-            <text ${placeDimLabel(labelX, labelY, Math.cos(angle), Math.sin(angle), displayVal, scale(50), false, labelStrokeColor).attrs}>${displayVal}</text>
+            <text ${placedRad.attrs}>${displayVal}</text>
           </g>`;
           try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
           if (!c.__editing) { out.push(labelHtml); }
@@ -2799,10 +2802,14 @@ switch(c.type){
             
             // Draw Arrows
             const arrowSize = scale(6);
-            // Start Arrow
-            out.push(`<polygon points="${sx},${sy} ${sx - Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy + Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize} ${sx + Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy - Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}" data-constraint-idx="${cIdx}"/>`);
-            // End Arrow
-            out.push(`<polygon points="${ex},${ey} ${ex - Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey + Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize} ${ex + Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey - Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}" data-constraint-idx="${cIdx}"/>`);
+            // The arc runs from startAngle to endAngle in the +angle direction, so each arrow points ALONG the arc, out of its
+            // end (tangent t = (-sin a, cos a); the base sits one arrow length back along the arc, spread across the radial r).
+            const arcArrow = (px, py, a, back) => {
+              const rx = Math.cos(a), ry = Math.sin(a), bx = px - Math.sin(a) * back * arrowSize, by = py + Math.cos(a) * back * arrowSize;
+              return `<polygon points="${px},${py} ${bx + rx*arrowSize/2},${by + ry*arrowSize/2} ${bx - rx*arrowSize/2},${by - ry*arrowSize/2}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}" data-constraint-idx="${cIdx}"/>`;
+            };
+            out.push(arcArrow(sx, sy, startAngle, 1));
+            out.push(arcArrow(ex, ey, endAngle, -1));
             
             const labelW = scale(40);
             const labelH = scale(18);

@@ -1386,6 +1386,54 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 
 ---
 
+### BUG-130
+- **Date / turn:** 2026-11-26 (audit ID `D-9`; fixed in task `1010`)
+- **Reported by:** audit `1003` (`V2.6.angleArrows`, `L1.visual.desktop`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `D-9`: both arrowheads of an angle dimension point 90 degrees off (radial instead of along the arc).
+- **What was wrong:** The two arrow polygons of every angle dimension were built with their base spread along the tangent and set back along the radial, so each arrowhead pointed along the radius (`dotRadial=+-1, dotTangent=0`).
+- **Cause:** `packages/ui/svg-renderer.js` (angle dimension, 'Draw Arrows'): the tangent and radial vectors were swapped in the two `<polygon>` strings; now one `arcArrow` helper builds both (tip on the arc end, base one arrow length back along the arc).
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/angle-arrows-d9-node.test.js`, `tests/dim-visuals-d9-d12-d16-live.test.js` (desktop + phone)
+- **Status:** fixed
+- **Family:** `dimension-display`
+- **History:** found in `1003` (`D-9`) -> fixed in task `1010`
+
+---
+
+### BUG-131
+- **Date / turn:** 2026-11-26 (audit ID `D-12`; fixed in task `1010`)
+- **Reported by:** audit `1003` (`V2.6.radiusLeader`, `L1.visual.desktop`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `D-12`: the radius dimension's leader line runs into its own `R 18` text.
+- **What was wrong:** The leader was drawn from the rim to the label centre, straight through the text.
+- **Cause:** `packages/ui/svg-renderer.js` (radius dimension): the leader ended at `(labelX, labelY)`; it now goes through `radialLead` (`packages/ui/dimension-lead.js`, the helper angle and linear dimensions already use) to the edge of the text box, and is not drawn when that is shorter than the minimum lead.
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/radius-leader-d12-node.test.js`, `tests/dim-visuals-d9-d12-d16-live.test.js` (desktop + phone)
+- **Status:** fixed
+- **Family:** `dimension-display`
+- **History:** found in `1003` (`D-12`) -> fixed in task `1010`
+
+---
+
+### BUG-132
+- **Date / turn:** 2026-11-26 (audit ID `D-16`; fixed in task `1010`)
+- **Reported by:** audit `1003` (`L1.visual.desktop`, `svg-renderer.js:2701,2751,2813`, `hover-manager.js:38-48`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `D-16`: a narrow dimension label such as `5` (6 x 15 px) has a tiny hover / click area.
+- **What was wrong:** `dimLabelAt` tested the pointer against the label's exact drawn box only, so a 6 px wide value was almost impossible to hit, most of all with a finger.
+- **Cause:** `packages/ui/hover-manager.js` `dimLabelAt`: no minimum hit size. It now grows every label's box to at least `DIM_LABEL_MIN_HIT_PX` (24 px) either way; hover, click, double-click edit and touch all go through this one function.
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/dim-label-hit-d16-node.test.js`, `tests/dim-visuals-d9-d12-d16-live.test.js` (desktop hover + phone tap, Shaper)
+- **Status:** fixed
+- **Family:** `dimension-display`
+- **History:** found in `1003` (`D-16`) -> fixed in task `1010`
+
+---
+
 ## Family index
 
 Entries in each family are listed in chronological date order (`MM-DD`, oldest first) so recurring patterns read as a timeline.

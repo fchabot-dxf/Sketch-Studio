@@ -2,6 +2,7 @@
 // TODO(shaper): parameterize the DOM reaches (document.getElementById('dimInput')/createElement/document.body)
 // before Shaper adopts this — it currently builds its inputs straight into the SketchStudio document.
 import { worldToScreen } from '#ui/coords.js';
+import { logDiagnostic } from '#core/debug.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyParameterChange, dimensionInputLabel, isDimensionDetermined, sizeRefusal, SIZE_REFUSAL } from '#core/dimension-seams.js';
@@ -474,10 +475,10 @@ export function showEditInput(svg, state, constraint, initialKey) {
     if (isDimensionDetermined(state, constraint)) {
         constraint.isDriven = true;
         constraint.driven = true;
-        showNotification(
-            'Dimension added as Driven (already determined by existing constraints). [ERR-DRIVEN-02]',
-            'info'
-        );
+        logDiagnostic('constraints', 'ERR-DRIVEN-02', 'Already determined by existing constraints; dimension added as driven.', {
+            constraintId: constraint.id,
+            type: constraint.type
+        });
         return;
     }
 

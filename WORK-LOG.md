@@ -18239,3 +18239,10 @@ TURN 895 (advisor follow-up): goStage moved to ONE helper, tests/helpers/go-stag
 
 ## TURN 899 — drive-rename-live waits for what it reads (Claude Sonnet subagent, branch agents/driveflake-899)
 Test only. Cause: the tab label was read once right after pagehide + flushDrive (no wait for the tab update), and the drawer / doc entry clicks aimed at a rect measured while the sidebar slid. Fix: clickSel uses tests/helpers/settled-centre.js; the label is waitFor'd (20 s) before the unchanged assertion. 5x alone ok, 3x beside gate:quick ok, gate:quick pass=607 fail=0.
+
+## TURN 1001 — remove leftover "stupid" notices & raw debug text from user toasts
+- Export: unified `apps/sketchstudio/main.js` and `apps/sketchstudio/ui/ui-manager.js` onto `runExport` in `apps/sketchstudio/ui/export-manager.js`; removed the `"Export started"` success toast (normal behaviour) and the silent `try { showNotification(...) } catch (_) {}` catches (also added missing `showNotification` import in `ui-manager.js`); kept `"Export failed: <reason>"`.
+- Shared Log helper: added `logDiagnostic(category, code, reason, args, level)` in `packages/core/debug.js` so codes and Args stay in the Log.
+- Normal-behaviour driven/reference notices silenced (Log keeps code/args): `dimension-tool.js` (`ERR-DIM-02` x2), `live-dimension-input.js` (`ERR-OVERCON-01`), `numeric-input-manager.js` (`ERR-DRIVEN-02`), `constraint-manager.js` (`announceReference`, `ERR-CMATH-02`, `ERR-CSOLVE-02`).
+- User-actionable error notices cleaned to one plain sentence (no `ERR-` code, no `Reason:`, no `Args:`): `input-manager.js` (`ERR-EQUAL-01` -> `'Equal needs two lines, or two circles or arcs.'`; `ERR-DRIVE-02` -> `'Cannot make this dimension driving: it conflicts with existing constraints.'`), `constraint-manager.js` (`ERR-CMATH-01` stripped from user toast). Task 874 `'Sketch geometry over constrained'` untouched.
+- Tests: added `tests/notices-1001-node.test.js` (27 checks) and `tests/notices-1001-live.test.js` (desktop 1280x800 + phone 390x844); updated `tests/dimension-line-line-reference-node.test.js` and `tests/harness/solver-scenarios.test.js` scenario 8 (`lastError === null`).

@@ -9,7 +9,6 @@ import { dbg, logDiagnostic } from '#core/debug.js';
 import { TOOL_MODES, CONSTRAINT_TYPES, DRAG_TYPES, DEFAULTS } from '#core/constants.js';
 import { ConstraintManager, announceReference } from '#core/constraint-manager.js';
 import { radialDimensionParams } from '#core/constraints.js';
-import { isPatternConstraint } from '#core/pattern.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { getDist, perpendicularDistance, projectPointOnLine, isPointLineDistance } from '#core/geometry.js';
 import { showEditInput, showSingleInput } from '#ui/numeric-input-manager.js';

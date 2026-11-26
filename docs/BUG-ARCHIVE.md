@@ -1385,6 +1385,21 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **Related:** BUG-092, BUG-093, BUG-094
 
+### BUG-096
+- **Date / turn:** 2026-11-26 (audit `DD-4`, task 1003; final owner ruling turn 3764 `"leave tool"`)
+- **Reported by:** worker (`1003`, Dimension tool focused audit — logged as divergence `DD-4`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** `"Audit DD-4: Pressing Esc mid-pick or mid-placement in the Dimension tool cancels the in-progress pick/placement and immediately exits to Select in one step."`
+- **What was wrong:** Not a bug. Initially flagged as an unverified divergence against Fusion (`DD-4`); advisor verified Fusion 360 live on 2026-11-26 that ONE `Esc` in Sketch Dimension exits mid-pick and mid-placement, and the owner ruled (turn 3764, `"leave tool"`) to keep one-step `Esc` (cancels whatever is in progress — new dimension removed, existing dimension kept per BUG-092 — and leaves the Dimension tool).
+- **Cause:** Intentional behaviour matching Fusion 360 (`packages/ui/input-manager.js` `handleEscape`).
+- **Task id(s):** `1003` (audit), `1004` (ruling recorded)
+- **Fix merge sha:** n/a (no code change; existing behaviour kept)
+- **Guarding test file(s):** `tests/dimension-1004-node.test.js`
+- **Status:** not a bug (closed; Fusion verified live 2026-11-26: one Esc exits mid-pick and mid-placement)
+- **Family:** `ui-input`
+- **Related:** BUG-092, BUG-095
+- **History:** logged as unverified divergence `DD-4` in task 1003 -> temporary two-step `Esc` ruling turn 3759 held after live Fusion check 2026-11-26 -> final owner ruling turn 3764 `"leave tool"` closed `DD-4` as not a bug
+
 ---
 
 ## Family index
@@ -1407,7 +1422,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-091 (11-26), BUG-092 (11-26), BUG-093 (11-26), BUG-094 (11-26), BUG-095 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-091 (11-26), BUG-092 (11-26), BUG-093 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---
@@ -1419,4 +1434,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
 - [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md) & [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md) — Solver UI/UX audits (`UX-nn` / `B-nn`, tasks `1000` and `1000B`).
-- [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Dimension Tool focused audit (`D-1`..`D-26`, `DD-1`..`DD-5`, task `1003`; paired with BUG-091..BUG-095).
+- [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Dimension Tool focused audit (`D-1`..`D-26`, `DD-1`..`DD-5`, task `1003`; paired with BUG-091..BUG-096).

@@ -1846,6 +1846,22 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `solver`
 - **Related:** BUG-140
 
+### BUG-147
+- **Date / turn:** 2026-11-26 (found by task 1008 merge check: `tests/coverage-matrix.test.js` after merging main)
+- **Reported by:** advisor / clerical merge agent (1008)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** `"Clicking a dimensioned arc, then a line, silently deleted the arc's radius."`
+- **What was wrong:** With the new rim picks (BUG-141), a placement's second pick spliced out the dimension being placed; when the first pick had created nothing (the arc / circle already has a driving dimension) that dimension was the EXISTING radius.
+- **Cause:** `startShapeDimension` (`dimension-tool.js`) falls back to `state.constraints[last]` when `createConstraint` refuses, then stamped it as born in this placement (`finalizeDimBirth`), and `discardPlacingLength` spliced any placing dimension out.
+- **Fix:** `discardPlacingLength` discards only a dimension born in the placement (`__newlyPlaced === true`, the rule of `resetDimensionState`'s Esc); `startShapeDimension` no longer stamps a re-offered existing dimension as born (and drops the birth snapshot). Tab in a reference dimension's read-only `view` box closes it like Enter.
+- **Open hazard (NOT fixed here, by ruling):** the `c = res || state.constraints[last]` fallback itself (in `startShapeDimension` and `createPointPointDimension`): when nothing is created, the LAST constraint of any kind is taken as the dimension; it is only the right one by luck. A circle that already has a driving dimension re-offers whatever constraint is last.
+- **Task id(s):** `1008`
+- **Fix merge sha:** pending (`agents/dimpicks-1008`)
+- **Guarding test file(s):** `tests/dimpicks-1008-node.test.js` (7, 8)
+- **Status:** fixed (fallback hazard open)
+- **Family:** `ui-input`
+- **Related:** BUG-141, BUG-143
+
 ---
 
 ## Family index
@@ -1868,7 +1884,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---

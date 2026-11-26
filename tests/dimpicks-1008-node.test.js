@@ -349,6 +349,38 @@ await test('6 Tab in the dimension edit box commits the typed value like Enter (
   assert.equal(app.state.history.length - h0, 1, 'one undo step');
 });
 
+// ─── a placement never discards an EXISTING dimension (the arc's radius survives; the distance is a NEW dimension) ───
+await test('7 an arc with a driving radius, then a line: the radius survives and the centre-to-line distance is a NEW dimension', async () => {
+  await openDesign(makeDoc({ ac: [0, 0, true], as: [25, 0], ae: [0, 25], la: [-40, -20], lb: [40, -20] },
+    [{ id: 'A1', type: 'arc', joints: ['ac', 'as', 'ae'] }, { id: 'L1', type: 'line', joints: ['la', 'lb'] }],
+    [{ type: 'distance', shape: 'A1', isRadius: true, value: 25, offset: 30, name: 'd1' }]), { centre: { x: 0, y: 0 }, w: 140 });
+  app.tool('dim');
+  await clickW({ x: 25 * Math.SQRT1_2, y: 25 * Math.SQRT1_2 });
+  await clickW({ x: 30, y: -20 });
+  assert.ok(dimByName('d1'), 'the arc radius d1 survives');
+  assert.ok(app.state.constraints.includes(dimByName('d1')), 'd1 is still in the constraints');
+  const added = allDims().filter((d) => d.name !== 'd1');
+  assert.equal(added.length, 1, 'one new dimension');
+  assert.equal(added[0].joints.length, 3, 'the centre-to-line distance');
+  assert.equal(added[0].joints[0], 'ac');
+});
+
+// ─── Tab in a reference dimension's read-only box closes it like Enter ───
+await test('8 Tab in a REFERENCE dimension read-only box closes it (no change)', async () => {
+  await openDesign(refDoc(), { centre: { x: 40, y: 20 }, w: 260 });
+  const c = dimByName('d3'), idx = app.state.constraints.indexOf(c);
+  const g = c.glyphPos, p = app.toScreen(g.x, g.y);
+  const h0 = app.state.history.length;
+  await app.pause(550);
+  await quiet(() => { app.dblclick(p.x, p.y, { target: () => labelEl(app, idx) }); });
+  assert.equal(boxOpen(), true, 'the read-only box opens');
+  await quiet(() => app.key('Tab'));
+  app.frames();
+  assert.equal(boxOpen(), false, 'Tab closed it');
+  assert.equal(app.state.history.length, h0, 'nothing changed');
+  assert.equal(dimByName('d3').isDriven, true, 'still a reference');
+});
+
 process.exitCode = failed ? 1 : 0;
 if (app) { try { await app.close(); } catch (_) {} }
 console.log(failed ? `${failed} FAILED` : 'ALL PASSED');

@@ -650,7 +650,13 @@ function startShapeDimension(svg, state, shape, e, w) {
         try { c.glyphPos = w; } catch(_){ }
         placeRadiusLabel(c, center, w);
         startPlacing(svg, state, c, e, w);
-        finalizeDimBirth(c, state);
+        if (res && typeof res === 'object') finalizeDimBirth(c, state);
+        else {
+            // nothing was created (the shape already has a driving dimension): `c` is an EXISTING dimension re-offered, never stamped as born in
+            // this placement (a later pick or Esc must not splice it out) and its birth snapshot is dropped, as for a recovered line-line dimension
+            endDimUndo(state);
+            if (state.history && state.history.length > 0 && state.discardSnapshotAt) state.discardSnapshotAt(state.history.length);
+        }
         return true;
     }
     return false;
@@ -815,11 +821,13 @@ function createPointPointDimension(svg, state, firstId, secondId, e, w) {
 // The temporary LENGTH dimension of a line (the preview while its label follows the cursor) is removed together with its birth snapshot
 // when a second pick turns it into another dimension (line + line, line + axis, line + point).
 function discardPlacingLength(state, pending) {
-    if (pending.__newlyPlaced && typeof pending.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) {
-        state.discardSnapshotAt(pending.__birthHistoryLength);
+    // a placement may only discard a dimension BORN in it (__newlyPlaced, the rule resetDimensionState's Esc has): an existing dimension a pick
+    // fell back to (startShapeDimension's last-constraint fallback) is never spliced out (task 1008)
+    if (pending.__newlyPlaced === true) {
+        if (typeof pending.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) state.discardSnapshotAt(pending.__birthHistoryLength);
+        const idx = state.constraints.indexOf(pending);
+        if (idx !== -1) state.constraints.splice(idx, 1);
     }
-    const idx = state.constraints.indexOf(pending);
-    if (idx !== -1) state.constraints.splice(idx, 1);
     pending.__placing = false;
     pending.__newlyPlaced = false;
     if (state && state.placingConstraint === pending) state.placingConstraint = null;

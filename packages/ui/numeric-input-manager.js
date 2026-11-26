@@ -343,7 +343,7 @@ function setupListeners() {
             dirty: () => !!uiState.typed[0],
             onAtDefault: (!uiState.typed[0] && !uiState.undoneToDefault) ? handleCancel : null
         })) return;
-        const tabCommits = e.key === 'Tab' && uiState.mode === 'edit'; // task 1008, D-15: the dimension's one field: Tab commits like Enter, focus stays
+        const tabCommits = e.key === 'Tab' && (uiState.mode === 'edit' || uiState.mode === 'view'); // task 1008, D-15: the dimension's one field: Tab commits like Enter, focus stays
         if (tabCommits) e.preventDefault();
         if (e.key === 'Enter' || tabCommits) handleCommit();
         if (e.key === 'Escape') handleCancel();

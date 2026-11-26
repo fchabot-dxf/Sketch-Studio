@@ -1310,7 +1310,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Related:** BUG-074, BUG-079
 - **History:** noticed turn 3504 (2026-11-24) -> task 1001 dispatched 2026-11-25
 
-### BUG-091
+### BUG-110
 - **Date / turn:** 2026-11-26 (audit 1000B `B-15`, owner ruling turn 3741)
 - **Reported by:** worker (auditor 1000B)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, constraint tools)
@@ -1323,10 +1323,10 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/constraint-refusal-stay-b15-1005-node.test.js`, `tests/constraint-activation-ux15-1005-node.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
-- **Related:** BUG-092, BUG-093
+- **Related:** BUG-111, BUG-112
 - **History:** found in audit 1000B (`B-15`) 2026-11-25 -> fixed in task 1005 2026-11-26
 
-### BUG-092
+### BUG-111
 - **Date / turn:** 2026-11-26 (audits 1000 `UX-15` / 1000B `B-14b,d` & second-click matrix, owner ruling turn 3741)
 - **Reported by:** workers (auditors 1000, 1000B)
 - **App(s) & host:** SketchStudio (vs Shaper, Pen Plotter, Trace)
@@ -1339,10 +1339,10 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/constraint-activation-ux15-1005-node.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
-- **Related:** BUG-091, BUG-094, BUG-096
+- **Related:** BUG-110, BUG-113, BUG-115
 - **History:** found in audits 1000 (`UX-15`) / 1000B (`B-14b,d`) 2026-11-25 -> fixed in task 1005 2026-11-26
 
-### BUG-093
+### BUG-112
 - **Date / turn:** 2026-11-26 (audit 1000B `B-10`)
 - **Reported by:** worker (auditor 1000B)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, Midpoint tool)
@@ -1355,10 +1355,10 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/midpoint-own-end-b10-1005-node.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
-- **Related:** BUG-091
+- **Related:** BUG-110
 - **History:** found in audit 1000B (`B-10`) 2026-11-25 -> fixed in task 1005 2026-11-26
 
-### BUG-094
+### BUG-113
 - **Date / turn:** 2026-11-26 (audits 1000 `UX-14` / 1000B `B-14a`)
 - **Reported by:** workers (auditors 1000, 1000B)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, Equal tool)
@@ -1371,10 +1371,10 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/equal-preselect-ux14-1005-node.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
-- **Related:** BUG-092, BUG-096
+- **Related:** BUG-111, BUG-115
 - **History:** found in audits 1000 (`UX-14`) / 1000B (`B-14a`) 2026-11-25 -> fixed in task 1005 2026-11-26
 
-### BUG-095
+### BUG-114
 - **Date / turn:** 2026-11-26 (audit 1000B `B-14c`)
 - **Reported by:** worker (auditor 1000B)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, H/V tool)
@@ -1387,10 +1387,10 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/hv-dup-notice-b14c-1005-node.test.js`
 - **Status:** fixed
 - **Family:** `notice-wording`
-- **Related:** BUG-079, BUG-092
+- **Related:** BUG-079, BUG-111
 - **History:** found in audit 1000B (`B-14c`) 2026-11-25 -> fixed in task 1005 2026-11-26
 
-### BUG-096
+### BUG-115
 - **Date / turn:** 2026-11-26 (audit 1000B `B-6`)
 - **Reported by:** worker (auditor 1000B)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, constraint preselection)
@@ -1403,7 +1403,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/constraint-preselect-b6-1005-node.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
-- **Related:** BUG-092, BUG-094
+- **Related:** BUG-111, BUG-113
 - **History:** found in audit 1000B (`B-6`) 2026-11-25 -> fixed in task 1005 2026-11-26
 
 ---
@@ -1419,7 +1419,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
-| `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-095 (11-26) |
+| `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
 | `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
@@ -1428,7 +1428,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-091 (11-26), BUG-092 (11-26), BUG-093 (11-26), BUG-094 (11-26), BUG-096 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---

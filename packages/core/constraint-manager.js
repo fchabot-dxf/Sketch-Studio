@@ -1019,7 +1019,7 @@ export class ConstraintManager {
         const dx = Math.abs(j2.x - j1.x);
         const dy = Math.abs(j2.y - j1.y);
         const type = dx > dy ? CONSTRAINT_TYPES.HORIZONTAL : CONSTRAINT_TYPES.VERTICAL;
-        return this.createConstraint(state, type, { joints }, { source: 'auto-detect', ...options });
+        return this.createConstraint(state, type, { joints }, { source: 'toolbar', ...options });
     }
 
     /** TASK 762: the reason a point-on-line constraint `params` ({ joint, shape }) cannot be held (its shape's kind holds no point: CURVE_REFUSALS

@@ -19,6 +19,99 @@ export function canConstrainEqual(s1, s2) {
 /** A refused or invalid pick of a constraint tool: tell the user why (the one notice every handler below uses; never a console.warn only). */
 function refuse(why) { showNotification(why, 'warning'); }
 
+const CURVE_OR_LINE_TYPES = new Set(['line', 'circle', 'arc']);
+
+// TASK 1005: ONE declared pre-selection validation table for every constraint tool (read by activateConstraintTool).
+const CONSTRAINT_PRESELECT = Object.freeze({
+    [TOOL_MODES.COINCIDENT]: {
+        accepts: (el, shape) => el.type === 'joint' || (!!shape && (shape.reference || COINCIDENT_CURVE_TYPES.has(shape.type)) && !curveRefusal(shape, TOOL_MODES.COINCIDENT)),
+        refusal: (shape) => (shape && curveRefusal(shape, TOOL_MODES.COINCIDENT)) || 'Coincident constrains two points, or a point and a line/curve.',
+    },
+    [TOOL_MODES.HORIZONTAL_VERTICAL]: {
+        accepts: (el, shape) => el.type === 'joint' || (!!shape && shape.type === 'line'),
+        refusal: () => 'Horizontal / Vertical takes a line, or two points.',
+    },
+    [TOOL_MODES.PARALLEL]: {
+        accepts: (el, shape) => el.type === 'shape' && !!shape && shape.type === 'line',
+        refusal: () => 'Parallel takes two lines.',
+    },
+    [TOOL_MODES.PERPENDICULAR]: {
+        accepts: (el, shape) => el.type === 'shape' && !!shape && shape.type === 'line',
+        refusal: () => 'Perpendicular takes two lines.',
+    },
+    [TOOL_MODES.COLLINEAR]: {
+        accepts: (el, shape) => el.type === 'shape' && !!shape && shape.type === 'line',
+        refusal: () => 'Collinear takes two lines.',
+    },
+    [TOOL_MODES.TANGENT]: {
+        accepts: (el, shape) => el.type === 'shape' && !!shape && CURVE_OR_LINE_TYPES.has(shape.type),
+        refusal: () => 'Tangent takes a line and a circle or arc, or two circles / arcs.',
+    },
+    [TOOL_MODES.EQUAL]: {
+        accepts: (el, shape) => el.type === 'shape' && !!shape && CURVE_OR_LINE_TYPES.has(shape.type),
+        refusal: () => EQUAL_SELECTION_REFUSAL,
+    },
+    [TOOL_MODES.MIDPOINT]: {
+        accepts: (el, shape) => el.type === 'joint' || (!!shape && (shape.type === 'line' || shape.type === 'arc')),
+        refusal: () => 'Midpoint takes a point and a line or an arc (or three points).',
+    },
+    [TOOL_MODES.SYMMETRIC]: {
+        accepts: (el, shape) => el.type === 'joint' || (!!shape && !shape.reference && !!SYMMETRIC_FAMILY[shape.type]),
+        refusal: () => 'Symmetric takes points, lines, circles or arcs.',
+    },
+});
+
+/**
+ * ONE activation entry point for all constraint tools (ribbon click and keyboard shortcut, every host).
+ * Applies valid immediate pre-selections (1 line for H/V, 2 shapes for Equal), validates single-item
+ * pre-selections so invalid picks (e.g. a joint for Parallel or a circle for H/V) are refused instead of
+ * poisoning pendingConstraint, and leaves the tool active (owner ruling turn 3741).
+ */
+export function activateConstraintTool(state, toolName) {
+    const effectiveType = (toolName === TOOL_MODES.HORIZONTAL_VERTICAL) ? CONSTRAINT_TYPES.HORIZONTAL : toolName;
+    const selJ = state.selectedJoints ? Array.from(state.selectedJoints) : [];
+    const selS = state.selectedShapes ? Array.from(state.selectedShapes) : [];
+
+    // Equal: 2 preselected shapes apply immediately (ribbon button and E key share this one path)
+    if (toolName === TOOL_MODES.EQUAL && selS.length === 2 && selJ.length === 0) {
+        const s1 = findShapeById(state.shapes, selS[0]);
+        const s2 = findShapeById(state.shapes, selS[1]);
+        if (canConstrainEqual(s1, s2)) {
+            recordConstraintStep(state, TOOL_MODES.EQUAL, () => ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.EQUAL, { shapes: [s1.id, s2.id] }, { source: 'toolbar' }));
+        } else {
+            logDiagnostic('constraints', 'ERR-EQUAL-01', 'Invalid selection for equal constraint.', {
+                selectedShapes: [s1 && s1.type, s2 && s2.type]
+            }, 'warn');
+            refuse(EQUAL_SELECTION_REFUSAL);
+        }
+        state.pendingConstraint = { type: effectiveType, firstElement: null };
+        return;
+    }
+
+    // Single-element preselection (1 joint or 1 shape, never a multi-shape group)
+    let firstEl = null;
+    if (selJ.length === 1 && selS.length === 0) firstEl = { type: 'joint', id: selJ[0] };
+    else if (selS.length === 1 && selJ.length === 0) firstEl = { type: 'shape', id: selS[0] };
+
+    if (firstEl) {
+        const shape = firstEl.type === 'shape' ? findShapeById(state.shapes, firstEl.id) : null;
+        const spec = CONSTRAINT_PRESELECT[toolName];
+        if (spec && !spec.accepts(firstEl, shape)) {
+            refuse(spec.refusal(shape));
+            state.pendingConstraint = { type: effectiveType, firstElement: null };
+            return;
+        }
+        // H/V with 1 preselected line: apply immediately and stay in H/V
+        if (toolName === TOOL_MODES.HORIZONTAL_VERTICAL && shape && shape.type === 'line') {
+            recordConstraintStep(state, TOOL_MODES.HORIZONTAL_VERTICAL, () => ConstraintManager.addHorizontalOrVertical(state, shape.joints));
+            state.pendingConstraint = { type: effectiveType, firstElement: null };
+            return;
+        }
+    }
+
+    state.pendingConstraint = { type: effectiveType, firstElement: firstEl };
+}
+
 export function setupConstraintTools(svg, appState) {
     dbg.log('constraints', '[constraint-tools] Setting up constraint tools...');
 }
@@ -133,7 +226,7 @@ function handleShapeConstraintPointerDown(e, svg, state, hitShape) {
     // ENFORCE LINE TYPE
     if (hitShape.shape.type !== 'line') { refuse(`${state.currentTool === TOOL_MODES.PARALLEL ? 'Parallel' : 'Perpendicular'} takes two lines (not a circle or an arc).`); return false; }
     
-    if (!state.pendingConstraint || !state.pendingConstraint.firstElement) {
+    if (!state.pendingConstraint || !state.pendingConstraint.firstElement || state.pendingConstraint.firstElement.type !== 'shape') {
         state.pendingConstraint = { type: state.currentTool, firstElement: { type: 'shape', id: hitShape.shape.id } };
         state.selectedShapes.add(hitShape.shape.id);
         return true;
@@ -349,31 +442,31 @@ function handleMidpointPointerDown(e, svg, state, hitJoint, hitShape) {
     const lineItem = buffer.find(x => x.type === 'shape');
     const jointItems = buffer.filter(x => x.type === 'joint');
 
-    // TASK 875: a point and an ARC, in either order: the point at the arc's sweep midpoint ({ joint, shape }, Fusion's addMidPoint(point, arc))
-    if (lineItem && lineItem.shape.type === 'arc') {
-        if (jointItems.length !== 1) return true;
+    // TASK 875 / 1005 (B-10): a point and an ARC or LINE, in either order. Picking the curve's own endpoint / centre is refused with a plain message, clears the pick buffer, and keeps Midpoint active.
+    if (lineItem && jointItems.length === 1) {
         const point = jointItems[0].id;
         if (lineItem.shape.joints.includes(point)) {
-            refuse("Midpoint of an arc: pick a point that is not the arc's own centre or end.");
-            buffer.splice(buffer.indexOf(jointItems[0]), 1);
-            state.selectedJoints.delete(point);
+            refuse(lineItem.shape.type === 'arc'
+                ? "Midpoint of an arc: pick a point that is not the arc's own centre or end."
+                : "Midpoint of a line: pick a point that is not the line's own end.");
+            state.selectedJoints.clear(); state.selectedShapes.clear();
+            resetConstraintState(state);
             return false;
         }
-        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.MIDPOINT, { joint: point, shape: lineItem.id }, { source: 'toolbar' });
-        state.selectedJoints.clear(); state.selectedShapes.clear();
-        resetConstraintState(state);
-        return true;
-    }
-
-    if (lineItem && jointItems.length === 1) {
+        if (lineItem.shape.type === 'arc') {
+            ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.MIDPOINT, { joint: point, shape: lineItem.id }, { source: 'toolbar' });
+            state.selectedJoints.clear(); state.selectedShapes.clear();
+            resetConstraintState(state);
+            return true;
+        }
         endpoints = lineItem.shape.joints;
-        midpoint = jointItems[0].id;
+        midpoint = point;
     } else if (jointItems.length === 3) {
         endpoints = [jointItems[0].id, jointItems[1].id];
         midpoint = jointItems[2].id;
     }
 
-        if (endpoints.length === 2 && midpoint && !endpoints.includes(midpoint)) {
+    if (endpoints.length === 2 && midpoint && !endpoints.includes(midpoint)) {
         ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.MIDPOINT, { joints: [endpoints[0], endpoints[1], midpoint] }, { source: 'toolbar' });
         state.selectedJoints.clear(); state.selectedShapes.clear();
         resetConstraintState(state);

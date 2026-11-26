@@ -360,7 +360,9 @@ function setupListeners() {
             dirty: () => !!uiState.typed[0],
             onAtDefault: (!uiState.typed[0] && !uiState.undoneToDefault) ? handleCancel : null
         })) return;
-        if (e.key === 'Enter') handleCommit();
+        const tabCommits = e.key === 'Tab' && (uiState.mode === 'edit' || uiState.mode === 'view'); // task 1008, D-15: the dimension's one field: Tab commits like Enter, focus stays
+        if (tabCommits) e.preventDefault();
+        if (e.key === 'Enter' || tabCommits) handleCommit();
         if (e.key === 'Escape') handleCancel();
         e.stopPropagation(); // Prevent global shortcuts
     });
@@ -825,6 +827,19 @@ function typingField() {
 
 // TASK 866 / 876: insert a referenced parameter name at the caret of the field being typed in (replacing any active selection), keeping the box open and focused.
 // ONE insert for the edit box and the drawing tools' boxes.
+// A REFERENCE (driven) dimension is measured, not a parameter: a formula cannot depend on it (task 1008, D-14). A click on its label inserts nothing;
+// the hint under the box says why. True when it refused.
+function refusesReferenceName(dim) {
+    if (!(dim.isDriven || dim.driven)) return false;
+    if (uiState.hintEl) {
+        uiState.hintEl.textContent = `${dim.name} is a reference dimension: a formula cannot use it`;
+        uiState.hintEl.classList.add('err');
+        showNumericInputEl(uiState.hintEl);
+        placeAssist();
+    }
+    return true;
+}
+
 function insertBoxText(name, field) {
     const el = field.el;
     const from = Math.min(el.selectionStart, el.selectionEnd), to = Math.max(el.selectionStart, el.selectionEnd);
@@ -882,14 +897,14 @@ function handleOutsidePress(e) {
         e.stopPropagation();
         e.stopImmediatePropagation();
         uiState.swallowUp = true;
-        if (dim.name) insertBoxText(dim.name, field); else field.el.focus();
+        if (dim.name && !refusesReferenceName(dim)) insertBoxText(dim.name, field); else field.el.focus();
         return;
     }
     if (dim) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        if (dim !== uiState.target && dim.name) insertBoxText(dim.name, field);
+        if (dim !== uiState.target && dim.name && !refusesReferenceName(dim)) insertBoxText(dim.name, field);
         else uiState.singleInput.focus();
         return;
     }

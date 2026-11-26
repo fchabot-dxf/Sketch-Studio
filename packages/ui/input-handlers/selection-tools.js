@@ -13,6 +13,7 @@ import { showEditInput } from '#ui/numeric-input-manager.js';
 import { isPatternConstraint } from '#core/pattern.js';
 import { editPatternFromLabel } from '#ui/input-handlers/pattern-tool.js';
 import { dragDimensionLabel } from '#core/dimension-seams.js';
+import { startDimensionLabelDrag } from '#ui/input-handlers/dimension-tool.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findInference } from '#core/inference-engine.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -217,17 +218,7 @@ export function handleSelectionPointerDown(e, svg, state, hitJoint, hitShape, hi
             }
             if (isPatternConstraint(constraint)) return true; // TASK 658: a pattern label has no position of its own to drag (it follows its pattern)
 
-            // The value drags freely in X and Y (offset + slide/angle)
-            svg.setPointerCapture(e.pointerId);
-            state.drag = {
-                type: DRAG_TYPES.DIMENSION,
-                mode: 'label',
-                constraint: constraint,
-                initialOffset: Number.isFinite(constraint.offset) ? constraint.offset : (SolverConfig.DIMENSION_OFFSET || 30),
-                startWorld: screenToWorld(svg, e.clientX, e.clientY),
-                startClient: { x: e.clientX, y: e.clientY },
-                pointerId: e.pointerId
-            };
+            startDimensionLabelDrag(svg, state, constraint, e); // the value drags freely in X and Y (offset + slide/angle): the one start, shared with the Dimension tool
             return true;
         }
     }

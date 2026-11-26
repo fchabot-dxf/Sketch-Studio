@@ -4,7 +4,7 @@
 //  polygon: no Sides field in the ribbon; nothing on the canvas before the click; after it, R + N; typing 8 = an octagon preview; Tab, then a size = that radius;
 //           Enter places it as ONE undo step; the next polygon starts with 8; Esc cancels; the first typed digit is kept.
 //  rect:    after the first click W + H; Tab / Shift+Tab switch with the typed value kept; a typed side locks it while the other follows the cursor; exact sizes; one undo step.
-//  circle:  after the first click the DIAMETER box (task 597); a typed diameter gives that diameter (radius = half, the radius dimension as before); one undo step; the first digit is kept.
+//  circle:  after the first click the DIAMETER box (task 597); a typed diameter gives that diameter (radius = half, a DIAMETER dimension: task 1008); one undo step; the first digit is kept.
 //  line:    (task 597) after the first click the L + angle boxes; typed length 50 + Tab + angle 30 gives exactly that segment; the chain's next segment has its boxes; one undo step; Esc = the canvas Esc.
 //  arc:     (task 597) after the centre click the radius box, after the start click the sweep box; typed values exact; one undo step; Esc = the canvas Esc.
 //  square:  (task 597) a typed 40 x 40 rectangle gets its size constraints like a typed 40 x 30 one.
@@ -157,7 +157,7 @@ try {
   assert.strictEqual(circ[0].radius, 12, 'circle: a typed diameter 24 gives radius exactly 12');
   const rc = st.constraints.filter((c) => c.shape === circ[0].id && c.type === 'distance');
   assert.strictEqual(rc.length, 1, 'circle: one size constraint');
-  assert(rc[0].isRadius === true && rc[0].value === 12, 'circle: the constraint is the existing radius dimension (isRadius, value = the radius): ' + JSON.stringify(rc[0]));
+  assert(rc[0].isRadius === true && rc[0].isDiameter === true && rc[0].value === 24, 'circle: the constraint is the DIAMETER dimension of the circle (isDiameter, value = the typed diameter): ' + JSON.stringify(rc[0]));
   assert(idleBoxes(), 'circle: box gone');
   app.undo();
   assert.strictEqual(hist(), base, 'circle: ONE undo');

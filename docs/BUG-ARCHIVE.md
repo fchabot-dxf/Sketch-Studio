@@ -1744,6 +1744,124 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Related:** BUG-124
 - **History:** found in `1000B` (`B-9`) and `1003` (`D-25`) -> fixed in task `1006`
 
+### BUG-140
+- **Date / turn:** 2026-11-26 (audit `DD-1` / `DIV-01` / `B-19a`, tasks 1000, 1000B & 1003; owner ruling turn 3760 -> fixed in task 1008)
+- **Reported by:** worker (`1000` solver UX audit, `1003` Dimension tool audit); owner ruling turn 3760
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, desktop & phone)
+- **Report:** `"Circle dimensions default to Radius (R) while the draw-time circle box asks for a Diameter; Fusion 360 gives a circle a Diameter (Ø, SketchDiameterDimension) and an arc a Radius (R)."`
+- **What was wrong:** A click on a circle in the Dimension tool, `D` with a circle selected, and the circle's draw-time box (which asks a DIAMETER) all made a RADIUS dimension (`R 20`); a typed diameter formula was rewritten to `(d1) / 2`.
+- **Cause:** Three creators each built the radial dimension params by hand (`dimension-tool.js` `startShapeDimension`, `circle-tool.js` x2) with `isRadius: true` and the radius as value; the model already carried `isDiameter` (solver, label `Ø`, slot width) but no creator for a circle set it.
+- **Fix:** ONE decision, `radialDimensionParams(shape, radius)` in `packages/core/constraints.js`: a circle gets `isDiameter` and value = 2 x radius, an arc stays a radius. `dimension-tool.js` and `circle-tool.js` take their params from it (the draw-time box now keeps the typed formula as typed: no `(x) / 2`). Two readers that took a radial value as the radius now read a diameter (`constraint-manager.js` EQUAL conflict check, `live-dimension-input.js` sandbox check: BUG-146). Saved designs with a circle Radius dimension are read as stored (no migration). `tool-ops.js` (the template recipe builder) keeps its radius dimensions on purpose. Fusion's right-click Radius/Diameter toggle was NOT added (needs hunks in `input-manager.js` / `dimension-seams.js`, files in other seats' hands).
+- **Task id(s):** `1000`, `1000B`, `1003` (audit), `1008` (fix)
+- **Fix merge sha:** pending (`agents/dimpicks-1008`)
+- **Guarding test file(s):** `tests/dimpicks-1008-node.test.js` (1a-1g), `tests/dimpicks-1008-live.test.js`; updated `tests/creation-boxes.test.js`, `tests/live-box-names-876-node.test.js`, `tests/harness/coverage/inventory.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-146
+
+### BUG-141
+- **Date / turn:** 2026-11-26 (audit `D-8`, task 1003 -> fixed in task 1008)
+- **Reported by:** worker (`1003`, Dimension tool focused audit)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, desktop & phone)
+- **Report:** `"Audit D-8: circle and arc rims cannot be picked as 1st or 2nd pick for point-circle, line-circle, circle-circle distances; clicking a rim drops a radius or a line length instead."`
+- **What was wrong:** A circle / arc rim was never a pick for a distance: point then rim, rim then point, line then rim, rim then line, rim then rim all made the circle's own size dimension (or a line length) instead of the distance.
+- **Cause:** `dimension-tool.js` only upgraded a line's length preview (line / point second pick); a circle's size preview and a pending point pick had no second-pick path for a rim (a non-line shape just superseded the pending point).
+- **Fix:** In `packages/ui/input-handlers/dimension-tool.js`: `upgradeRadialToDistance` (a circle's / arc's size preview + a point, line or other rim = the distance from its CENTRE), a pending point + a rim (Case B2), a line preview + a rim (2b2); all end in the shared creators `createPointPointDimension` (extracted from the point-to-point case, now the ONE creation) and `createPointLineDimension`. Centre distances only (no tangent distance; unverified vs Fusion). A point that is the circle's own centre / rim, or a second click on its own rim, is still the circle's own dimension / a drop. Behaviour change: a click on a point, line or another rim while a circle's size is being placed now starts that distance instead of dropping the label there.
+- **Task id(s):** `1003` (audit), `1008` (fix)
+- **Fix merge sha:** pending (`agents/dimpicks-1008`)
+- **Guarding test file(s):** `tests/dimpicks-1008-node.test.js` (item 2), `tests/dimpicks-1008-live.test.js`; `tests/dimension-1004-node.test.js` D-5b comments updated
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-140
+
+### BUG-142
+- **Date / turn:** 2026-11-26 (audit `D-10`, task 1003 -> fixed in task 1008)
+- **Reported by:** worker (`1003`, Dimension tool focused audit)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, desktop & phone)
+- **Report:** `"Audit D-10: existing dimension labels cannot be dragged while the Dimension tool is active; near a line on phone the press can start a duplicate dimension."`
+- **What was wrong:** In the Dimension tool a single press on an existing label did nothing (it fell through to the shape under it, which could start a new dimension); the label could only be moved in the Select tool.
+- **Cause:** `dimension-tool.js` ended the label branch with a comment ("let the selection tool handle dragging") and no drag; the drag start existed only inline in `selection-tools.js`.
+- **Fix:** `startDimensionLabelDrag` (exported from `dimension-tool.js`) is the ONE start of a label press-drag; `selection-tools.js` now calls it too (its inline copy removed) and the Dimension tool's press on a label starts it (not while a dimension is being placed: its own label is under the pointer and the press drops it). Pattern labels still have no drag. One undo step per drag (`dragDimensionLabel`).
+- **Task id(s):** `1003` (audit), `1008` (fix)
+- **Fix merge sha:** pending (`agents/dimpicks-1008`)
+- **Guarding test file(s):** `tests/dimpicks-1008-node.test.js` (item 3), `tests/dimpicks-1008-live.test.js` (desktop mouse + phone touch)
+- **Status:** fixed
+- **Family:** `ui-input`
+
+### BUG-143
+- **Date / turn:** 2026-11-26 (audit `D-13`, task 1003 -> fixed in task 1008)
+- **Reported by:** worker (`1003`, Dimension tool focused audit; extends `B-13`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** `"Audit D-13: a circle with only a Reference radius dimension behaves differently when clicked in the Dimension tool than a circle with no dimension; a reference dimension blocks adding a driving one."`
+- **What was wrong:** Clicking a circle that carried only a Reference dimension re-offered that reference (the created one was refused as a duplicate and the tool grabbed the last constraint in the list); no new driving dimension could be placed.
+- **Cause:** `hasConstraint` (`packages/core/constraints.js`, DISTANCE radial duplicate check) counted any radial dimension on the shape as a duplicate, and `hasDrivingDistanceForShape` (`dimension-tool.js`) counted a reference as "driving".
+- **Fix:** A reference radial dimension no longer blocks a new driving one (`hasConstraint`), and `hasDrivingDistanceForShape` ignores references: a circle with only a reference behaves like a circle with none (a new driving Diameter is placed; the reference stays). Not changed (found, not asked): a circle that already has a DRIVING dimension still re-offers it by the last-constraint fallback in `startShapeDimension`.
+- **Task id(s):** `1003` (audit), `1008` (fix)
+- **Fix merge sha:** pending (`agents/dimpicks-1008`)
+- **Guarding test file(s):** `tests/dimpicks-1008-node.test.js` (item 4)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-140
+
+### BUG-144
+- **Date / turn:** 2026-11-26 (audit `D-14`, task 1003 -> fixed in task 1008)
+- **Reported by:** worker (`1003`, values & driven-ness audit)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** `"Audit D-14: while editing a value, clicking a Reference dimension inserts its name, so a formula can depend on a reference (then fails with 'd3 is a reference dimension')."`
+- **What was wrong:** Clicking a Reference dimension's label in the value box inserted its name (`d1 + d3`); the formula was then refused by the parser only after the insert.
+- **Cause:** `handleOutsidePress` (`packages/ui/numeric-input-manager.js`) inserted the name of any clicked dimension other than the one being edited.
+- **Fix:** `refusesReferenceName(dim)` in `numeric-input-manager.js`: a click on a Reference dimension inserts nothing and the hint under the box says "dN is a reference dimension: a formula cannot use it" (both the edit box and the draw-time boxes go through the same branch). A driving dimension still inserts. (Fusion's rule is unverified.)
+- **Task id(s):** `1003` (audit), `1008` (fix)
+- **Fix merge sha:** pending (`agents/dimpicks-1008`)
+- **Guarding test file(s):** `tests/dimpicks-1008-node.test.js` (item 5)
+- **Status:** fixed
+- **Family:** `ui-input`
+
+### BUG-145
+- **Date / turn:** 2026-11-26 (audit `D-15`, task 1003 -> fixed in task 1008)
+- **Reported by:** worker (`1003`, values & driven-ness audit)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** `"Audit D-15: Tab in the dimension edit box leaves it without saving what was typed (box stays open, value unchanged)."`
+- **What was wrong:** Typing a value and pressing Tab moved focus out of the box and committed nothing.
+- **Cause:** The single-input `keydown` handler (`packages/ui/numeric-input-manager.js`) handled Enter and Escape only.
+- **Fix:** In the dimension EDIT box Tab commits exactly as Enter (same `handleCommit`, one undo step) and keeps focus (`preventDefault`). The autocomplete list still takes Tab first when open; the draw-time single boxes and the two-field boxes are unchanged. (Fusion: Tab moves to the next field after committing; unverified.)
+- **Task id(s):** `1003` (audit), `1008` (fix)
+- **Fix merge sha:** pending (`agents/dimpicks-1008`)
+- **Guarding test file(s):** `tests/dimpicks-1008-node.test.js` (item 6)
+- **Status:** fixed
+- **Family:** `ui-input`
+
+### BUG-146
+- **Date / turn:** 2026-11-26 (found by task 1008 while making circles Diameter dimensions)
+- **Reported by:** worker (`1008`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** `"EQUAL between a circle with a Diameter dimension (40) and a circle with a Radius dimension (20) was refused as 'conflicting fixed dimensions (40.0 vs 20.0)'; the live-dimension sandbox compared a diameter edit with the radius."`
+- **What was wrong:** Two readers took a radial dimension's value as the radius even when it is a diameter (`isDiameter`, already true for the Slot width): the EQUAL conflict check and the live-dimension sandbox error.
+- **Cause:** `ConstraintManager.validateParams` EQUAL `getDriving` returned `c.value`; `live-dimension-input.js` `validateWithSandbox` measured `s.radius` against the edit value.
+- **Fix:** Both read the radius (`c.value / 2`) / the diameter (`radius * 2`) when `c.isDiameter`.
+- **Task id(s):** `1008`
+- **Fix merge sha:** pending (`agents/dimpicks-1008`)
+- **Guarding test file(s):** `tests/dimpicks-1008-node.test.js` (1g)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-140
+
+### BUG-147
+- **Date / turn:** 2026-11-26 (found by task 1008 merge check: `tests/coverage-matrix.test.js` after merging main)
+- **Reported by:** advisor / clerical merge agent (1008)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** `"Clicking a dimensioned arc, then a line, silently deleted the arc's radius."`
+- **What was wrong:** With the new rim picks (BUG-141), a placement's second pick spliced out the dimension being placed; when the first pick had created nothing (the arc / circle already has a driving dimension) that dimension was the EXISTING radius.
+- **Cause:** `startShapeDimension` (`dimension-tool.js`) falls back to `state.constraints[last]` when `createConstraint` refuses, then stamped it as born in this placement (`finalizeDimBirth`), and `discardPlacingLength` spliced any placing dimension out.
+- **Fix:** `discardPlacingLength` discards only a dimension born in the placement (`__newlyPlaced === true`, the rule of `resetDimensionState`'s Esc); `startShapeDimension` no longer stamps a re-offered existing dimension as born (and drops the birth snapshot). Tab in a reference dimension's read-only `view` box closes it like Enter.
+- **Open hazard (NOT fixed here, by ruling):** the `c = res || state.constraints[last]` fallback itself (in `startShapeDimension` and `createPointPointDimension`): when nothing is created, the LAST constraint of any kind is taken as the dimension; it is only the right one by luck. A circle that already has a driving dimension re-offers whatever constraint is last.
+- **Task id(s):** `1008`
+- **Fix merge sha:** pending (`agents/dimpicks-1008`)
+- **Guarding test file(s):** `tests/dimpicks-1008-node.test.js` (7, 8)
+- **Status:** fixed (fallback hazard open)
+- **Family:** `ui-input`
+- **Related:** BUG-141, BUG-143
+
 ---
 
 ### BUG-130
@@ -2153,7 +2271,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-146 (11-26) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -2161,7 +2279,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 
 ---
@@ -2172,4 +2290,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-150..BUG-154 fixed in task `1011`; BUG-160..BUG-161 fixed in task `1012`; BUG-170..BUG-174 fixed in task `1014`; BUG-180..BUG-183 fixed in task `1013`).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-150..BUG-154 fixed in task `1011`; BUG-160..BUG-161 fixed in task `1012`; BUG-170..BUG-174 fixed in task `1014`; BUG-180..BUG-183 fixed in task `1013`; BUG-140..BUG-147 fixed in task `1008`).

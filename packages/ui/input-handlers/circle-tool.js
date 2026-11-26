@@ -1,6 +1,6 @@
 // Circle tool - preview and creation
 import { TOOL_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
-import { addConstraint } from '#core/constraints.js';
+import { addConstraint, radialDimensionParams } from '#core/constraints.js';
 import { setupNumericInput, showSingleInput, hideInput, resetLockedDimensions, isInputActive } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint, onShapeSnap } from '#core/snap-constraints.js';
@@ -9,13 +9,11 @@ import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, se
 import { newShapeId } from '#core/shape-id.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
-let circleState = { lockedRadius: null, radiusExpression: null, radiusName: null, radiusAssign: null, boxOpen: false };   // TASK 876 / 1013: radiusExpression = formula of typed DIAMETER halved; radiusName / radiusAssign from `w = expr`
-// the radius dimension of a typed diameter d1 + 5 is (d1 + 5) / 2: the box holds the diameter, the dimension the radius
-const radiusFormula = (diameterFormula) => (diameterFormula ? `(${diameterFormula}) / 2` : null);
-const clearCircleLocks = () => { circleState.lockedRadius = null; circleState.radiusExpression = null; circleState.radiusName = null; circleState.radiusAssign = null; };
+let circleState = { lockedRadius: null, diameterExpression: null, radiusName: null, radiusAssign: null, boxOpen: false };   // TASK 876 / 1013: diameterExpression = formula of the typed DIAMETER (task 1008: a circle's dimension is a diameter); radiusName / radiusAssign from `w = expr`
+const clearCircleLocks = () => { circleState.lockedRadius = null; circleState.diameterExpression = null; circleState.radiusName = null; circleState.radiusAssign = null; };
 const localState = { isDragging: false, dragStartScreen: null };
 // TASK 596: after the first click the size box shows at once (base-tool's shared creation-box path); the size follows the cursor until one is typed.
-// TASK 597: the box is the DIAMETER (like Fusion); the circle keeps its radius, and a typed one adds the same radius dimension as before (isRadius, value = diameter / 2)
+// TASK 597: the box is the DIAMETER (like Fusion); the circle keeps its radius, and a typed one adds its DIAMETER dimension (task 1008, radialDimensionParams: value = the typed diameter)
 const BOX = { single: { field: 'diameter' } };
 
 export function setupCircleTool(svg, state){
@@ -26,7 +24,7 @@ export function setupCircleTool(svg, state){
             if (detail.mode === 'single' && detail.field === 'diameter') {
                 if (detail.typed[0] && detail.value > 0) {
                     circleState.lockedRadius = detail.value / 2;
-                    circleState.radiusExpression = radiusFormula(liveExpression(detail, 0));
+                    circleState.diameterExpression = liveExpression(detail, 0);
                     circleState.radiusName = liveName(detail, 0);
                     circleState.radiusAssign = liveAssign(detail, 0);
                 } // only a typed diameter locks (the box otherwise shows the live one, rounded)
@@ -41,7 +39,7 @@ export function setupCircleTool(svg, state){
             if (detail.mode !== 'single' || detail.field !== 'diameter') return;
             const v = detail.value / 2;
             circleState.lockedRadius = (detail.reset && detail.reset[0]) ? null : (v > 0 ? v : null);
-            circleState.radiusExpression = circleState.lockedRadius !== null ? radiusFormula(liveExpression(detail, 0)) : null;
+            circleState.diameterExpression = circleState.lockedRadius !== null ? liveExpression(detail, 0) : null;
             circleState.radiusName = circleState.lockedRadius !== null ? liveName(detail, 0) : null;
             circleState.radiusAssign = circleState.lockedRadius !== null ? liveAssign(detail, 0) : null;
             const center = state.joints.get(state.active.start) || state.active.startPt;
@@ -117,10 +115,8 @@ function commitCircle(state, r, { snapForEnd = null, endPt = null } = {}) {
     if (circleState.lockedRadius != null) {
         if (circleState.radiusAssign) applyLiveAssign(state, circleState.radiusAssign);
         addConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
-            shape: shapeId,
-            value: r,
-            isRadius: true,
-            expression: circleState.radiusExpression,
+            ...radialDimensionParams({ id: shapeId, type: 'circle' }, r),
+            expression: circleState.diameterExpression,
             ...(circleState.radiusName ? { name: circleState.radiusName } : {}),
         });
     }

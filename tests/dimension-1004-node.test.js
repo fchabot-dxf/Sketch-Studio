@@ -224,10 +224,10 @@ await test('D-5b: Point then Circle rim clears pendingDimension so next click is
   await openDesign(doc, { centre: { x: 10, y: 10 }, w: 240 });
   app.tool('dim');
   await clickW({ x: -40, y: 20 }); // p1 starts pendingDimension
-  await clickW({ x: 35, y: -25 }); // Circle rim -> creates R 15
-  await clickW({ x: 45, y: -40 }); // drop R 15
+  await clickW({ x: 35, y: -25 }); // Circle rim -> the point-to-centre distance (task 1008, D-8)
+  await clickW({ x: 45, y: -40 }); // drop it
   if (boxOpen()) { await quiet(() => app.enter()); app.frames(); }
-  assert.equal(allDims().length, 1, '1 radius dim placed');
+  assert.equal(allDims().length, 1, '1 point-to-centre dim placed');
   assert.equal(app.state.active, null, 'state.active cleared');
 
   // Now click unrelated p3 -> must start a fresh first pick, NOT create distance(p1, p3)!

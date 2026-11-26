@@ -1310,6 +1310,102 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Related:** BUG-074, BUG-079
 - **History:** noticed turn 3504 (2026-11-24) -> task 1001 dispatched 2026-11-25
 
+### BUG-091
+- **Date / turn:** 2026-11-26 (audit 1000B `B-15`, owner ruling turn 3741)
+- **Reported by:** worker (auditor 1000B)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, constraint tools)
+- **Report:** Audit `B-15` (`docs/SOLVER-UX-AUDIT-1000B.md`): after a refused / invalid pick, Parallel, Perpendicular, Collinear, H/V, Midpoint and Symmetric dropped to Select while Coincident, Tangent and Equal stayed active.
+- **What was wrong:** Refused clicks in 6 of the 9 constraint tools exited the tool back to Select instead of keeping the tool active.
+- **Cause:** `packages/ui/input-manager.js:758-763` (`EXIT ON INVALID CLICK`) called `switchToTool(state, TOOL_MODES.SELECT)` whenever `handleConstraintPointerDown` returned `false`.
+- **Fix:** Removed the `if (!handled) switchToTool(state, TOOL_MODES.SELECT)` exit branch in `packages/ui/input-manager.js`; constraint tools now stay active after every use or refusal (only `Esc` or picking another tool exits).
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/constraint-refusal-stay-b15-1005-node.test.js`, `tests/constraint-activation-ux15-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-092, BUG-093
+- **History:** found in audit 1000B (`B-15`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
+### BUG-092
+- **Date / turn:** 2026-11-26 (audits 1000 `UX-15` / 1000B `B-14b,d` & second-click matrix, owner ruling turn 3741)
+- **Reported by:** workers (auditors 1000, 1000B)
+- **App(s) & host:** SketchStudio (vs Shaper, Pen Plotter, Trace)
+- **Report:** Audit `UX-15` / `B-14b,d` (`docs/SOLVER-UX-AUDIT-1000.md`, `docs/SOLVER-UX-AUDIT-1000B.md`, `docs/SOLVER-UX-CROSS-1000B.md`): in SketchStudio only, re-clicking an active constraint tool's ribbon button exited to Select, H/V with a preselected line exited to Select, and Coincident cleared the selection.
+- **What was wrong:** SketchStudio diverged from Shaper and Pen Plotter on constraint tool activation and re-click behaviour.
+- **Cause:** SketchStudio kept its own duplicate `handleToolActivate` / `setTool` in `apps/sketchstudio/ui/ui-manager.js:26-110` wired through `onToolClick` and `defaultInputCtx.setActiveTool` / `resetToSelectTool`.
+- **Fix:** Deleted `handleToolActivate`, `setTool`, `onToolClick` override, and duplicate Esc listener from `apps/sketchstudio/ui/ui-manager.js` and removed `defaultInputCtx.setActiveTool` / `resetToSelectTool` in `packages/ui/input-manager.js` so all hosts share `switchToTool`; re-clicking an active constraint tool now stays in the tool.
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/constraint-activation-ux15-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-091, BUG-094, BUG-096
+- **History:** found in audits 1000 (`UX-15`) / 1000B (`B-14b,d`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
+### BUG-093
+- **Date / turn:** 2026-11-26 (audit 1000B `B-10`)
+- **Reported by:** worker (auditor 1000B)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, Midpoint tool)
+- **Report:** Audit `B-10` (`docs/SOLVER-UX-AUDIT-1000B.md`): Midpoint picked on a line's own endpoint was silent and wedged its pick buffer until Esc; on an arc's own endpoint/centre it warned and exited to Select.
+- **What was wrong:** Line own-endpoint picks silently left `[shape, joint]` in `selectionBuffer` so subsequent valid midpoint picks failed; arc own-endpoint picks left the curve in buffer and exited the tool.
+- **Cause:** `packages/ui/input-handlers/constraint-tools.js:353-381` (`handleMidpointPointerDown`) only refused arc own endpoints (without clearing the full buffer) and had no refusal/reset path when `!endpoints.includes(midpoint)` failed on a line.
+- **Fix:** Unified own-endpoint/centre refusal for both lines and arcs in `packages/ui/input-handlers/constraint-tools.js` (`handleMidpointPointerDown`): shows a plain refusal message, clears selection and `pendingConstraint`, and stays in the Midpoint tool.
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/midpoint-own-end-b10-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-091
+- **History:** found in audit 1000B (`B-10`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
+### BUG-094
+- **Date / turn:** 2026-11-26 (audits 1000 `UX-14` / 1000B `B-14a`)
+- **Reported by:** workers (auditors 1000, 1000B)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, Equal tool)
+- **Report:** Audit `UX-14` / `B-14a` (`docs/SOLVER-UX-AUDIT-1000.md`, `docs/SOLVER-UX-AUDIT-1000B.md`): pressing `E` with 2 preselected shapes applied Equal (or refused an invalid pair) while clicking the Equal ribbon button ignored the 2-shape preselection.
+- **What was wrong:** Ribbon button and `E` shortcut ran separate code paths with different preselection behaviour.
+- **Cause:** `packages/ui/input-manager.js:1363-1385` handled 2-shape Equal preselection only in the `E` keydown branch, while `switchToTool` / `handleToolActivate` only inspected single-item preselections.
+- **Fix:** Moved `tool.equal` and `tool.horizontalVertical` into `TOOL_SHORTCUTS` -> `switchToTool` -> `activateConstraintTool` (`packages/ui/input-handlers/constraint-tools.js`), which handles 2-shape Equal preselection identically for ribbon clicks and the `E` key across all hosts.
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/equal-preselect-ux14-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-092, BUG-096
+- **History:** found in audits 1000 (`UX-14`) / 1000B (`B-14a`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
+### BUG-095
+- **Date / turn:** 2026-11-26 (audit 1000B `B-14c`)
+- **Reported by:** worker (auditor 1000B)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, H/V tool)
+- **Report:** Audit `B-14c` (`docs/SOLVER-UX-AUDIT-1000B.md`): adding a duplicate H/V via preselection + `H` key or H/V ribbon button was silent, while clicking the line in the H/V tool showed `"Sketch geometry over constrained"`.
+- **What was wrong:** Duplicate H/V gave different user feedback depending on whether preselection or click-in-tool was used.
+- **Cause:** `packages/core/constraint-manager.js:1022` (`ConstraintManager.addHorizontalOrVertical`) passed `{ source: 'auto-detect' }`, which bypassed the `opts.source === 'toolbar'` duplicate notice at `constraint-manager.js:223`.
+- **Fix:** Changed `ConstraintManager.addHorizontalOrVertical`'s default source in `packages/core/constraint-manager.js:1022` to `'toolbar'`, so preselect + `H`, preselect + H/V ribbon, and H/V tool click all emit the same over-constrained notice.
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/hv-dup-notice-b14c-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `notice-wording`
+- **Related:** BUG-079, BUG-092
+- **History:** found in audit 1000B (`B-14c`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
+### BUG-096
+- **Date / turn:** 2026-11-26 (audit 1000B `B-6`)
+- **Reported by:** worker (auditor 1000B)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, constraint preselection)
+- **Report:** Audit `B-6` (`docs/SOLVER-UX-AUDIT-1000B.md`): preselecting a joint then activating Parallel and clicking a line created a corrupt `parallel` constraint with a joint ID in `shapes[0]`; preselecting a circle then activating H/V caused a nonsensical second-point refusal on a line click.
+- **What was wrong:** Incompatible single-item preselections were stuffed into `pendingConstraint.firstElement` without validating element kind/shape type for the chosen constraint tool.
+- **Cause:** `packages/ui/input-manager.js:1568-1585` (and deleted `apps/sketchstudio/ui/ui-manager.js:62-98`) assigned any single selected joint or shape into `pendingConstraint.firstElement`, and `handleShapeConstraintPointerDown` (`constraint-tools.js:136`) did not verify `firstElement.type === 'shape'`.
+- **Fix:** Added a declared `CONSTRAINT_PRESELECT` table in `packages/ui/input-handlers/constraint-tools.js` (`activateConstraintTool`) that refuses invalid single preselections with a plain warning, leaves `firstElement: null` and the tool active, plus guarded `firstElement.type === 'shape'` in `handleShapeConstraintPointerDown`.
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/constraint-preselect-b6-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-092, BUG-094
+- **History:** found in audit 1000B (`B-6`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
 ---
 
 ## Family index
@@ -1323,7 +1419,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
-| `notice-wording` | BUG-079 (11-24), BUG-090 (11-25) |
+| `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-095 (11-26) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
 | `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
@@ -1332,7 +1428,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-091 (11-26), BUG-092 (11-26), BUG-093 (11-26), BUG-094 (11-26), BUG-096 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---

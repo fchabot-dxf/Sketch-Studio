@@ -1,6 +1,6 @@
 // Circle tool - preview and creation
 import { TOOL_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
-import { addConstraint } from '#core/constraints.js';
+import { addConstraint, radialDimensionParams } from '#core/constraints.js';
 import { setupNumericInput, showSingleInput, hideInput, resetLockedDimensions, isInputActive } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint, onShapeSnap } from '#core/snap-constraints.js';
@@ -9,21 +9,19 @@ import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, se
 import { newShapeId } from '#core/shape-id.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
-let circleState = { lockedRadius: null, radiusExpression: null, boxOpen: false };   // TASK 876: radiusExpression = the formula of the typed DIAMETER, halved, or null
-// the radius dimension of a typed diameter d1 + 5 is (d1 + 5) / 2: the box holds the diameter, the dimension the radius
-const radiusFormula = (diameterFormula) => (diameterFormula ? `(${diameterFormula}) / 2` : null);
+let circleState = { lockedRadius: null, diameterExpression: null, boxOpen: false };   // TASK 876: diameterExpression = the formula of the typed DIAMETER, or null
 const localState = { isDragging: false, dragStartScreen: null };
 // TASK 596: after the first click the size box shows at once (base-tool's shared creation-box path); the size follows the cursor until one is typed.
-// TASK 597: the box is the DIAMETER (like Fusion); the circle keeps its radius, and a typed one adds the same radius dimension as before (isRadius, value = diameter / 2)
+// TASK 597: the box is the DIAMETER (like Fusion); the circle keeps its radius, and a typed one adds its DIAMETER dimension (task 1008, radialDimensionParams: value = the typed diameter)
 const BOX = { single: { field: 'diameter' } };
 
 export function setupCircleTool(svg, state){
     setupNumericInput(svg, state);
-    state.onDrawCancelled(() => { if (circleState.boxOpen) { circleState.boxOpen = false; circleState.lockedRadius = null; circleState.radiusExpression = null; hideInput(); } });   // another tool picked / Undo mid-draw: the box goes with the draw
+    state.onDrawCancelled(() => { if (circleState.boxOpen) { circleState.boxOpen = false; circleState.lockedRadius = null; circleState.diameterExpression = null; hideInput(); } });   // another tool picked / Undo mid-draw: the box goes with the draw
     setupDimensionListeners(state, TOOL_MODES.CIRCLE, {
         onApply: (detail) => {
             if (detail.mode === 'single' && detail.field === 'diameter') {
-                if (detail.typed[0] && detail.value > 0) { circleState.lockedRadius = detail.value / 2; circleState.radiusExpression = radiusFormula(liveExpression(detail, 0)); } // only a typed diameter locks (the box otherwise shows the live one, rounded)
+                if (detail.typed[0] && detail.value > 0) { circleState.lockedRadius = detail.value / 2; circleState.diameterExpression = liveExpression(detail, 0); } // only a typed diameter locks (the box otherwise shows the live one, rounded)
                 if (detail.confirmedBy === 'enter') {
                     let placed = false;
                     try { placed = finalizeCircleFromActive(svg, state); } catch (_) { }
@@ -35,7 +33,7 @@ export function setupCircleTool(svg, state){
             if (detail.mode !== 'single' || detail.field !== 'diameter') return;
             const v = detail.value / 2;
             circleState.lockedRadius = (detail.reset && detail.reset[0]) ? null : (v > 0 ? v : null);
-            circleState.radiusExpression = circleState.lockedRadius !== null ? radiusFormula(liveExpression(detail, 0)) : null;
+            circleState.diameterExpression = circleState.lockedRadius !== null ? liveExpression(detail, 0) : null;
             const center = state.joints.get(state.active.start) || state.active.startPt;
             if (center && state.active.preview) {
                 const pt = state.active.preview && state.active.preview.pt ? state.active.preview.pt : center;
@@ -43,12 +41,12 @@ export function setupCircleTool(svg, state){
                 try { state.tempMousePos = pt; } catch (_) { }
             }
         },
-        onCancel: () => { circleState.lockedRadius = null; circleState.radiusExpression = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
+        onCancel: () => { circleState.lockedRadius = null; circleState.diameterExpression = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
     });
 }
 
 export function resetCircleState(state){ 
-    if (state && state.active && state.active.mode === TOOL_MODES.CIRCLE) { circleState.lockedRadius = null; circleState.radiusExpression = null; try { hideInput(); } catch (_) { /* no DOM (node) */ } } // the radius box open since the first click goes with the circle
+    if (state && state.active && state.active.mode === TOOL_MODES.CIRCLE) { circleState.lockedRadius = null; circleState.diameterExpression = null; try { hideInput(); } catch (_) { /* no DOM (node) */ } } // the radius box open since the first click goes with the circle
     resetToolState(state, TOOL_MODES.CIRCLE, localState);
 }
 
@@ -124,7 +122,7 @@ export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlob
     
     // Only add a radius distance constraint if the user explicitly entered a radius
     if (circleState.lockedRadius != null) {
-        addConstraint(state, CONSTRAINT_TYPES.DISTANCE, { shape: shapeId, value: r, isRadius: true, expression: circleState.radiusExpression });
+        addConstraint(state, CONSTRAINT_TYPES.DISTANCE, { ...radialDimensionParams({ id: shapeId, type: 'circle' }, r), expression: circleState.diameterExpression });
     }
 
     try{ 
@@ -134,7 +132,7 @@ export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlob
     }catch(_){ }
     applyRimSnap(state, shapeId, snapForEnd, endPt);
 
-    circleState.lockedRadius = null; circleState.radiusExpression = null; circleState.boxOpen = false;
+    circleState.lockedRadius = null; circleState.diameterExpression = null; circleState.boxOpen = false;
     localState.isDragging = false;
     localState.dragStartScreen = null;
     try{ resetLockedDimensions(); }catch(_){ }
@@ -160,9 +158,9 @@ export function finalizeCircleFromActive(svg, state){
         state.shapes.push({ id: shapeId, type: 'circle', joints: [state.active.start], radius: r, isConstruction: !!state.isConstructionMode });
         // Only add a radius distance constraint if the user explicitly entered a radius
         if (circleState.lockedRadius != null) {
-            addConstraint(state, CONSTRAINT_TYPES.DISTANCE, { shape: shapeId, value: r, isRadius: true, expression: circleState.radiusExpression });
+            addConstraint(state, CONSTRAINT_TYPES.DISTANCE, { ...radialDimensionParams({ id: shapeId, type: 'circle' }, r), expression: circleState.diameterExpression });
         }
-        circleState.lockedRadius = null; circleState.radiusExpression = null; circleState.boxOpen = false; try{ resetLockedDimensions(); }catch(_){ }
+        circleState.lockedRadius = null; circleState.diameterExpression = null; circleState.boxOpen = false; try{ resetLockedDimensions(); }catch(_){ }
         try{ hideInput(); }catch(_){ }
         state.endUndoGroup(); state.active = null; return true;
     }catch(_){ try{ state.endUndoGroup(); }catch(_){ } state.active = null; return false; }

@@ -175,6 +175,16 @@ function withDimensionState(obj, params) {
 }
 
 /**
+ * THE decision of what a circle or an arc is dimensioned as (task 1008, Fusion's Sketch Dimension): a CIRCLE gets a DIAMETER (the dimension
+ * reads the whole width, value = 2 x the radius), an ARC a RADIUS. Every creator of this dimension (the Dimension tool, D with the shape
+ * selected, the circle's draw-time box, tool-ops) takes its params from here; a saved dimension is read as stored (no migration).
+ */
+export function radialDimensionParams(shape, radius) {
+    const diameter = shape.type === 'circle';
+    return { shape: shape.id, isRadius: true, ...(diameter ? { isDiameter: true } : {}), value: diameter ? radius * 2 : radius };
+}
+
+/**
  * Create a constraint object with validation
  * @param {string} type - Constraint type
  * @param {object} params - Constraint parameters
@@ -422,7 +432,8 @@ export function hasConstraint(constraints, type, params) {
                 break;
             case CONSTRAINT_TYPES.DISTANCE:
                 if (params.isRadius && c.isRadius) {
-                    if (c.shape && params.shape && c.shape === params.shape) return true;
+                    // a REFERENCE radial dimension never blocks a new DRIVING one on the same shape (task 1008, D-13: the same as a shape with none)
+                    if (c.shape && params.shape && c.shape === params.shape) return !((c.isDriven || c.driven) && !(params.isDriven || params.driven));
                 } else if (c.shapes && params.shapes) {
                     // Line-Line distance check
                     const [a, b] = c.shapes; const [x, y] = params.shapes;

@@ -183,10 +183,10 @@ function buildDimensionModes() {
   modes.push({ mode: 'point-line', kind: 'distance point to line (one 3-joint distance: perpendicular distance)', ...must(DT, /create-point-to-line/) });
   modes.push({ mode: 'line-line', kind: 'distance between two parallel lines (shapes)', ...must(DT, /create-line-line-distance/) });
   modes.push({ mode: 'angle', kind: 'angle between two lines (shapes), either pick order', ...must(DT, /create-angle'/) });
-  modes.push({ mode: 'radius', kind: 'distance isRadius on a circle or an arc', ...must(DT, /isRadius: true,/) });
+  modes.push({ mode: 'radius', kind: 'distance isRadius on a circle (a diameter, isDiameter) or an arc (a radius)', ...must(DT, /\.\.\.radialDimensionParams\(shape, radius\)/) });
   return modes;
 }
-// declared label-only branch (no tool creates it)
+// the diameter label branch (a circle's dimension, task 1008; the Slot width)
 function diameterBranch() { return at('packages/ui/svg-renderer.js', findLine('packages/ui/svg-renderer.js', /c\.isDiameter/)); }
 
 // ---- edit features that create or change constraints / joints ------------------------------------------------------------------------
@@ -245,7 +245,7 @@ export function buildInventory() {
     shapeKinds: buildShapeKinds(),
     shapeTypeLiterals: shapeTypeLiterals(),
     dimensionModes: buildDimensionModes(),
-    diameter: { ...diameterBranch(), note: 'label branch; created for Slot width (isRadius + isDiameter, #core/slot.js)' },
+    diameter: { ...diameterBranch(), note: 'label branch; created for a circle (task 1008, #core/constraints.js radialDimensionParams) and for Slot width (isRadius + isDiameter, #core/slot.js)' },
     editFeatures: buildEditFeatures(),
     absent: absentFeatures(),
     structuralTypes: [...structuralTypes()],

@@ -8,6 +8,8 @@ import { SolverConfig } from '#core/solver-config.js';
 import { dbg, logDiagnostic } from '#core/debug.js';
 import { TOOL_MODES, CONSTRAINT_TYPES, DRAG_TYPES, DEFAULTS } from '#core/constants.js';
 import { ConstraintManager, announceReference } from '#core/constraint-manager.js';
+import { radialDimensionParams } from '#core/constraints.js';
+import { isPatternConstraint } from '#core/pattern.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { getDist, perpendicularDistance, projectPointOnLine, isPointLineDistance } from '#core/geometry.js';
 import { showEditInput, showSingleInput } from '#ui/numeric-input-manager.js';
@@ -34,7 +36,7 @@ function hasDrivingDistanceForJoints(state, aId, bId){
 // Helper: check if a driving DISTANCE constraint exists for a shape (radius)
 function hasDrivingDistanceForShape(state, shapeId){
     if(!state || !Array.isArray(state.constraints)) return false;
-    return state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE && c.shape === shapeId && (typeof c.value === 'number'));
+    return state.constraints.some(c => c && c.type === CONSTRAINT_TYPES.DISTANCE && c.shape === shapeId && !(c.isDriven || c.driven) && (typeof c.value === 'number'));
 }
 
 // Local state for the dimension tool workflow
@@ -87,6 +89,21 @@ function finishPlacementWithoutEdit(c, state) {
 // release of a press-drag), the notice the solver's reference decision carries is shown now, once.
 function announcePlacedReference(c) {
     if (c && c.__asksSecondPick && (c.isDriven || c.driven)) announceReference(c);
+}
+
+// The ONE start of a press-drag on an existing dimension's label (the value drags freely in X and Y: offset + slide / angle): the Select tool's
+// press and the Dimension tool's press (task 1008, D-10) both end here. dragDimensionLabel moves it, with ONE undo step per drag.
+export function startDimensionLabelDrag(svg, state, constraint, e) {
+    svg.setPointerCapture(e.pointerId);
+    state.drag = {
+        type: DRAG_TYPES.DIMENSION,
+        mode: 'label',
+        constraint: constraint,
+        initialOffset: Number.isFinite(constraint.offset) ? constraint.offset : (SolverConfig.DIMENSION_OFFSET || 30),
+        startWorld: screenToWorld(svg, e.clientX, e.clientY),
+        startClient: { x: e.clientX, y: e.clientY },
+        pointerId: e.pointerId
+    };
 }
 
 export function setupDimensionTool(svg, appState) {
@@ -392,8 +409,13 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
             showEditInput(svg, state, constraint);
             return true;
         }
-        // If single click on label, return false to let selection tool handle dragging if needed, 
-        // or return true if you want to swallow it. Usually selection tool handles label drags.
+        // A single press on a label drags it, as in the Select tool (task 1008, D-10), unless a dimension is being placed: its own label is
+        // under the pointer and the press drops it (section 2)
+        const placingNow = dimensionState.placingConstraint && dimensionState.placingConstraint.__placing;
+        if (!placingNow) {
+            if (!isPatternConstraint(constraint)) startDimensionLabelDrag(svg, state, constraint, e);
+            return true;
+        }
     }
 
     const w = screenToWorld(svg, e.clientX, e.clientY);
@@ -419,14 +441,24 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
 
         // 2b. UPGRADE TO POINT-TO-LINE (task 555, Fusion's second pick): a point clicked while a line's length is being placed
         // turns the preview into the perpendicular distance from that point to the line. A click on the line's own end is a drop.
-        if (hitJoint && pending.__asksSecondPick && pending.type === CONSTRAINT_TYPES.DISTANCE && pending.joints && pending.joints.length === 2) {
-            const lineOfPending = sceneShapes(state.shapes).find(s => s.type === 'line' && s.joints.includes(pending.joints[0]) && s.joints.includes(pending.joints[1]));
-            if (lineOfPending && !lineOfPending.joints.includes(hitJoint.id)) {
-                discardPlacingLength(state, pending);
-                state.active = null;
-                return createPointLineDimension(svg, state, hitJoint.id, lineOfPending, e, w);
-            }
+        const lineOfPending = (pending.__asksSecondPick && pending.type === CONSTRAINT_TYPES.DISTANCE && pending.joints && pending.joints.length === 2)
+            ? sceneShapes(state.shapes).find(s => s.type === 'line' && s.joints.includes(pending.joints[0]) && s.joints.includes(pending.joints[1])) : null;
+        if (hitJoint && lineOfPending && !lineOfPending.joints.includes(hitJoint.id)) {
+            discardPlacingLength(state, pending);
+            state.active = null;
+            return createPointLineDimension(svg, state, hitJoint.id, lineOfPending, e, w);
         }
+
+        // 2b2. A circle's / arc's rim clicked while a line's length is being placed (task 1008, D-8): the distance from the circle's centre to the line
+        if (!hitJoint && lineOfPending && hitShape && hitShape.shape && isRadialShape(hitShape.shape)) {
+            discardPlacingLength(state, pending);
+            state.active = null;
+            return createPointLineDimension(svg, state, hitShape.shape.joints[0], lineOfPending, e, w);
+        }
+
+        // 2b3. A point, a line or another circle / arc rim clicked while a circle's / arc's size is being placed (task 1008, D-8): the distance from its centre to it
+        const radialUp = upgradeRadialToDistance(svg, state, pending, hitJoint, hitShape, e, w);
+        if (radialUp !== undefined) return radialUp;
 
         logDim('finalize-continue');
 
@@ -522,24 +554,14 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
         if (hitJoint) {
             logDim('create-point-to-point');
             if (dimensionState.pendingDimension.firstJoint === hitJoint.id) return false; // Ignore self-click
+            return createPointPointDimension(svg, state, dimensionState.pendingDimension.firstJoint, hitJoint.id, e, w);
+        }
 
-            beginDimUndo(state);
-            const firstId = dimensionState.pendingDimension.firstJoint;
-            const j1 = sceneJoints(state.joints).get(firstId);
-            
-            const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
-                joints: [firstId, hitJoint.id],
-                value: getDist(j1, hitJoint.j),
-                dimMode: 'auto' // Bypass duplicate check to allow multiple dim types
-            });
-            
-            const c = (res && typeof res === 'object') ? res : state.constraints[state.constraints.length - 1];
-            if (!c) { endDimUndo(state); clearPointPick(state); return false; }
-            
-            startPlacing(svg, state, c, e, w);
-            updateConstraintOffset(state, c, w); // Initialize dimMode and isDriven status
-            finalizeDimBirth(c, state);
-            return true;
+        // Case B2: a circle's / arc's rim = the distance from the point to its CENTRE (task 1008, D-8: the rim is a pick like a point or a line).
+        // The point being that circle's own centre is no such distance: the click falls through to the circle's own dimension (Case 4).
+        if (hitShape && hitShape.shape && isRadialShape(hitShape.shape) && hitShape.shape.joints[0] !== dimensionState.pendingDimension.firstJoint) {
+            logDim('create-point-to-centre');
+            return createPointPointDimension(svg, state, dimensionState.pendingDimension.firstJoint, hitShape.shape.joints[0], e, w);
         }
 
         // Case C: Clicked Empty Space -> Cancel Pending
@@ -617,9 +639,7 @@ function startShapeDimension(svg, state, shape, e, w) {
         const alreadyHasDriving = hasDrivingDistanceForShape(state, shape.id);
 
         const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
-            shape: shape.id,
-            value: radius,
-            isRadius: true,
+            ...radialDimensionParams(shape, radius),
             isDriven: alreadyHasDriving
         });
         
@@ -742,6 +762,53 @@ function lineLineDimension(svg, state, s1, s2, e, w) {
 
     startPlacing(svg, state, targetConstraint, e, w);
     finalizeDimBirth(targetConstraint, state);
+    return true;
+}
+
+const isRadialShape = (s) => !!s && (s.type === 'circle' || s.type === 'arc') && Array.isArray(s.joints) && s.joints.length >= 1;
+
+// A circle's / arc's size preview (`pending`, being placed) plus a second pick (task 1008, D-8): a point, a line, or another circle / arc rim =
+// the distance from its CENTRE to it. Returns undefined when `pending` is not such a preview or the pick is its own centre / rim / points (a drop).
+function upgradeRadialToDistance(svg, state, pending, hitJoint, hitShape, e, w) {
+    if (!(pending.type === CONSTRAINT_TYPES.DISTANCE && pending.isRadius && pending.shape)) return undefined;
+    const own = sceneShapes(state.shapes).find(s => s.id === pending.shape);
+    if (!isRadialShape(own)) return undefined;
+    const centreId = own.joints[0];
+    if (hitJoint) {
+        if (own.joints.includes(hitJoint.id)) return undefined;
+        discardPlacingLength(state, pending);
+        return createPointPointDimension(svg, state, centreId, hitJoint.id, e, w);
+    }
+    const s = hitShape && hitShape.shape;
+    if (!s || s.id === own.id) return undefined;
+    if (s.type === 'line') {
+        discardPlacingLength(state, pending);
+        return createPointLineDimension(svg, state, centreId, s, e, w);
+    }
+    if (isRadialShape(s)) {
+        discardPlacingLength(state, pending);
+        return createPointPointDimension(svg, state, centreId, s.joints[0], e, w);
+    }
+    return undefined;
+}
+
+// The ONE creation of a point-to-point DISTANCE, placing: two clicked points, a point and a circle's centre (its rim), two centres.
+function createPointPointDimension(svg, state, firstId, secondId, e, w) {
+    const a = sceneJoints(state.joints).get(firstId);
+    const b = sceneJoints(state.joints).get(secondId);
+    beginDimUndo(state);
+    const res = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
+        joints: [firstId, secondId],
+        value: getDist(a, b),
+        dimMode: 'auto' // Bypass duplicate check to allow multiple dim types
+    });
+
+    const c = (res && typeof res === 'object') ? res : state.constraints[state.constraints.length - 1];
+    if (!c) { endDimUndo(state); clearPointPick(state); return false; }
+
+    startPlacing(svg, state, c, e, w);
+    updateConstraintOffset(state, c, w); // Initialize dimMode and isDriven status
+    finalizeDimBirth(c, state);
     return true;
 }
 

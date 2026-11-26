@@ -215,10 +215,10 @@ function validateWithSandbox(state, config) {
                 const center = state.joints.get(s.joints[0]);
                 // If shape has a radius property (circle), check it. Or check distance to rim.
                 if (typeof s.radius === 'number') {
-                    error = Math.abs(s.radius - target);
+                    error = Math.abs(s.radius * (c.isDiameter ? 2 : 1) - target); // a diameter dimension's value is twice the radius (task 1008)
                 } else if (s.joints.length >= 2) {
                     const rim = state.joints.get(s.joints[1]);
-                    if (center && rim) error = Math.abs(getDist(center, rim) - target);
+                    if (center && rim) error = Math.abs(getDist(center, rim) * (c.isDiameter ? 2 : 1) - target);
                 }
             }
         } else if (c.shapes && c.shapes.length === 2) {

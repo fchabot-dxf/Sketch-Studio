@@ -889,7 +889,7 @@ export class ConstraintManager {
                     for (const c of constraints) {
                         if (c.type !== CONSTRAINT_TYPES.DISTANCE) continue;
                         if (c.isDriven || c.driven) continue;
-                        if (c.isRadius && c.shape === sid && typeof c.value === 'number') return c.value;
+                        if (c.isRadius && c.shape === sid && typeof c.value === 'number') return c.isDiameter ? c.value / 2 : c.value; // the radius either way (task 1008: a circle's dimension is a diameter)
                         if (c.joints && c.joints.length === 2 && (!c.dimMode || c.dimMode === 'aligned')) {
                             const s = shapes.find(sh => sh.id === sid);
                             if (s && s.joints && s.joints.length >= 2) {

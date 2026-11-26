@@ -119,13 +119,13 @@ try {
     eq(inputs.map((i) => i.value), ['5', '7d1'], 'D. the name is inserted in the field being typed in, the other is untouched');
     inputs[1].value = '5'; inputs[1].dispatchEvent(new app.window.Event('input', { bubbles: true }));
     app.esc(); app.esc();
-    // a circle's diameter typed as a formula: its radius dimension reads (formula) / 2
+    // a circle's diameter typed as a formula: its diameter dimension reads the formula as typed (task 1008)
     app.tool('circle'); click({ x: cv.x - 300, y: cv.y - 250 }); app.move(cv.x - 200, cv.y - 200);
     app.type('d1 / 2'); app.enter();
     const cir = st.shapes.filter((s) => s.type === 'circle').pop();
     near(cir.radius, 50, 'D. a circle typed with the diameter d1 / 2 (100) has radius 50');
     const rad = st.constraints.find((c) => c.isRadius && c.shape === cir.id);
-    eq(rad && rad.expression, '(d1 / 2) / 2', 'D. its radius dimension reads the diameter formula halved');
+    eq(rad && rad.expression, 'd1 / 2', 'D. its diameter dimension reads the diameter formula as typed');
     app.esc(); app.esc();
   }
 

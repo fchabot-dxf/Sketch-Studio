@@ -15,7 +15,7 @@ function cachedFreedom(joints, shapes, constraints, groupState) {
   for (const [id, j] of joints) parts.push(id, j.x, j.y, j.fixed ? 1 : 0);
   const blocks = groupState ? rigidBlocks({ shapes, groups: groupState.groups, enteredGroupId: groupState.enteredGroupId }) : [];
   const key = JSON.stringify([parts, constraints.filter(c => !c.isDriven && !c.driven),
-    shapes.map(s => [s.id, s.type, s.joints, s.radius]), blocks.map(b => [b.id, b.shapes.map(s => s.id)])]);
+    shapes.map(s => [s.id, s.type, s.joints, s.radius, s.fixed ? 1 : 0]), blocks.map(b => [b.id, b.shapes.map(s => s.id)])]);
   if (lastFreedom.key !== key) {
     lastFreedom = { key, value: new NewtonSolver(joints, constraints, shapes, { groupState }).jointFreedom() };
   }

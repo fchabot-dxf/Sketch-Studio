@@ -21,6 +21,7 @@ import { isPatternConstraint, patternHandles, patternSpacing } from '#core/patte
 import { axisRect, linearLead, radialLead, isNarrowDim, DIM_ARROW_PX, DIM_NARROW_STUB_PX, DIM_LEAD_MIN_PX } from '#ui/dimension-lead.js';
 import { quantityText, dimensionUnit } from '#core/parameters.js';
 import { isAutoDimName } from '#core/expression.js';
+import { isShapeLocked } from '#core/lock-state.js';
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
@@ -1268,8 +1269,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     // can still move and should stay blue, otherwise the user has no visual
     // signal that the sketch isn't done.
     if (fixedShapes.has(s.id)) {
-        // LOCKED (every joint fixed:true, the Lock action) vs merely fully constrained (DOF 0): both sit in fixedShapes.
-        const locked = LOCKED_LINE_COLOR && s.joints && s.joints.length > 0 && s.joints.every(jid => { const jj = joints.get(jid); return jj && jj.fixed === true; });
+        // LOCKED (one source of truth in #core/lock-state.js) vs merely fully constrained (DOF 0): both sit in fixedShapes.
+        const locked = LOCKED_LINE_COLOR && isShapeLocked({ joints, shapes, constraints: activeConstraints }, s);
         strokeColor = locked ? LOCKED_LINE_COLOR : '#202020'; // Black — fully rigid
     } else {
         strokeColor = '#60A5FA'; // Blue (paler) — under-constrained, can still move

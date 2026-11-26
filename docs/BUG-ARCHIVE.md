@@ -1384,6 +1384,69 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `solver`
 - **History:** found in `1000` (`UX-07`), `1000B` (`B-5`), `1003` (`D-21`) -> fixed in task `1007` (removed duplicate loop)
 
+### BUG-120
+- **Date / turn:** 2026-11-26 (audit IDs `UX-01`, `B-2`, `D-17`; fixed in task `1006`)
+- **Reported by:** audits `1000` (`D9.1`, `D9.2`), `1000B` (`2b`), `1003` (`V2.4.toggle.Href->Drv`, `Vref->Drv`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-01` / `B-2` / `D-17`: making a horizontal or vertical reference dimension on a diagonal Driving set its value to the slanted length (50 on a 30 x 40 diagonal), so the shape jumped (`b (30,40) -> (50,40)`).
+- **What was wrong:** the promotion re-measured every joint-pair distance as the aligned length, whatever its mode.
+- **Cause:** `packages/core/dimension-seams.js` `toggleDriving` hand-rolled its own measurement (`getDist` for any 2-joint distance), not the one the label and the Parameters table read (`#core/constraint-verifier.js` `measureDimension`).
+- **Fix:** `toggleDriving` takes the value `measureDimension` gives (H / V: `|dx|` / `|dy|`), then re-solves; the hand-rolled branches are gone.
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 1)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-121, BUG-122
+- **History:** found in `1000` (`UX-01`), `1000B` (`B-2`), `1003` (`D-17`) -> fixed in task `1006`
+
+### BUG-121
+- **Date / turn:** 2026-11-26 (audit ID `B-3`, part of `D-17`; fixed in task `1006`)
+- **Reported by:** audits `1000B` (`2c`, `2d`), `1003` (`V2.4.toggle.ParRef->Drv`, `PtAxisRef->Drv`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-3`: making a MOVED line-line or point-to-axis reference dimension Driving snapped the geometry back to the value it was born with (`55 -> 20`, `60 -> 25`).
+- **What was wrong:** the promotion had no line-line branch at all, and its point-to-line branch read `state.joints`, where the axis ends (`j_origin`, `j_ref_x`) are not: the stale value stayed and the solve moved the geometry to it.
+- **Cause:** `packages/core/dimension-seams.js` `toggleDriving` (same hand-rolled measurement as BUG-120).
+- **Fix:** the same one change as BUG-120: `measureDimension` (line-line perpendicular distance; an axis resolved in the scene).
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 2)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-120, BUG-122
+- **History:** found in `1000B` (`B-3`) and `1003` (`D-17`) -> fixed in task `1006`
+
+### BUG-122
+- **Date / turn:** 2026-11-26 (audit ID `D-4`; fixed in task `1006`)
+- **Reported by:** audit `1003` (`V2.4.toggle.AngAxisRef->Drv`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `D-4`: making an angle-to-axis reference dimension Driving collapsed the line to the origin (`b = (0, -0)`).
+- **What was wrong:** the promotion looked the axis (`ref_axis_x` / `ref_axis_y`) up in `state.shapes`, where it is not, so the stale value stayed and the solve folded the line.
+- **Cause:** `packages/core/dimension-seams.js` `toggleDriving` angle branch (same hand-rolled measurement as BUG-120).
+- **Fix:** new `#core/constraint-verifier.js` `measureAngleDimension` (`{ value, sector, parallel }`, axes resolved in the scene: the sector under the label, as before; parallel lines 0 / 180), the one angle measurement: `measureDimension` reads its value, `toggleDriving` its value and sector.
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 3)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-120, BUG-121
+- **History:** found in `1003` (`D-4`) -> fixed in task `1006`
+
+### BUG-123
+- **Date / turn:** 2026-11-26 (audit IDs `UX-08`, `B-4`, `D-19`; fixed in task `1006`)
+- **Reported by:** audits `1000` (`D9.3b`, `IR2.1`), `1000B` (`P8-A`, `2a`), `1003` (`V2.4.ctxToggle`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-08` / `B-4` / `D-19`: Driving <-> Reference (context menu) and Lock / Unlock (F, the ribbon Lock, the context menu) recorded no undo step: Ctrl+Z undid the edit before (it deleted a line drawn before the lock), and a switch to Reference lost the dimension's formula for good.
+- **What was wrong:** neither change took a snapshot before it.
+- **Cause:** `packages/core/dimension-seams.js` `toggleDriving` and `packages/ui/input-manager.js` `toggleFixedSelection` (the one Lock / Unlock every way calls) never called `saveState`.
+- **Fix:** each records ONE undo step (`#core/sketch-model.js` `recordUndo`, the shared undo path) before it changes anything; a refused switch, and a Lock that changes no point, record none.
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (sections 4a, 4b)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`UX-08`), `1000B` (`B-4`), `1003` (`D-19`) -> fixed in task `1006`
+
 ---
 
 ## Family index
@@ -1399,7 +1462,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
 | `storage-lifecycle` | BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |

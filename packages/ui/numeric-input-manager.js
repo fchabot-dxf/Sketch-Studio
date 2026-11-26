@@ -13,6 +13,7 @@ import { createParameterCompletion } from '#ui/parameter-completion.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
 import { dimLabelAt } from '#ui/hover-manager.js';
 import { findSnap } from '#ui/snap-detection.js';
+import { measureDimension } from '#core/constraint-verifier.js';
 
 export const NUMERIC_INPUT_STYLE_ID = 'sk-numeric-input-styles';
 
@@ -37,6 +38,8 @@ export function parseBoxValue(text, quantity = 'length', state = uiState.appStat
 /** TASK 876: the keyboard a box asks for on a phone. A name or a formula (d1 / 2) needs letters, so it is the full text keyboard: the dimension edit box's rule,
  *  declared once for the edit box and the drawing tools' boxes (was the decimal keypad while drawing, O15). */
 const BOX_INPUT_MODE = 'text';
+/** TASK 1006 (DIV-03): the hint under a REFERENCE dimension's read-only box (showEditInput 'view'). */
+const REFERENCE_BOX_HINT = 'Reference dimension: measured, not typed. To type a value, make it Driving (right-click it, or touch and hold).';
 
 const NUMERIC_INPUT_CSS = `
 .dim-input {
@@ -215,6 +218,7 @@ let uiState = {
     
     // State
     rafId: null,
+    focusRafId: null,
     svg: null,
     appState: null,
 
@@ -469,10 +473,13 @@ export function setLiveInputValue(index, value) {
 export function showEditInput(svg, state, constraint, initialKey) {
     if (!constraint) return;
 
-    // If target is driven or fully fixed endpoints, skip opening the editor and force driven.
-    if (constraint.isDriven || constraint.driven) return;
-    // A dimension on a quantity the sketch already determines is placed DRIVEN (a measurement) and is never typed.
-    if (isDimensionDetermined(state, constraint)) {
+    // TASK 1006 (DIV-03 / DD-3): a REFERENCE dimension opens its box READ-ONLY ('view'), showing what its label shows (the value it measures now,
+    // #core/constraint-verifier.js measureDimension) and a hint saying how to type it. Enter, Esc or a press outside closes it; nothing changes.
+    // (A just-placed reference never gets here: the Dimension tool drops it without opening the box.)
+    const reference = !!(constraint.isDriven || constraint.driven);
+    // A dimension PLACED on a quantity the sketch already determines is born DRIVEN (a measurement) and is never typed. TASK 1006 (UX-16): at its
+    // birth only: an existing driving dimension opens its box like any other (a value the sketch cannot take is refused when it is typed).
+    if (!reference && constraint.__newlyPlaced === true && isDimensionDetermined(state, constraint)) {
         constraint.isDriven = true;
         constraint.driven = true;
         logDiagnostic('constraints', 'ERR-DRIVEN-02', 'Already determined by existing constraints; dimension added as driven.', {
@@ -484,7 +491,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
 
     resetState();
     uiState.active = true;
-    uiState.mode = 'edit';
+    uiState.mode = reference ? 'view' : 'edit';
     uiState.target = constraint;
     uiState.appState = state;
     uiState.svg = svg;
@@ -506,6 +513,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
         const jb = state.joints.get(constraint.joints[1]);
         if (ja && jb) prefillValue = Math.abs(jb.y - ja.y);
     }
+    if (reference) { const now = measureDimension(constraint, state.joints, state.shapes); if (now !== null) prefillValue = now; }
     // U2: LENGTH dims format through the document unit; ANGLE dims stay in degrees (raw toFixed). docUnit defaults
     // 'mm' (= the world base), so for a LENGTH dim formatUnit(v,'mm') === v.toFixed(1) — byte-identical to before.
     const isAngleDim = constraint.type === CONSTRAINT_TYPES.ANGLE;
@@ -523,12 +531,22 @@ export function showEditInput(svg, state, constraint, initialKey) {
     uiState.singleInput.inputMode = BOX_INPUT_MODE;
     uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey : defaultValue;
     const len = uiState.singleInput.value.length;
-    uiState.singleInput.setSelectionRange(typeof initialKey === 'string' ? len : 0, len);
-    updateAssist({ complete: typeof initialKey === 'string' });
-
-    requestAnimationFrame(() => {
+    if (typeof initialKey === 'string') {
         uiState.singleInput.focus();
-        if (!initialKey) uiState.singleInput.select();
+        uiState.singleInput.setSelectionRange(len, len);
+    } else {
+        uiState.singleInput.setSelectionRange(0, len);
+    }
+    uiState.singleInput.readOnly = reference;
+    if (reference && uiState.hintEl) { uiState.hintEl.textContent = REFERENCE_BOX_HINT; uiState.hintEl.classList.remove('err'); showNumericInputEl(uiState.hintEl); }
+    else updateAssist({ complete: typeof initialKey === 'string' });
+
+    if (uiState.focusRafId) { cancelAnimationFrame(uiState.focusRafId); uiState.focusRafId = null; }
+    uiState.focusRafId = requestAnimationFrame(() => {
+        uiState.focusRafId = null;
+        if (!uiState.active || (uiState.mode !== 'edit' && uiState.mode !== 'view')) return; // TASK 1006: a reference's read-only box (mode 'view') takes focus too, so Enter / Esc reach it
+        uiState.singleInput.focus();
+        if (typeof initialKey !== 'string') uiState.singleInput.select();
     });
     startTrackingLoop();
     // TASK 723: a press anywhere outside the box ends it (Fusion). Capture phase on the document: it runs BEFORE the canvas / ribbon / footer
@@ -658,6 +676,7 @@ export function placeAnchoredBox({ el, svg, world, panAnchor = world, obstacles 
 
 function handleCommit() {
     if (!uiState.active) return;
+    if (uiState.mode === 'view') { hideInput(); return; } // TASK 1006 (DIV-03): a reference's read-only box changes nothing
     if (uiState.mode === 'edit' && uiState.target) {
         // TASK 535: the box text goes through the ONE expression parser (a number, a unit, a formula, a name, `name = value`): previewDimensionInput
         // plans it (pure), applyParameterChange commits THAT plan through the batch seam: one undo step, all-or-nothing, parameters included.
@@ -819,6 +838,7 @@ function insideBox(e) {
 // TASK 876: the same press on a drawing tool's value box (live-single / live-dual) that the user has typed in inserts the dimension's name the same way; anything else
 // is the drawing's own press, as ever (the box is neither closed nor committed by it).
 function handleOutsidePress(e) {
+    if (uiState.active && uiState.mode === 'view') { if (!insideBox(e)) hideInput(); return; } // TASK 1006 (DIV-03): closes, the press goes on
     const field = uiState.active ? typingField() : null;
     if (!field) return;
     if (e.button === 1) return; // the middle button pans the view (as the wheel zooms it): navigating is not working elsewhere, the box stays
@@ -1090,18 +1110,20 @@ function resetState() {
     
     if (uiState.singleInput) {
         uiState.singleInput.classList.remove('sk-live-box');
+        uiState.singleInput.readOnly = false; // TASK 1006 (DIV-03): a reference's box was read-only
         if (uiState.singleInput.style) uiState.singleInput.style.transform = '';
         hideNumericInputEl(uiState.singleInput);
     }
     if (uiState.dualContainer) { uiState.dualContainer.classList.remove('sk-live-box'); hideNumericInputEl(uiState.dualContainer); }
     if (uiState.rafId) { cancelAnimationFrame(uiState.rafId); uiState.rafId = null; }
+    if (uiState.focusRafId) { cancelAnimationFrame(uiState.focusRafId); uiState.focusRafId = null; }
 }
 
 function startTrackingLoop() {
     if (uiState.rafId) cancelAnimationFrame(uiState.rafId);
     
     const loop = () => {
-        if (uiState.active && uiState.mode === 'edit' && uiState.target && uiState.svg) {
+        if (uiState.active && (uiState.mode === 'edit' || uiState.mode === 'view') && uiState.target && uiState.svg) {
             // Update position based on constraint
             if (uiState.target.glyphPos) placeEditBox();
             placeAssist();

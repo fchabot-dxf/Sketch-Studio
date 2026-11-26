@@ -64,6 +64,25 @@ function finalizeDimBirth(c, state){
     c.__birthHistoryLength = state && state.history ? state.history.length : null;
 }
 
+// Clear any in-progress point-first pick (rubber band + pending first joint) in one place.
+function clearPointPick(state) {
+    dimensionState.pendingDimension = null;
+    if (state && state.active && (state.active.mode === TOOL_MODES.DIMENSION || state.active.mode === 'dim-angle')) {
+        state.active = null;
+    }
+}
+
+// End placement when no immediate edit box is opening (drag-release, or a driven drop):
+// the dimension is committed in the sketch, so a later double-click + Esc must not delete it.
+function finishPlacementWithoutEdit(c, state) {
+    if (!c) return;
+    c.__placing = false;
+    c.__newlyPlaced = false;
+    delete c.__restoredDimension;
+    if (state && state.placingConstraint === c) state.placingConstraint = null;
+    if (dimensionState.placingConstraint === c) dimensionState.placingConstraint = null;
+}
+
 // TASK 589: a line's length preview is created quietly (startShapeDimension); when it is PLACED as a reference (a click, Enter, or the
 // release of a press-drag), the notice the solver's reference decision carries is shown now, once.
 function announcePlacedReference(c) {
@@ -111,23 +130,23 @@ export function resetDimensionState(state) {
             if (typeof pc.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) state.discardSnapshotAt(pc.__birthHistoryLength);
             pc.__placing = false;
         } else {
-            if (pc.__newlyPlaced === true && typeof pc.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) state.discardSnapshotAt(pc.__birthHistoryLength);
-            if (state && Array.isArray(state.constraints)) {
-                const idx = state.constraints.indexOf(pc);
-                if (idx !== -1) state.constraints.splice(idx, 1);
+            if (pc.__newlyPlaced === true) {
+                if (typeof pc.__birthHistoryLength === 'number' && state && state.discardSnapshotAt) state.discardSnapshotAt(pc.__birthHistoryLength);
+                if (state && Array.isArray(state.constraints)) {
+                    const idx = state.constraints.indexOf(pc);
+                    if (idx !== -1) state.constraints.splice(idx, 1);
+                }
             }
             pc.__placing = false;
             pc.__newlyPlaced = false;
         }
     }
-    dimensionState.pendingDimension = null;
+    clearPointPick(state);
     dimensionState.placingConstraint = null;
+    dimensionState.pendingPointer = null;
     dimensionState.editingConstraint = null;
     if (state) {
         state.placingConstraint = null;
-        if (state.active && state.active.mode === TOOL_MODES.DIMENSION) {
-            state.active = null;
-        }
     }
 }
 
@@ -210,10 +229,12 @@ export function startDimensionFromSelection(svg, state, wOverride, opts = {}) {
         try { c.glyphPos = w; } catch(_){ }
 
         if (keepPlacing) {
+            clearPointPick(state);
             try { state.placingConstraint = c; } catch(_) {}
             dimensionState.placingConstraint = c;
             try { if (opts.keyboardPlaced) c.__keyboardPlaced = true; } catch(_) {}
         } else {
+            clearPointPick(state);
             try { c.__placing = false; } catch(_){ }
             dimensionState.editingConstraint = c;
             showEditInput(svg, state, c);
@@ -261,7 +282,7 @@ export function getPlacingConstraint(state) {
     return (state && state.placingConstraint) || dimensionState.placingConstraint;
 }
 
-export function anchorPlacingDimension(svg, state) {
+export function anchorPlacingDimension(svg, state, initialKey) {
     const pending = (state && state.placingConstraint) || dimensionState.placingConstraint;
     if (!pending || !pending.__placing) return false;
 
@@ -284,9 +305,7 @@ export function anchorPlacingDimension(svg, state) {
             if (dist === null || Math.abs(dist - (pending.value || 0)) > 0.1) {
                 pending.isDriven = true;
                 pending.driven = true;
-                pending.__placing = false;
-                if (state && state.placingConstraint === pending) state.placingConstraint = null;
-                dimensionState.placingConstraint = null;
+                finishPlacementWithoutEdit(pending, state);
                 logDiagnostic('constraints', 'ERR-DIM-02', 'Geometry already defined; dimension added as driven.', {
                     joints: [j1, j2],
                     value: pending.value,
@@ -314,19 +333,20 @@ export function anchorPlacingDimension(svg, state) {
         if (j1 && j2) pending.value = getDist(j1, j2);
     }
 
-    pending.__placing = false;
-    if (state && state.placingConstraint === pending) state.placingConstraint = null;
-    dimensionState.placingConstraint = null;
-
     if (pending.isDriven || pending.driven) {
+        finishPlacementWithoutEdit(pending, state);
         announcePlacedReference(pending);
         return true;
     }
 
+    pending.__placing = false;
+    if (state && state.placingConstraint === pending) state.placingConstraint = null;
+    dimensionState.placingConstraint = null;
+
     dimensionState.editingConstraint = pending;
     try {
         const svgEl = svg || (typeof document !== 'undefined' ? (document.getElementById('svgCanvas') || document.querySelector('svg')) : null);
-        showEditInput(svgEl, state, pending);
+        showEditInput(svgEl, state, pending, initialKey);
     } catch(err) {
         console.error(err);
     }
@@ -414,9 +434,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
         if (pending.isDriven || pending.driven) {
             logDim('drop-driven', { id: pending.id || '(pending)' });
             announcePlacedReference(pending);
-            try { pending.__placing = false; delete pending.__restoredDimension; } catch(_){ }
-            try { if (state && state.placingConstraint === pending) state.placingConstraint = null; } catch(_){ }
-            dimensionState.placingConstraint = null;
+            finishPlacementWithoutEdit(pending, state);
             return true;
         }
         
@@ -451,9 +469,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
                     // Adding as driving would distort => force driven
                     pending.isDriven = true;
                     pending.driven = true;
-                    pending.__placing = false;
-                    state.placingConstraint = null;
-                    dimensionState.placingConstraint = null;
+                    finishPlacementWithoutEdit(pending, state);
                     // Add joint status details for debugging
                     const jointStatus = {
                         j1,
@@ -518,11 +534,10 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
             });
             
             const c = (res && typeof res === 'object') ? res : state.constraints[state.constraints.length - 1];
-            if (!c) { endDimUndo(state); return false; }
+            if (!c) { endDimUndo(state); clearPointPick(state); return false; }
             
             startPlacing(svg, state, c, e, w);
             updateConstraintOffset(state, c, w); // Initialize dimMode and isDriven status
-            dimensionState.pendingDimension = null;
             finalizeDimBirth(c, state);
             return true;
         }
@@ -532,6 +547,9 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
             resetDimensionState(state);
             return true;
         }
+
+        // Non-line shape (e.g. circle/arc rim) supersedes the pending point pick before Case 4 starts its own dimension.
+        clearPointPick(state);
     }
 
     // 4. START NEW DIMENSION (First Click)
@@ -767,13 +785,13 @@ function createPointLineDimension(svg, state, firstId, lineShape, e, w) {
 
     startPlacing(svg, state, c, e, w);
     updateConstraintOffset(state, c, w);
-    dimensionState.pendingDimension = null;
     finalizeDimBirth(c, state);
     return true;
 }
 
 // Helper to initialize placement state for a new constraint
 function startPlacing(svg, state, constraint, e, w) {
+    clearPointPick(state);
     try { constraint.__placing = true; } catch(_){ }
     
     // UNIFIED STATE NAME: placingConstraint (fixed typo)
@@ -970,11 +988,9 @@ export function handleDimensionPointerUp(e, svg, state) {
                              const j2 = sceneJoints(state.joints).get(c.joints[1]);
                              if (j1 && j2) c.value = Math.abs(j2.y - j1.y);
                         }
-                        dimensionState.placingConstraint.__placing = false; 
-                        dimensionState.placingConstraint = null; 
+                        finishPlacementWithoutEdit(c, state);
                     } 
                 } catch(_){ }
-                try { state.placingConstraint = null; } catch(_){ }
                 announcePlacedReference(placed); // outside the catch above: a throw here is not hidden
             }
             try { svg.releasePointerCapture(e.pointerId); } catch (_){ }

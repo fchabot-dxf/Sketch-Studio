@@ -5,7 +5,7 @@
 // TODO(shaper): parameterize the ~54 DOM-id reaches before Shaper adopts this input layer (relocation only).
 
 import { pickableShapes } from '#core/reference-lines.js';
-import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets, activeSketchScene, otherSketchScene, inActiveSketch } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
+import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets, activeSketchScene, otherSketchScene, inActiveSketch, recordUndo } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
 import { dbg, logDiagnostic } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS, ACTIVE_SKETCH_SNAP_TOOLS } from '#core/constants.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
@@ -25,9 +25,9 @@ import { beginClosePath, handleClosePathPointerDown, closePathMenuActions } from
 import { handleTextPointerDown, commitTextEditor, cancelTextEditor, textMenuActions } from '#ui/input-handlers/text-tool.js'; // TASK 845: the Text tool and its editor, every app
 import { watchTextOutlines } from '#ui/text-fonts.js'; // TASK 845: a text's letters are rebuilt whenever its shape comes back without them (an undo)
 import { transformBoxPointerDown, transformBoxPointerMove, transformBoxPointerUp, cancelTransformGesture } from '#ui/transform-box.js'; // TASK 753: a group's transform box, every app
-import { updateHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
+import { updateHover, clearHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
-import { setupConstraintTools, recordConstraintStep, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState, EQUAL_SELECTION_REFUSAL, canConstrainEqual } from '#ui/input-handlers/constraint-tools.js';
+import { setupConstraintTools, activateConstraintTool, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState, handlePanZoomWheel } from '#ui/input-handlers/pan-zoom.js';
 import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection, anchorPlacingDimension, isDimensionPlacing, getPlacingConstraint, resetDimensionState } from '#ui/input-handlers/dimension-tool.js';
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
@@ -54,7 +54,6 @@ import { SolverConfig } from '#core/solver-config.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import SettingsManager, { docUnit } from '#core/settings-manager.js';
 import { getMagnetThreshold, isWithinMagnet } from '#ui/snap-magnet.js';
-import { ConstraintManager } from '#core/constraint-manager.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { createClipboard, clipboardKeyAction, isTextEditingTarget } from '#ui/clipboard.js'; // TASK 559: Ctrl+C / Ctrl+X / Ctrl+V
 import { matchesShortcut, matchShortcut } from '#ui/shortcuts.js'; // TASK 727: THE declaration of every key below
@@ -94,47 +93,12 @@ export const defaultInputCtx = {
     return { mag: document.getElementById('magnifier'), magContent: document.getElementById('mag-content') };
   },
   getInputHost() { return (typeof document !== 'undefined') ? document.body : null; },
-  // P4b TOOLBAR/STATUS (app-specific; a host with its own toolbar supplies these, or omits to skip the sync).
-  // setActiveTool — switch via the toolbar button (primary path); returns true if it handled the switch.
-  setActiveTool(toolName) {
-    try {
-      const toolButton = document.getElementById('tool-' + toolName) || (typeof document !== 'undefined' ? document.querySelector(`.sk-ribbon-btn[data-tool="${toolName}"], [data-tool="${toolName}"]`) : null);
-      if (toolButton) {
-        try {
-          const activeEl = document.activeElement;
-          if (activeEl && activeEl !== toolButton && activeEl.classList && activeEl.classList.contains('tool-btn')) {
-            try { activeEl.blur(); } catch(_) {}
-          }
-        } catch(_) {}
-        try { document.querySelectorAll('.tool-btn, .tool-button, [class*="tool"]').forEach(b => b.classList.remove('active','selected','bg-blue-500','text-white')); } catch(_) {}
-        try { toolButton.click(); } catch(_) {}
-        try { document.querySelectorAll('.tool-btn').forEach(b => { try{ b.blur(); }catch(_){ } }); } catch(_) {}
-        try { toolButton.classList.add('active'); toolButton.focus(); setTimeout(()=>{ try{ toolButton.blur(); }catch(_){ } }, 0); } catch(_) {}
-        return true;
-      }
-    } catch(_) {}
-    return false;
-  },
-  // highlightActiveTool — manual active-state highlight (fallback when there's no toolbar button to click).
+  // highlightActiveTool — sync active highlight on toolbar/ribbon buttons immediately on programmatic tool switch.
   highlightActiveTool(toolName) {
-    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-    const toolEl = document.getElementById('tool-' + toolName);
-    if (toolEl) toolEl.classList.add('active');
-  },
-  // resetToSelectTool — clear all toolbar buttons + activate Select; returns true if the select button was found.
-  resetToSelectTool() {
-    document.querySelectorAll('.tool-btn, .tool-button, [class*="tool"]').forEach(btn => {
-      btn.classList.remove('active', 'selected', 'bg-blue-500', 'text-white');
+    if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
+    document.querySelectorAll('.tool-btn, .sk-ribbon-btn[data-tool]').forEach(b => {
+      b.classList.toggle('active', b.dataset?.tool === toolName || b.id === 'tool-' + toolName);
     });
-    const selectBtn = document.getElementById('tool-select') ||
-                      document.querySelector('[data-tool="select"]') ||
-                      document.querySelector('.tool-btn[data-tool="select"]');
-    if (selectBtn) {
-      selectBtn.click();
-      try { document.querySelectorAll('.tool-btn').forEach(b => { try{ b.blur(); }catch(_){ } }); } catch(_) {}
-      return true;
-    }
-    return false;
   },
 };
 let inputCtx = defaultInputCtx;
@@ -766,13 +730,8 @@ function handlePointerDown(e, svg, state) {
         case TOOL_MODES.EQUAL:
         case TOOL_MODES.MIDPOINT:
         case TOOL_MODES.SYMMETRIC:
+            // TASK 1005 (B-15, owner ruling turn 3741): constraint tools stay active after every use or refusal; only Esc or picking another tool exits.
             handled = handleConstraintPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint);
-            // EXIT ON INVALID CLICK: If the constraint tool didn't handle the click (empty space or invalid target),
-            // switch back to Select tool immediately.
-            if (!handled) {
-                switchToTool(state, TOOL_MODES.SELECT);
-                return true;
-            }
             break;
     }
 
@@ -1229,8 +1188,8 @@ export function sketchHistory(state) {
     return h;
 }
 
-// TASK 727: the tool each declared tool key opens (the keys themselves are in shortcuts.js). H and E have their own branch below (they act
-// on a preselection first). TASK 740: every ribbon tool and constraint; the key runs switchToTool, which is what its ribbon button runs.
+// TASK 727 / 1005: the tool each declared tool key opens (the keys themselves are in shortcuts.js). Every ribbon tool and constraint
+// (including H and E) runs switchToTool — the ONE activation path shared by ribbon buttons and keyboard shortcuts across all hosts.
 export const TOOL_SHORTCUTS = Object.freeze({
     'tool.line': 'line', 'tool.rect': 'rect', 'tool.circle': 'circle', 'tool.arc': 'arc', // drawing tools
     'tool.slot': TOOL_MODES.SLOT, 'tool.polygon': TOOL_MODES.POLYGON, 'tool.bezier': TOOL_MODES.BEZIER, 'tool.text': TOOL_MODES.TEXT, // TASK 845
@@ -1238,7 +1197,8 @@ export const TOOL_SHORTCUTS = Object.freeze({
     'tool.closePath': TOOL_MODES.CLOSE_PATH, // TASK 760
     'tool.mirror': TOOL_MODES.MIRROR, 'tool.circularPattern': TOOL_MODES.CIRCULAR_PATTERN, 'tool.rectangularPattern': TOOL_MODES.RECTANGULAR_PATTERN,
     'tool.select': 'select', 'tool.pan': 'pan', // selection and navigation (V for View)
-    'tool.coincident': TOOL_MODES.COINCIDENT, 'tool.perpendicular': TOOL_MODES.PERPENDICULAR, 'tool.tangent': TOOL_MODES.TANGENT,
+    'tool.coincident': TOOL_MODES.COINCIDENT, 'tool.horizontalVertical': TOOL_MODES.HORIZONTAL_VERTICAL, 'tool.equal': TOOL_MODES.EQUAL,
+    'tool.perpendicular': TOOL_MODES.PERPENDICULAR, 'tool.tangent': TOOL_MODES.TANGENT,
     'tool.collinear': TOOL_MODES.COLLINEAR, 'tool.parallel': TOOL_MODES.PARALLEL,
     'tool.midpoint': TOOL_MODES.MIDPOINT, 'tool.symmetric': TOOL_MODES.SYMMETRIC,
     'tool.dimension': 'dim',
@@ -1306,8 +1266,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
                 if (pc && !pc.isDriven && !pc.driven) {
                     try {
                         const svgEl = canvasSvg || inputCtx.getCanvasSvg?.() || (typeof document !== 'undefined' ? (document.getElementById('svgCanvas') || document.querySelector('svg')) : null);
-                        anchorPlacingDimension(svgEl, state);
-                        showEditInput(svgEl, state, pc, e.key);
+                        anchorPlacingDimension(svgEl, state, e.key);
                     } catch(_){ }
                     e.preventDefault();
                     return;
@@ -1354,47 +1313,9 @@ function setupKeyboardShortcuts(state, opts = {}) {
             }
         }
 
-        // Tool switching shortcuts (declared in shortcuts.js; TASK 740: the letters never fire with Ctrl / Cmd / Alt held, those are the browser's)
+        // Tool switching shortcuts (declared in shortcuts.js; TASK 740/1005: all tools including H and E go through switchToTool)
         const toolId = matchShortcut(e, Object.keys(TOOL_SHORTCUTS));
         if (toolId) { switchToTool(state, TOOL_SHORTCUTS[toolId]); e.preventDefault(); }
-        // H: If a single line is preselected, apply H/V immediately. Otherwise switch to tool and wait for selection.
-        if (matchesShortcut(e, 'tool.horizontalVertical')) {
-            const selShapes = state.selectedShapes ? Array.from(state.selectedShapes) : [];
-            if (selShapes.length === 1) {
-                const s = state.shapes.find(x => x.id === selShapes[0]);
-                if (s && s.type === 'line') {
-                    recordConstraintStep(state, TOOL_MODES.HORIZONTAL_VERTICAL, () => ConstraintManager.addHorizontalOrVertical(state, s.joints));
-                    e.preventDefault();
-                    return;
-                }
-            }
-            switchToTool(state, TOOL_MODES.HORIZONTAL_VERTICAL);
-            e.preventDefault();
-        }
-        // E: If two shapes are pre-selected and valid for EQUAL, apply immediately. Otherwise enter pending mode.
-        if (matchesShortcut(e, 'tool.equal')) {
-            const selShapes = state.selectedShapes ? Array.from(state.selectedShapes) : [];
-            if (selShapes.length === 2) {
-                const s1 = state.shapes.find(x => x.id === selShapes[0]);
-                const s2 = state.shapes.find(x => x.id === selShapes[1]);
-                if (canConstrainEqual(s1, s2)) {
-                    recordConstraintStep(state, TOOL_MODES.EQUAL, () => ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.EQUAL, { shapes: [s1.id, s2.id] }, { source: 'toolbar' }));
-                    // Keep selections and the tool active — do not reset or switch away; user will exit manually. (TASK 878: its glyph shows: no message)
-                    e.preventDefault();
-                    return;
-                } else {
-                    logDiagnostic('constraints', 'ERR-EQUAL-01', 'Invalid selection for equal constraint.', {
-                        selectedShapes: [s1 && s1.type, s2 && s2.type]
-                    }, 'warn');
-                    showNotification(EQUAL_SELECTION_REFUSAL, 'warning');
-                    e.preventDefault();
-                    return;
-                }
-            }
-            // Otherwise, just switch to the Equal tool and let clicking apply (preselection will be respected by switchToTool)
-            switchToTool(state, TOOL_MODES.EQUAL);
-            e.preventDefault();
-        } // E for Equal
     });
 }
 
@@ -1505,6 +1426,7 @@ export function selectionLockState(state, selectionOnly = true) {
 }
 
 // The one Lock / Unlock: the F key, the ribbon Lock button and the context menu all call this.
+// TASK 1006 (UX-08 / B-4): a Lock / Unlock that changes a point is ONE undo step (recordUndo before the change).
 export function toggleFixedSelection(state) {
     const ids = lockTargets(state, false);
     if (ids.length === 0) return false;
@@ -1516,11 +1438,9 @@ export function toggleFixedSelection(state) {
     });
 
     const nextFixed = !allFixed;
-    for (const id of ids) {
-        if (id === 'j_origin') continue;
-        const j = state.joints.get(id);
-        if (j) j.fixed = nextFixed;
-    }
+    const changed = ids.filter(id => { const j = id === 'j_origin' ? null : state.joints.get(id); return j && !!j.fixed !== nextFixed; });
+    if (changed.length) recordUndo(state, nextFixed ? 'lock' : 'unlock');
+    for (const id of changed) state.joints.get(id).fixed = nextFixed;
 
     try { dbg.log('debug', '[fixed] toggle', { ids, fixed: nextFixed }); } catch(_) {}
     try { if (state.engine) state.engine.solve(SolverConfig.ITERATIONS || 500); } catch(_) {}
@@ -1531,15 +1451,36 @@ export function toggleFixedSelection(state) {
 // Re-export showDimInput so higher-level modules (e.g. main.js) can open the dim editor
 export const showDimInput = showEditInput;
 
+
+// Shared exit cleanup when switching tools (both switchToTool and tool-ribbon's host-owned onToolClick path).
+export function leaveActiveTool(state, nextTool) {
+    commitTextEditor(); // TASK 845: another tool (its button or its key) keeps the text being edited, as a press outside the editor does
+    if (typeof state.closeDrawStep === 'function') state.closeDrawStep(); // TASK 549: picking another tool in the middle of a draw cancels it (the ribbon button does the same)
+    // TASK 1004 (B-7/D-20, D-6): leaving Dimension mid-placement or mid-pick cancels it like Esc (a new dim removed, an existing one kept).
+    // Re-clicking Dimension or pressing its key keeps an active placement / pick (owner tool rule).
+    if (nextTool !== TOOL_MODES.DIMENSION) resetDimensionState(state);
+}
+
 // Helper: Switch the active tool programmatically with UI update fallback
 export function switchToTool(state, toolName) {
-    commitTextEditor(); // TASK 845: another tool (its button or its key) keeps the text being edited, as a press outside the editor does
-    state.closeDrawStep(); // TASK 549: picking another tool in the middle of a draw cancels it (the ribbon button does the same)
+    // TASK 1005 (owner ruling turn 3741): re-clicking the active constraint tool's button or key stays in the tool (never exits or re-fires preselection).
+    if (state.currentTool === toolName && CONSTRAINT_TOOLS.includes(toolName)) {
+        inputCtx.highlightActiveTool?.(toolName);
+        return;
+    }
+    leaveActiveTool(state, toolName);
     // Primary path: let the host's toolbar handle the switch (default = SketchStudio's #tool-<name> button click +
     // active-state sync). Returns true when handled; a host without a toolbar omits it -> we fall through.
+
     if (inputCtx.setActiveTool && inputCtx.setActiveTool(toolName)) return;
 
-    // Fallback: set tool directly
+    // Cleanup for tool being left
+    if (state.currentTool === TOOL_MODES.LINE && toolName !== TOOL_MODES.LINE) {
+        try { deactivateLineTool(state); } catch(_) {}
+    }
+    if (state.currentTool === TOOL_MODES.BEZIER && toolName !== TOOL_MODES.BEZIER) {
+        try { resetBezierState(state); } catch(_) {}
+    }
     if (state.currentTool === TOOL_MODES.TRIM && toolName !== TOOL_MODES.TRIM) {
         try { resetTrimState(); } catch(_) {}
     }
@@ -1550,9 +1491,15 @@ export function switchToTool(state, toolName) {
         resetFilletState();
     }
     if (state.currentTool === TOOL_MODES.OFFSET && toolName !== TOOL_MODES.OFFSET) resetOffsetState(); // TASK 650
+    if (state.currentTool !== toolName) resetConstraintState(state);
     resetPatternState(); // TASK 658: any tool switch cancels an open pattern dialog (a new pattern tool's `begin` opens its own)
 
     state.currentTool = toolName;
+    state.active = null;
+    try { clearHover(state); state.tempMousePos = null; } catch(_) {}
+    if (typeof state.resetPolyline === 'function') state.resetPolyline();
+    state._clearPolylineRequest = true;
+
     const targetSvg = canvasSvg || inputCtx.getCanvasSvg?.();
     if (toolName === TOOL_MODES.TRIM) {
         try { setupTrimTool(targetSvg, state); } catch(_) {}
@@ -1569,32 +1516,12 @@ export function switchToTool(state, toolName) {
             try { startDimensionFromSelection(svgEl, state); } catch(_) {}
         }
     }
-    // Update UI manually (ancillary P4b: host's toolbar/status hooks; default = SketchStudio DOM)
     inputCtx.highlightActiveTool?.(toolName);
 
-    // TASK 751: a constraint / dimension takes single curves and points, never a user group: its picks go to single curves and points whatever the
-    // group level (the selection is not used as its operand). TASK 878: normal behaviour, no message on the tool's start (owner ruling: a notice only when something is wrong).
-
-    // Fallback preselection for constraint tools (matches toolbar behavior)
+    // TASK 751: a constraint / dimension takes single curves and points, never a user group.
+    // TASK 1005: ONE constraint activation path (validates preselection, applies immediate H/V line & Equal 2-shape).
     if (CONSTRAINT_TOOLS.includes(toolName)) {
-        let firstEl = null;
-        if (state.selectedJoints && state.selectedJoints.size === 1 && (!state.selectedShapes || state.selectedShapes.size === 0)) {
-            firstEl = { type: 'joint', id: [...state.selectedJoints][0] };
-        } else if (state.selectedShapes && state.selectedShapes.size === 1 && (!state.selectedJoints || state.selectedJoints.size === 0)) {
-            firstEl = { type: 'shape', id: [...state.selectedShapes][0] };
-        }
-
-        if (toolName === TOOL_MODES.HORIZONTAL_VERTICAL && firstEl && firstEl.type === 'shape') {
-            const s = state.shapes.find(x => x.id === firstEl.id);
-            if (s && s.type === 'line') {
-                recordConstraintStep(state, TOOL_MODES.HORIZONTAL_VERTICAL, () => ConstraintManager.addHorizontalOrVertical(state, s.joints));
-                // Keep the current tool active (do not switch to Select). User will exit the tool manually. (TASK 878: its glyph shows: no message)
-                return;
-            }
-        }
-
-        const effectiveType = (toolName === TOOL_MODES.HORIZONTAL_VERTICAL) ? CONSTRAINT_TYPES.HORIZONTAL : toolName;
-        state.pendingConstraint = { type: effectiveType, firstElement: firstEl };
+        activateConstraintTool(state, toolName);
     }
     if (TOOL_BEGIN[toolName]) TOOL_BEGIN[toolName](state); // TASK 740: Mirror / a pattern starts its pick (the ribbon used to run it itself)
 }
@@ -1649,7 +1576,7 @@ function handleEscape(state) {
     state.active = null; state.drag = null;
 
     // 4. RESET CONSTRAINT BUFFERS (Crucial for multi-click tools)
-    try{ resetConstraintState(); }catch(_){ try{ import('#ui/input-handlers/constraint-tools.js').then(m => m.resetConstraintState()); }catch(_){ state.selectionBuffer = []; } }
+    resetConstraintState(state);
 
     // 5. Force UI to Select Mode
     try{ state.currentTool = TOOL_MODES.SELECT; }catch(_){ }

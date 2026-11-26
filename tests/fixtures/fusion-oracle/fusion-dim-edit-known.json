@@ -68,17 +68,6 @@
    "dim-angle|LL|1,4#huge20"
   ]
  },
- "fusion-refuses-dimension": {
-  "reason": "Fusion refuses to place this dimension (the quantity is already determined: over-constrained); ours places it as a DRIVING dimension, so the edit moves nothing or is refused",
-  "runs": [
-   "dim-angle|RR|8,8#grow2",
-   "dim-angle|RR|8,8#shrink05",
-   "dim-angle|RR|8,8#tiny",
-   "dim-angle|RR|8,8#huge20",
-   "dim-angle|RR|8,8#zero",
-   "dim-angle|RR|8,8#negative"
-  ]
- },
  "distance-box-refused": {
   "reason": "a distance dimension (between the points of two lines, horizontal, vertical, point-to-line, line-to-line, a line length, a radius) typed 0 or a negative value: this recording (Fusion API, parameter.expression) accepts it (the points meet / the radius is 0), but the Fusion dimension BOX refuses it (measured 2026-11-19 with real keys in the box, task 789b: 0 and -5 for an aligned distance between two separate lines, a horizontal one, a circle radius and a line length: the box stays open, red underline, tooltip \"Invalid expression\", nothing changes; 0.3 and 0.001 accepted; evidence scratchpad fusion-box-test/ D1-D6); ours refuses it like the box (task 789b, \"a length must be more than 0\")",
   "runs": [

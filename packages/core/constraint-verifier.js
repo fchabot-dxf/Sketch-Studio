@@ -57,17 +57,33 @@ function distanceNow(c, joints, shapes) {
  */
 export function measureDimension(c, joints, shapes) {
     if (!c) return null;
+    if (c.type === CONSTRAINT_TYPES.ANGLE) { const m = measureAngleDimension(c, joints, shapes); return m && !m.parallel ? m.value : null; }
     if (constraintReferencesAxis(c)) { joints = sceneJoints(joints); shapes = sceneShapes(shapes); }
     if (c.type === CONSTRAINT_TYPES.DISTANCE) return distanceNow(c, joints, shapes);
-    if (c.type !== CONSTRAINT_TYPES.ANGLE || !Array.isArray(c.shapes) || c.shapes.length !== 2) return null;
+    return null;
+}
+
+/**
+ * TASK 1006 (D-4): what an ANGLE dimension between two lines measures NOW, an axis resolved in the scene: { value, sector, parallel }. Two lines
+ * that meet: the sector of at most 180 degrees under its label (#core/angle-sector.js, the reference rule), its span the value (measureDimension's).
+ * Parallel lines have no sector: the angle between the directions (0 or 180), the CCW sector from line 1's direction, parallel: true. null when
+ * its geometry is missing. A reference made Driving (#core/dimension-seams.js toggleDriving) takes this value AND sector, so nothing moves.
+ */
+export function measureAngleDimension(c, joints, shapes) {
+    if (!c || c.type !== CONSTRAINT_TYPES.ANGLE || !Array.isArray(c.shapes) || c.shapes.length !== 2) return null;
+    if (constraintReferencesAxis(c)) { joints = sceneJoints(joints); shapes = sceneShapes(shapes); }
     const [s1, s2] = c.shapes.map((id) => shapes.find((sh) => sh.id === id));
     if (!s1 || !s2 || !s1.joints || !s2.joints) return null;
     const [a, b, p, q] = [s1.joints[0], s1.joints[1], s2.joints[0], s2.joints[1]].map((id) => joints.get(id));
     if (!a || !b || !p || !q) return null;
-    const int = getLineIntersection(a, b, p, q);
-    if (!int) return null;
     const d1 = Math.atan2(b.y - a.y, b.x - a.x), d2 = Math.atan2(q.y - p.y, q.x - p.x);
-    return angleSectorUnderLabel(d1, d2, angleLabelAngle(c, int, d1, d2)).value;
+    const int = getLineIntersection(a, b, p, q);
+    if (!int) {
+        const v = Math.abs((d1 - d2) * 180 / Math.PI);
+        return { value: v > 180 ? 360 - v : v, sector: angleSectorOf(null), parallel: true };
+    }
+    const ch = angleSectorUnderLabel(d1, d2, angleLabelAngle(c, int, d1, d2));
+    return { value: ch.value, sector: ch.sector, parallel: false };
 }
 
 export function measureResidual(c, joints, shapes) {

@@ -544,7 +544,7 @@ export function showEditInput(svg, state, constraint, initialKey) {
     if (uiState.focusRafId) { cancelAnimationFrame(uiState.focusRafId); uiState.focusRafId = null; }
     uiState.focusRafId = requestAnimationFrame(() => {
         uiState.focusRafId = null;
-        if (!uiState.active || uiState.mode !== 'edit') return;
+        if (!uiState.active || (uiState.mode !== 'edit' && uiState.mode !== 'view')) return; // TASK 1006: a reference's read-only box (mode 'view') takes focus too, so Enter / Esc reach it
         uiState.singleInput.focus();
         if (typeof initialKey !== 'string') uiState.singleInput.select();
     });

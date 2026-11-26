@@ -19,14 +19,15 @@ import { snapBoostFor } from '#ui/snap-detection.js';
 import { dragArrowSvg, dragArrowHit } from '#ui/drag-arrow-handle.js';
 import {
   offsetChainOf, offsetChainGeometry, offsetSideAt, offsetHandleAnchor, offsetArcSpan, applyOffset, defaultOffsetDistance, parseOffsetDistance,
-  offsetSideAndDistance, OFFSET_ZERO_REASON, OFFSET_UNDO_LABEL
+  evaluateOffsetDistance, offsetSideAndDistance, OFFSET_ZERO_REASON, OFFSET_UNDO_LABEL
 } from '#core/offset.js';
 import { arcSweepInfo } from '#core/geometry.js';
 import { inertEntities, activeSketchPick } from '#core/sketch-model.js';
 import { docUnit, lengthText } from '#core/settings-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
-import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox } from '#ui/numeric-input-manager.js';
+import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox, attachExternalCompletion } from '#ui/numeric-input-manager.js';
+import { applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
@@ -156,7 +157,12 @@ function dragArrowTo(svg, e) {
   _open.el.value = text;
   _open.text = text;
   _open.d = v;
+  _open.expression = null;
+  _open.name = null;
+  _open.assign = null;
   _open.side = side;
+  if (_open.completion) _open.completion.close();
+  _open.el.setAttribute('aria-invalid', 'false');
   refresh();
 }
 
@@ -185,18 +191,33 @@ function openInput(svg, state, chain, pickId, side, pickPt) {
   document.body.appendChild(el);
   // an Undo / Redo ends the offset in progress: the chain it was on may be gone
   const unsubHistory = typeof state.addHistoryListener === 'function' ? state.addHistoryListener(() => { if (!_committing) cancelAll(); }) : null;
-  _open = { chain, pickId, side, d: currentDistance, text: defaultValue, el, svg, state, pickPt, unsubHistory }; // text: what the box shows as WE wrote it (rounded to the precision); while it is unchanged the box holds _open.d exactly (TASK 724)
+  _open = { chain, pickId, side, d: currentDistance, text: defaultValue, expression: null, name: null, assign: null, el, svg, state, pickPt, unsubHistory, completion: null }; // text: what the box shows as WE wrote it (rounded to the precision); while it is unchanged the box holds _open.d exactly (TASK 724)
   ensureViewListener();
   const applyInputValue = () => {
-    if (el.value === _open.text) return refresh(); // not an edit: the exact _open.d stays
-    const v = parseOffsetDistance(el.value, docUnit());
-    if (v != null) _open.d = v;
+    if (el.value === _open.text) {
+      _open.expression = null; _open.name = null; _open.assign = null;
+      el.setAttribute('aria-invalid', 'false');
+      return refresh(); // not an edit: the exact _open.d stays
+    }
+    const r = evaluateOffsetDistance(state, el.value, docUnit());
+    if (r.ok) {
+      _open.d = r.v;
+      _open.expression = r.expression;
+      _open.name = r.name || null;
+      _open.assign = r.assign || null;
+      el.setAttribute('aria-invalid', 'false');
+    } else {
+      _open.expression = null; _open.name = null; _open.assign = null;
+      el.setAttribute('aria-invalid', 'true');
+    }
     refresh();
   };
-  el.addEventListener('input', applyInputValue);
+  _open.completion = attachExternalCompletion(el, state, () => { applyInputValue(); });
+  el.addEventListener('input', () => { applyInputValue(); if (_open && _open.completion) _open.completion.update(); });
   el.addEventListener('keydown', (ev) => {
     ev.stopPropagation(); // typing never reaches the canvas shortcuts (Delete, F, ...)
-    if (handleBoxUndoKey(ev, el, defaultValue, applyInputValue)) return;
+    if (_open && _open.completion && _open.completion.handleKey(ev)) { ev.stopImmediatePropagation(); return; }
+    if (handleBoxUndoKey(ev, el, defaultValue, () => { applyInputValue(); if (_open && _open.completion) _open.completion.close(); })) return;
     if (ev.key === 'Enter') { ev.preventDefault(); commitOffsetInput(); }
     else if (ev.key === 'Escape') { ev.preventDefault(); cancelAll(); }
   });
@@ -238,14 +259,28 @@ function ensureViewListener() {
 export function commitOffsetInput() {
   if (!_open) return;
   const { el, chain, state } = _open;
-  const v = el.value === _open.text ? _open.d : parseOffsetDistance(el.value, docUnit()); // an unedited box applies its exact distance, not the rounded text
-  if (v == null) { showNotification(`Offset: enter a distance; ${OFFSET_ZERO_REASON}.`, 'warning'); return; }
+  let v, expression = null, name = null, assign = null;
+  if (el.value === _open.text) {
+    v = _open.d; // an unedited box applies its exact distance, not the rounded text
+  } else {
+    const parsed = evaluateOffsetDistance(state, el.value, docUnit());
+    if (!parsed.ok) { showNotification(`Offset: ${parsed.message || `enter a distance; ${OFFSET_ZERO_REASON}`}.`, 'warning'); return; }
+    v = parsed.v;
+    expression = parsed.expression;
+    name = parsed.name || null;
+    assign = parsed.assign || null;
+  }
   const { side, d } = offsetSideAndDistance(_open.side, v);
   const pre = offsetChainGeometry(state, chain, d, side);
   if (!pre.ok) { showNotification('Offset: ' + pre.reason + '.', 'warning', HINT_MS); return; }
   _committing = true;
   let res;
-  try { res = recordConstraintStep(state, OFFSET_UNDO_LABEL, () => applyOffset(state, chain, v, _open.side)); } finally { _committing = false; }
+  try {
+    res = recordConstraintStep(state, OFFSET_UNDO_LABEL, () => {
+      if (assign) applyLiveAssign(state, assign);
+      return applyOffset(state, chain, v, _open.side, { expression, name });
+    });
+  } finally { _committing = false; }
   if (!res.ok) { showNotification('Offset: ' + res.reason + '.', 'warning', HINT_MS); return; }
   currentDistance = d; // |v|: the distance USED is the remembered one
   cancelAll(); // TASK 878: the offset shows: no message
@@ -253,6 +288,7 @@ export function commitOffsetInput() {
 }
 
 function removeInput() {
+  if (_open && _open.completion) _open.completion.detach();
   if (_open && _open.unsubHistory) _open.unsubHistory();
   if (_open && _open.el && _open.el.parentNode) _open.el.parentNode.removeChild(_open.el);
   _open = null;

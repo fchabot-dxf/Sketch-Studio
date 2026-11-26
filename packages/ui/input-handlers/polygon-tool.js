@@ -4,17 +4,18 @@
 // places it, Esc cancels. The result is N plain LINE shapes with shared joints + construction radii + equal-side / equal-radius
 // constraints (core/shapes.js makePolygon), made in ONE undo group so a single Undo removes the whole polygon. Modelled on the
 // circle tool (same click-or-drag flow).
-import { TOOL_MODES, POLYGON_SIDES } from '#core/constants.js';
+import { TOOL_MODES, POLYGON_SIDES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { addConstraint } from '#core/constraints.js';
+import { ConstraintManager } from '#core/constraint-manager.js';
 import { makePolygon, clampPolygonSides } from '#core/shapes.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { clearPreview } from '#ui/preview-manager.js';
 import { hideInput } from '#ui/numeric-input-manager.js';
-import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, snapPoint, MIN_SHAPE_SIZE } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, snapPoint, MIN_SHAPE_SIZE, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 
 const localState = { isDragging: false, dragStartScreen: null };
 // The live box: `sides` / `lockedRadius` are what the user typed in it (null = not typed: the cursor sets the size, state.polygonSides the sides).
-const live = { boxOpen: false, sides: null, lockedRadius: null, cursor: null };
+const live = { boxOpen: false, sides: null, lockedRadius: null, radiusExpression: null, radiusName: null, radiusAssign: null, cursor: null };
 const MIN_RADIUS = MIN_SHAPE_SIZE;   // TASK 782: the one minimum size (base-tool.js)
 const SIDES_KEY = 'sk-polygon-sides';
 const BOX = { dual: { kind: 'polygon', labels: ['R', 'N'], separator: 'sides', quantities: ['length', 'count'] } };
@@ -39,12 +40,23 @@ export function setupPolygonTool(svg, state) {
         onPreview: (detail) => {
             if (detail.reset && detail.reset[1]) live.sides = null;
             else if (detail.typed[1] && Number.isFinite(detail.height)) live.sides = clampPolygonSides(detail.height);
-            if (detail.reset && detail.reset[0]) live.lockedRadius = null;
-            else if (detail.typed[0]) live.lockedRadius = detail.width > 0 ? detail.width : null;
+            if (detail.reset && detail.reset[0]) { live.lockedRadius = null; live.radiusExpression = null; live.radiusName = null; live.radiusAssign = null; }
+            else if (detail.typed[0]) {
+                live.lockedRadius = detail.width > 0 ? detail.width : null;
+                live.radiusExpression = live.lockedRadius !== null ? liveExpression(detail, 0) : null;
+                live.radiusName = live.lockedRadius !== null ? liveName(detail, 0) : null;
+                live.radiusAssign = live.lockedRadius !== null ? liveAssign(detail, 0) : null;
+            }
             redrawPreview(state);
         },
         onApply: (detail) => {
             if (detail.confirmedBy !== 'enter') return;
+            if (detail.typed && detail.typed[0]) {
+                live.lockedRadius = detail.width > 0 ? detail.width : null;
+                live.radiusExpression = live.lockedRadius !== null ? liveExpression(detail, 0) : null;
+                live.radiusName = live.lockedRadius !== null ? liveName(detail, 0) : null;
+                live.radiusAssign = live.lockedRadius !== null ? liveAssign(detail, 0) : null;
+            }
             if (Number.isFinite(detail.height)) live.sides = clampPolygonSides(detail.height);
             const center = state.joints.get(state.active.start);
             const end = sizedEnd(center, live.cursor || center);
@@ -57,7 +69,7 @@ export function setupPolygonTool(svg, state) {
 
 function resetLive() {
     if (live.boxOpen) hideInput();
-    live.boxOpen = false; live.sides = null; live.lockedRadius = null; live.cursor = null;
+    live.boxOpen = false; live.sides = null; live.lockedRadius = null; live.radiusExpression = null; live.radiusName = null; live.radiusAssign = null; live.cursor = null;
 }
 
 /** `pt`, pulled to the typed size along the centre -> pt direction (a typed size holds while the cursor turns the polygon). */
@@ -127,6 +139,10 @@ export function createPolygon(state, endPt, vertexSnap = null) {
     const radius = Math.hypot(endPt.x - center.x, endPt.y - center.y);
     localState.isDragging = false; localState.dragStartScreen = null;
     const sides = polygonSides(state);
+    const typedRadius = live.lockedRadius;
+    const radiusExpression = live.radiusExpression;
+    const radiusName = live.radiusName;
+    const radiusAssign = live.radiusAssign;
     resetLive();
     if (!(radius > MIN_RADIUS)) {   // a second click on the centre: no polygon, and the centre joint made by the first click goes too
         state.closeDrawStep(); // nothing committed: the centre joint made by the first click goes with the cancelled step
@@ -141,6 +157,16 @@ export function createPolygon(state, endPt, vertexSnap = null) {
     rememberSides(state, sides);
     for (const s of built.shapes) state.shapes.push(s);
     for (const c of built.constraints) addConstraint(state, c.type, c);
+    // TASK 1013 (B-19b): a typed radius (or formula `d1 / 2`) becomes a driving radius dimension on the polygon's radial
+    if (typedRadius != null) {
+        if (radiusAssign) applyLiveAssign(state, radiusAssign);
+        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
+            joints: [state.active.start, vertexId],
+            value: typedRadius,
+            expression: radiusExpression,
+            ...(radiusName ? { name: radiusName } : {}),
+        }, { source: 'polygon' });
+    }
     try {
         if (state.active.centerSnapTarget && state.active.centerSnapTarget.isLocked) applySnapConstraint(state, state.active.start, state.active.centerSnapTarget);
     } catch (_) { /* a snap that cannot constrain still leaves a valid polygon */ }

@@ -11,9 +11,9 @@ import { makeArc } from './shapes.js';
 import { arcSweepInfo } from './geometry.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { removeOrphanJoints } from './joints.js';
-import { format as formatUnit, parse as parseUnit } from './units.js';
+import { format as formatUnit } from './units.js';
 import { docUnit } from './settings-manager.js';
-import { nextDimensionName } from './parameters.js';
+import { nextDimensionName, evaluateBoxText, sizeRefusal } from './parameters.js';
 import { newJointId } from './shape-id.js';
 import { inActiveSketch } from './sketch-model.js';
 import { ConstraintManager } from './constraint-manager.js';
@@ -32,10 +32,19 @@ export function defaultFilletRadius(docUnit = 'mm') {
   return docUnit === 'in' ? 6.35 : 5;
 }
 
-/** Parse a typed radius in the document unit (a suffix overrides) -> world mm, or null if invalid / <= 0. */
-export function parseFilletRadius(str, docUnit = 'mm') {
-  const v = parseUnit(str, docUnit);
-  return (v != null && v > 0) ? v : null;
+/** TASK 1013 (B-19e): evaluate a fillet radius expression (number, unit, formula `d1 / 2`, or `name = expr`) through the ONE box parser (#core/parameters.js evaluateBoxText). */
+export function evaluateFilletRadius(state, str, unit = docUnit()) {
+  const r = evaluateBoxText(state, str, 'length', { unit, allowAssign: !!state });
+  if (!r.ok) return r;
+  const why = sizeRefusal(r.v);
+  if (why) return { ok: false, code: 'OUT_OF_RANGE', message: why };
+  return r;
+}
+
+/** Parse a typed radius in the document unit (a suffix overrides; with `state`, formulas like `d1 / 2` resolve too) -> world mm, or null if invalid / <= 0. */
+export function parseFilletRadius(str, unit = 'mm', state = null) {
+  const r = evaluateFilletRadius(state, str, unit);
+  return r.ok ? r.v : null;
 }
 
 /**
@@ -568,7 +577,8 @@ export function applyFillet(state, cornerInfo, radius = 5, options = {}) {
       isRadius: true,
       isDriven: false,
       driven: false,
-      name: nextDimensionName(constraints, state.parameters), // TASK 535: this dimension is pushed directly (not through addConstraint), so it takes its automatic name here
+      name: (options && options.name) || nextDimensionName(constraints, state.parameters), // TASK 535 / 1013: custom name from `r = ...`, else automatic
+      ...(options && options.expression ? { expression: options.expression } : {}),
       offset: Math.max(finalRadius * 0.6, 6)
     };
     constraints.push(radiusConstraint);

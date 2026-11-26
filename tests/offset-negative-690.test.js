@@ -49,7 +49,7 @@ function offsetOf(build, sidePt, d = 5) {
 // the box: type `text` into the dimension -> applyParameterChange's result (one undo step)
 const typeInto = (S, c, text) => {
   const pv = previewDimensionInput(S.state, c, text, { unit: 'mm' });
-  ok(pv.ok, `"${text}" is a value the box takes (${pv.hint})`);
+  if (!pv.ok) return { ok: false, reason: pv.hint };
   return applyParameterChange(S.state, pv.plan, 'edit');
 };
 const J = (S, id) => S.state.joints.get(id);

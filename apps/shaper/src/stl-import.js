@@ -19,13 +19,12 @@ import { browserFileSeam } from '#ui/project-file.js';
 import { sliceStl, STL_DEFAULTS, orientationForUp, orientationOf, orientedBounds } from '#core/stl-slice.js';
 import { computeGeometryBounds } from '#core/geometry-bounds.js';
 import { findLoops } from '#core/loop-finder.js';
-import { lengthText } from '#core/settings-manager.js';
 import { importFusionSelection } from './fusion-import.js';
 import { selectionNotice } from './fusion-bridge.js';
 import { getStlSource, getStlSources, stlSourceOf, setStlSource, putStlSource, setCurrentStl, rememberMesh, meshOf } from './stl-source.js';
 import { getSelections, localSelectionId } from './selection-list.js';
 import { regionKeys, regionOf } from './operations-store.js';
-import { getStock } from './stock.js';
+import { getStock, tallerNote } from './stock.js'; // TASK 898: the taller note, shared with a Fusion selection's add
 import { placement, placementNow, IDENTITY } from './relief-frame.js';
 import { mountStlCard } from './stl-card.js';
 import { openOrientView } from './orient-view.js'; // TASK 808: the Orient view (click the floor face)
@@ -94,7 +93,7 @@ export function createStlImporter({ ensureSketch, getController, prepare, panelE
   });
   const levelsText = (n) => `a relief, ${n} level${n === 1 ? '' : 's'}`;
   // TASK 841: a part taller than the stock is said, never fixed silently (owner: no infantilising)
-  const tallerText = (name, h) => (h > getStock().thickness + 1e-9 ? `${name} is ${lengthText(h, { show: 'unit' })} tall: the stock is ${lengthText(getStock().thickness, { show: 'unit' })}` : null);
+  const tallerText = (name, h) => tallerNote(name, h, getStock().thickness);
   /**
    * Slice the mesh and import it: `part` null = the design is REPLACED (Open STL; a source from before the selection list); a part = that part is put in again in
    * place (a re-slice: its own Roughing, the stock as its source says: an opened part sets it, an inserted one leaves it); `at` = TASK 841, a NEW part inserted at
@@ -112,7 +111,7 @@ export function createStlImporter({ ensureSketch, getController, prepare, panelE
     showPrepare();
     const res = importFusionSelection(sliced.payload, id
       ? { controller: getController(), prepare, onImport: afterImport, addAs: id, place: placed, join: false, stock: keep ? 'keep' : 'part', fit: Boolean(entry && opened) }
-      : { controller: getController(), prepare, onImport: afterImport });
+      : { controller: getController(), prepare, onImport: afterImport, stock: 'part' }); // TASK 898: Open STL says it (the stock = its height, as before); a Fusion selection's default makes a Stock row
     if (!res.ok) return res;
     const n = sliced.info.sections;
     if (!res.imported) { notice(res.message, false); return { ...res, info: sliced.info }; }

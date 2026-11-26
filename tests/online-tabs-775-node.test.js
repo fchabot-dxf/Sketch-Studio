@@ -176,13 +176,19 @@ const XY = (a) => a.map(([x, y]) => ({ x, y }));
   // TASK 822: report/midpoint-move.json's 3077.8 mm Outside outline: its tabs were REFUSED (a tab of the even spread landed where its gap strip did not fit) and
   // are PLACED now (kept off the narrow stretches, tests/hold-part-822-node.test.js): its download, preview, Operations row and 3D changed on purpose
   const changed822 = (name, set) => name === 'report/midpoint-move.json' && set === 'tabs';
+  // TASK 898 (STOCK T2): a Fusion selection makes the design's Stock row (an EMPTY Stock, its thickness from the part): the Operations list of an imported plan
+  // ('plan': the selection as imported) lists it first; its download, preview copy and 3D footprints are the same
+  const stockRow898 = (name, set) => name.startsWith('fusion/') && set === 'plan';
+  let stockRows = 0;
   for (const [name, sets] of Object.entries(base)) for (const [set, facets] of Object.entries(sets)) {
     if (changed804.has(set) || changed804b.has(set)) continue;
     if (changed822(name, set)) { ok(now[name][set].download !== facets.download, `${name} ${set}: its refused tabs are placed now (TASK 822)`); n++; continue; }
+    if (stockRow898(name, set)) { const { ops: o1, ...r1 } = now[name][set], { ops: o2, ...r2 } = facets; eq(r1, r2, `${name} ${set}: download, preview copy and 3D footprints identical to origin/main 5e79336`); ok(o1 !== o2, `${name} ${set}: its Operations list has the selection's Stock row (TASK 898)`); stockRows++; n += 4; continue; }
     if (GUIDE_DEPTH_WORDS_825.has(name)) { const { ops: o1, ...r1 } = now[name][set], { ops: o2, ...r2 } = facets; eq(r1, r2, `${name} ${set}: download, preview copy and 3D footprints identical to origin/main 5e79336`); guideWordsDiffer ||= o1 !== o2; n += 4; continue; }
     eq(now[name][set], facets, `${name} ${set}: download, preview copy, operations and 3D footprints identical to origin/main 5e79336 (TASK 786: the downloads to the 786 exporter)`); n += Object.keys(facets).length;
   }
   assert.ok(guideWordsDiffer, "TASK 825 V4: the document with a Guide that has a depth lists it in its row");
+  assert.ok(stockRows > 0, 'TASK 898: the imported Fusion plans were compared');
   console.log(`byte-identical: ${Object.keys(base).length} drawings, ${n} facets`);
 }
 

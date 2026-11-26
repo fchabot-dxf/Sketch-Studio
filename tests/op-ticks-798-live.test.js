@@ -182,7 +182,7 @@ try {
     const build1 = await evalJs(`import('/apps/shaper/src/main.js').then((m) => ({ triangles: m.currentReviewView().lastBuild.triangles, levels: m.currentReviewView().lastBuild.levels }))`);
     const line = await evalJs(`(() => { const e = document.getElementById('simexport-ticked'); return { hidden: e.hidden, text: e.textContent }; })()`);
     console.log(label + ' 3D (Outside unticked): ' + JSON.stringify(build1) + ' line: ' + JSON.stringify(line));
-    assert.deepStrictEqual(line, { hidden: false, text: `Exporting 2 of 3 operations (unticked: 4. Outside · ${full} (⅛″ end mill)). Place it with the same anchor as the earlier file.` }, label + ': the Export line names the unticked Outside');
+    assert.deepStrictEqual(line, { hidden: false, text: `Exporting 2 of 3 operations (unticked: 3. Outside · ${full} (⅛″ end mill)). Place it with the same anchor as the earlier file.` }, label + ': the Export line names the unticked Outside (TASK 898, owner turns 3710-3712: by its list number, the Stock unnumbered: 3)');
     await shot(`${D}-export-3d-outline-unticked.png`);
     await shot(`${D}-export-line.png`, '#review-cards', 2); // TASK 880: the line is a card over the view
     await view('2d');

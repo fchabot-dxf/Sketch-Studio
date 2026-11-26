@@ -35,7 +35,7 @@ const loopAt = (st, x, y) => findLoops(st).find((l) => l.edges.some((e) => { con
 {
   const t = CUT_TYPES.find((c) => c.id === STOCK_TYPE_ID);
   assert.ok(t, 'Stock is a declared cut type');
-  assert.deepStrictEqual(t.params, ['cutDepth'], 'its one field is the depth row (thickness): no offset / bit rows');
+  assert.deepStrictEqual(t.params, ['cutDepth', 'sculptedOn'], 'its rows: the depth row (thickness) and TASK 898 where a sculpted part sits in it: no offset / bit rows');
   assert.strictEqual(t.depthParam, 'stockDepth'); assert.strictEqual(PARAM_HINTS.stockDepth.label, 'Thickness', 'TASK 770: its depth row is the Thickness (param-hints.js)'); assert.strictEqual(t.targetKind, 'region', 'closed loops only');
   assert.ok(typeRefusal('stock', ['loop:a']) === null && typeRefusal('stock', ['profile:p']) === null, 'a closed shape can be the stock'); // TASK S2: the one compatibility rule (cut-plan.js typeRefusal)
   assert.ok(typeRefusal('stock', ['chain:c']) !== null, 'an open chain cannot be the stock');

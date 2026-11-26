@@ -9,10 +9,9 @@ import { importFusionSelection, mapFusionCutType } from '../apps/shaper/src/fusi
 import { mountFusionPrepareBar } from '../apps/shaper/src/fusion-bridge.js';
 import { getSelections, setSelections } from '../apps/shaper/src/selection-list.js';
 import { removeSelection, clearSelections } from '../apps/shaper/src/selection-edit.js';
-import { getStock, setStock } from '../apps/shaper/src/stock.js';
+import { getStock, setStock, resolveStock } from '../apps/shaper/src/stock.js';
 
 import { captureShaperDoc, applyShaperDoc } from '../apps/shaper/src/shaper-doc.js';
-import { DEFAULT_STOCK } from '#core/relief-model.js';
 import { V2_PLAN } from './helpers/plan-v2.js'; // TASK S1: the test's v2 document of the plan, loaded through applyShaperDoc
 import { storeOps } from '../apps/shaper/src/operations-store.js';
 
@@ -47,7 +46,9 @@ const imp = (p) => importFusionSelection(p, { controller: app.controller, prepar
 const ids = () => getSelections().map((e) => e.id);
 const texts = () => getSelections().map((e) => e.text);
 const plan = () => [...V2_PLAN.keys()].sort();
-const snap = () => ({ list: ids(), shapes: st.shapes.map((s) => s.id).sort(), plan: plan(), thickness: getStock().thickness, sketches: st.sketches.map((s) => s.name) });
+// TASK 898 (STOCK T2): a Fusion selection writes no number into the declared record: the design's Stock row ('model') gives the board the parts' thickness
+const board = () => resolveStock(st).board.thickness;
+const snap = () => ({ list: ids(), shapes: st.shapes.map((s) => s.id).sort(), plan: plan(), thickness: board(), sketches: st.sketches.map((s) => s.name) });
 
 try {
   // ── 1. Add two selections: a body, then a sketch; the list, the sketches, the records ──
@@ -59,7 +60,8 @@ try {
   eq(r1.message, 'Added Tray: 2 regions', 'an add says Added');
   eq(st.history.length, h0 + 1, 'an add is ONE undo step');
   eq(texts(), ['Tray · body'], 'the list: A, its summary text');
-  eq(getStock().thickness, 12, '794: a fresh start takes the part\'s stock thickness');
+  eq(board(), 12, '794 / 898: a fresh start: the board takes the part\'s thickness (the Stock row, from the part)');
+  eq(getStock().thickness, 7, '898: the declared record is not written');
   ok(storeOps().length > 0 && storeOps().every((op) => op.geometry.every((g) => getSelections()[0].cutKeys.includes(g.key))), '794: a fresh start takes the part\'s own operations (TASK S1: the list order is theirs; no stale order)');
   const afterA = snap();
   const recA = new Map([...V2_PLAN.entries()].map(([k, r]) => [k, { ...r }]));
@@ -78,14 +80,14 @@ try {
   eq(st.shapes.length, 9, 'A\'s shapes stay, B\'s are added');
   eq(V2_PLAN.get(aKey).toolDia, 6.35, 'A\'s Prepare settings are kept');
   eq(V2_PLAN.order(), ['user-order'], '794: adding to a design that has parts keeps the operation order');
-  eq(getStock().thickness, 12, 'B has no stock: the thickness stays');
+  eq(board(), 12, 'B has no stock: the thickness stays (the thickest part: A)');
   const afterB = snap();
   const bKey = getSelections()[1].cutKeys[0];
 
   // a thicker third: the thickest wins
   const r3 = imp(C());
   ok(r3.ok, 'C imported');
-  eq(getStock().thickness, 25, 'adding a thicker part: the stock takes the thickest of them');
+  eq(board(), 25, 'adding a thicker part: the stock takes the thickest of them');
   const afterC = snap();
   st.undo();
   eq(snap(), afterB, 'Undo of the third add: list, shapes, plan, sketches AND the stock thickness are back');
@@ -130,11 +132,11 @@ try {
   // ── 4. A fresh start after Clear all (794): thickness = the part's, default when it has none; the order is the part's own ──
   V2_PLAN.setOrder(['left-over']);
   imp(B());
-  eq(getStock().thickness, DEFAULT_STOCK.thickness, '794: no stock in the payload: the app\'s default thickness');
+  eq(board(), 7, '898: no part has a thickness: the board is the declared record\'s (7 mm, never written by a selection)');
   ok(storeOps().every((op) => op.geometry.every((g) => getSelections()[0].cutKeys.includes(g.key))), '794: after Clear all the order starts over (TASK S1: only the part\'s own operations are stored)');
   clearSelections(app.controller, { prepare: app.prepare });
   imp(A());
-  eq(getStock().thickness, 12, '794: after Clear all the next part\'s thickness');
+  eq(board(), 12, '794: after Clear all the next part\'s thickness');
 
   // ── 5. The same selectionId again updates in place (TASK 795c / SA-15: canonical JSON except id & label matches; changed depth/cutType arrives new & unassigned) ──
   const holeKey0 = getSelections()[0].cutKeys[1];
@@ -165,11 +167,11 @@ try {
   eq(texts(), ['Body1 · 2 regions'], 'the fallback row text');
   ok(!getSelections()[0].fusion && getSelections()[0].id.startsWith('local-'), 'a local id; the add-in has no overlay for it');
   eq(st.shapes.length, 8, 'only the replacing selection\'s shapes');
-  eq(getStock().thickness, DEFAULT_STOCK.thickness, '794: a replace with no stock: the default thickness');
+  eq(board(), 7, '898: a replace with no stock: the declared record\'s');
   const stl = msg('part.stl', [{ id: 'o', cutType: 'outside', depthMm: 8, outer: { closed: true, segments: rectSegs(0, 0, 10, 10) }, holes: [] }], { kind: 'stl', stock: { thicknessMm: 8 } });
   imp(stl);
   eq(texts(), ['part.stl'], 'an STL\'s row is its file name');
-  eq(getStock().thickness, 8, 'an STL: the thickness is the part\'s height');
+  eq(board(), 8, 'an STL: the thickness is the part\'s height');
 
   // ── 7. Save / reload keeps the list ──
   setSelections([]);

@@ -293,7 +293,9 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     }
     ok(cuts.every((c) => c.terrace.depth <= 8), 'none below the floor');
     ok(!cuts.some((c) => sameOutline(c.polygon, V2_PLAN.get(pk2) && deriveCuts({ kind: 'loop', id: pk2.slice(5) }, effectiveCutRecord(prec), st).find((x) => x.isCompound).outerPoly)), 'none is the Pocket\'s own outline (the floor cut\'s wall)');
-    const ops = describeOperations(st, planEntries());
+    const allOps = describeOperations(st, planEntries());
+    eq(allOps[0].cutType, 'stock', "TASK 898: a Fusion selection's Stock row first (an EMPTY Stock, from the part)");
+    const ops = allOps.filter((o) => o.cutType !== 'stock'); // the cut operations
     eq(ops.map((o) => [o.cutType, o.tool.label]), [['pocket', '¼″ end mill'], ['contour', '⅛″ ball nose'], ['exterior', '⅛″ end mill']], 'the Operations list: the Pocket, then its Contour (its own bit group), then the outline');
     eq(ops[1].rowText, 'Contour · 0.25–8 mm', 'the Contour row: its levels\' depths');
     eq(ops[1].detail, '32 levels', 'and how many levels');
@@ -326,7 +328,7 @@ const TAN10 = Math.tan((10 * Math.PI) / 180);
     eq([Boolean(contourOf(pk2)), V2_PLAN.get(pk2).finishAllowance], [true, 0.5], 'a Contour added again: the allowance unchanged');
     eq(h.note()[0], 'Pocket 1 (8mm): 8 steps, 1 to 8 mm · outlines 0.176 mm apart', 'a sloped Roughing keeps the stepped note');
     eq(h.note()[1], 'Roughing: 0.5 mm left on every wall for the Contour', 'and says the allowance');
-    const ops2 = describeOperations(st, planEntries());
+    const ops2 = describeOperations(st, planEntries()).filter((o) => o.cutType !== 'stock'); // the cut operations (TASK 898: + the selection's Stock row)
     eq(ops2.map((o) => o.cutType), ['roughing', 'contour', 'exterior'], 'the Contour after the Roughing');
     eq(ops2[0].label, '¼″ end mill · Roughing · 1–8 mm (1 region) · 8 levels, allowance 0.5 mm', 'the Roughing operation');
 

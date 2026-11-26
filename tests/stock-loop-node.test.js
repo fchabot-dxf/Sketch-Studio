@@ -44,10 +44,10 @@ try {
   const keyA = stockKey();
   assert.ok(keyA && keyA.startsWith('loop:'), 'the L loop is now the Stock: ' + keyA);
   assert.strictEqual(notice(), '', 'TASK 878: the Stock shows on the drawing: no notice');
-  // the card for a Stock: ONE field (Thickness), no offset / bit / shape rows
+  // the card for a Stock: the Thickness (TASK 898: + Sculpted parts sit on), no offset / bit / shape rows
   const rows = [...doc.querySelectorAll('.cut-rows > .cut-row')].filter((r) => doc.defaultView.getComputedStyle(r).display !== 'none').map((r) => (r.dataset.param || r.dataset.row) + ':' + r.querySelector('.cut-field-label').textContent);
   console.log('stock card rows:', JSON.stringify(rows));
-  assert.deepStrictEqual(rows, ['cutDepth:Thickness'], 'the card shows only the Thickness row');
+  assert.deepStrictEqual(rows, ['cutDepth:Thickness', 'sculptedOn:Sculpted parts sit on'], 'the card shows the Thickness row and (TASK 898) where a sculpted part sits: no offset / bit / shape rows');
   const depth = q('.cut-depth'); depth.value = '0.5in'; depth.dispatchEvent(new doc.defaultView.Event('change', { bubbles: true }));
   assert(V2_PLAN.get(stockKeyOf(V2_PLAN)).cutDepth === 12.7, 'thickness stored');
   assert.strictEqual(V2_PLAN.get(stockKeyOf(V2_PLAN)).cutDepth, 12.7, 'thickness typed as 0.5in is stored in mm');

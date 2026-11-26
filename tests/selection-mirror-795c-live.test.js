@@ -77,6 +77,9 @@ async function run({ width, height }) {
   const rowsInfo = () => evalJs(`[...document.querySelectorAll('#shaper-fusion-selections .shaper-fusion-sel')].map((e) => ({ id: e.dataset.selectionId, group: e.dataset.group || null, text: e.querySelector('.shaper-fusion-sel-text').textContent }))`);
   const opsInfo = () => evalJs(`import('/apps/shaper/src/operations-store.js').then((M) => M.storeOps().map((o) => ({ id: o.id, type: o.type, count: o.geometry.length })))`);
   const stockVal = () => evalJs(`import('/apps/shaper/src/stock.js').then((S) => S.getStock().thickness)`);
+  // TASK 898 (STOCK T2): a Fusion selection no longer writes its part's thickness into the declared record: the board reads it through the selection's Stock row
+  // ('model'). The board, and that row, as the page has them:
+  const boardVal = () => evalJs(`Promise.all([import('/apps/shaper/src/stock.js'), import('/apps/shaper/src/operations-store.js')]).then(([S, O]) => ({ board: S.resolveStock(window.__designController.state).board.thickness, stockRows: O.storeOps().filter((o) => o.type === 'stock').map((o) => o.settings.cutDepth) }))`);
   const shot = async (name) => {
     const r = await evalJs(`(() => { const b = document.getElementById('shaper-fusion-bar').getBoundingClientRect(); return { x: Math.max(0, b.left), y: Math.max(0, b.top), width: Math.ceil(b.width), height: Math.ceil(b.height + 14) }; })()`);
     const { data } = await send('Page.captureScreenshot', { format: 'png', clip: { ...r, scale: 2 } });
@@ -156,11 +159,15 @@ async function run({ width, height }) {
     // 6. Stock-card edit in Export (Review) has its own undo step.
     const goStage = makeGoStage({ cdp, width, click });
     await goStage('review');
+    // TASK 898: the declared record is the card's (the selection left it as it was); the board is 12 mm from the part (the Stock row, 'model') before and after
+    const record0 = await stockVal();
+    assert.deepStrictEqual(await boardVal(), { board: 12, stockRows: ['model'] }, `[${label}] the board: 12 mm from the part (the selection's Stock row)`);
     await evalJs(`(() => { const el = document.getElementById('review-stock-thickness'); el.value = '25 mm'; el.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     assert.strictEqual(await stockVal(), 25, `[${label}] stock changed to 25 mm`);
     await goStage('prepare');
     await click('#btn-undo');
-    assert.strictEqual(await stockVal(), 12, `[${label}] Undo reverted stock thickness to 12 mm`);
+    assert.strictEqual(await stockVal(), record0, `[${label}] Undo reverted the stock thickness (the record) to ${record0} mm`);
+    assert.deepStrictEqual(await boardVal(), { board: 12, stockRows: ['model'] }, `[${label}] after the Undo the board is still 12 mm from the part (the Stock row kept)`);
     assert.strictEqual((await rowsInfo()).length, 2, `[${label}] earlier selection remained intact after undoing stock edit`);
 
     console.log(`[${label}] ok`);

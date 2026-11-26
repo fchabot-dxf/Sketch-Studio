@@ -18246,3 +18246,47 @@ Test only. Cause: the tab label was read once right after pagehide + flushDrive 
 - Normal-behaviour driven/reference notices silenced (Log keeps code/args): `dimension-tool.js` (`ERR-DIM-02` x2), `live-dimension-input.js` (`ERR-OVERCON-01`), `numeric-input-manager.js` (`ERR-DRIVEN-02`), `constraint-manager.js` (`announceReference`, `ERR-CMATH-02`, `ERR-CSOLVE-02`).
 - User-actionable error notices cleaned to one plain sentence (no `ERR-` code, no `Reason:`, no `Args:`): `input-manager.js` (`ERR-EQUAL-01` -> `'Equal needs two lines, or two circles or arcs.'`; `ERR-DRIVE-02` -> `'Cannot make this dimension driving: it conflicts with existing constraints.'`), `constraint-manager.js` (`ERR-CMATH-01` stripped from user toast). Task 874 `'Sketch geometry over constrained'` untouched.
 - Tests: added `tests/notices-1001-node.test.js` (27 checks) and `tests/notices-1001-live.test.js` (desktop 1280x800 + phone 390x844); updated `tests/dimension-line-line-reference-node.test.js` and `tests/harness/solver-scenarios.test.js` scenario 8 (`lastError === null`).
+## TURN 898
+STOCK step T2 (docs/STOCK-MODEL-890.md section 5 row T2) + the sculpted part's placement in a thicker stock (owner turn 3703: "1 Yes", "2 allow to choose";
+advisor default Floor). Claude Opus subagent, branch agents/stockT2-898. apps/shaper only; packages/core untouched.
+- T2 (fusion-import.js): a Fusion selection (the `stock` option null) writes no number into the declared record any more: it ensures the design's ONE Stock
+  operation (new cut-plan.js `ensureStock`: the Stock as it is, else a NEW EMPTY Stock with cutDepth 'model' = the parts' largest thicknessMm, re-read at every
+  resolution). An add no longer raises a typed thickness; a part added taller than the board is said in the notice ("Body C is 50 mm tall: the stock is 40 mm",
+  the stl-import.js rule, now ONE helper stock.js `tallerNote`). The STL options are unchanged: Open STL now passes `stock: 'part'` explicitly (the record = its
+  height, exactly as before: it was the default branch's "fresh" case), Insert passes 'keep'. The website never makes a Stock row.
+- The placement: ONE declared setting on the Stock's card, shaper.js `SCULPTED_ON` (Floor | Top, default Floor; field `sculptedOn` on the Stock operation; the
+  Stock's CUT_TYPES params ['cutDepth', 'sculptedOn']; param-hints label "Sculpted parts sit on", one hint per choice; cut-panel.js preset row). Applied in ONE place,
+  cut-plan.js `reliefDrop(type, key)` = (stock - part) for a region with relief LEVELS cut by a Roughing / Contour when the Stock says Floor and the stock is thicker
+  (the part = its selection's thicknessMm, else its levels' deepest; the stock = new stock.js `boardThickness`, the Stock's thickness without the sketch, else the
+  record's); else 0. Its readers: `modelDepth` (a Depth 'model' reads the part's placed bottom), `resolveEntry` (the levels handed to the derivation: every section
+  `drop` deeper plus an EMPTY section at the part's top, so the levels above the part read no material: the Roughing's first level clears the stock above it, a
+  Contour has no pass there; memoised per list + drop), and fusion-toolpaths.js (the Fusion viewport draws a path from its PART's top: z = depth - drop; separate
+  commit 593b5030). The region keeps its levels as imported. `normalizeDepth` compares a typed Depth with the UNPLACED imported depth (`importedDepth`), so how a
+  Depth is stored never depends on the stock at the time (an import files its regions before its part and its Stock exist).
+- What today did (origin/main): the part's top at the stock's top, always: the levels were read as imported (cut-plan.js:52 recordOf / :130 resolveEntry), a
+  Roughing 'model' read the imported depth (:44 modelDepth). = Top now, byte for byte.
+- Tests: new tests/stock-placement-898-node.test.js (47 checks: T2 one EMPTY 'model' Stock, no number in the record, a thicker add re-read, a typed 40 survives an
+  add + the taller note, a replace's own Stock, the Fusion project saved / opened again keeps it (12 mm from the persisted thicknessMm), Open STL unchanged; the declaration; a 20 mm frustum in 30 mm: Floor 10 .. 30 mm, the 10 mm level clears >= 400 mm²
+  over the 20 x 20 top, every other level Top's + 10 mm with the same paths, Top's SVG = the 20 mm stock's byte for byte, the Contour follows, a Pocket on a drawn
+  square and a Pocket on the relief's region ignore it, stock == part: Floor and Top byte-identical); new tests/stock-placement-898-live.test.js (the built Fusion
+  panel, desktop 1280 x 800 + phone 390 x 844 touch). Updated for the asked behaviour: stock-loop(.test / -node) and cut-offset-types-node (the Stock's second row),
+  fusion-body-relief-887-node / selection-list-795-node / selection-mirror-795c-node (the board, not the record, holds the part's thickness; the Stock row listed),
+  roughing-contour-792-node (the Stock row listed; its v2 document cannot hold an EMPTY operation: the record says the part's 6 mm), online-tabs-775-node (the
+  imported Fusion plans' Operations list has the Stock row; download / preview / 3D still byte-identical), fusion-multibody-891-node (the payload has no stock
+  thickness, so the 19.05 mm record: the 12 mm relief sits on its Floor, its first level 0.05 mm above the body: allowed by exactly reliefDrop).
+- Evidence (.evidence/898/, local): fail-first-node.txt (the new node test on the code before: SCULPTED_ON missing); probe-before.txt md5
+  2a0f7c133885fc0264d7f137ce62f752 (origin/main app code: record 25 -> 20 -> 30, no Stock; relief in 30 mm: depth 20, levels z 0 .. 20) and probe-after.txt md5
+  e666216094e6d249b870a910f789eac6 (record 25 kept, ONE Stock {geometry 0, 'model'}; depth 30, levels z 10 .. 30); desktop/phone-ops-stock-row.png,
+  -stock-card.png, -export-3d-floor(-zoom).png, -export-3d-top(-zoom).png (Floor "Roughing: 12 levels, 0.315 to 0.787 in", Top "11 levels, 0.039 to 0.472 in").
+- Advisor ruling (review of 898): a design with NO Stock operation places sculpted parts at the TOP (today's file, byte for byte): the Floor | Top choice (default
+  Floor) is the Stock operation's. Declared once in cut-plan.js reliefDrop (no Stock operation -> 0); the Stock hint says it ("Without a Stock, a relief sits at the top").
+  Node test: a website STL relief in a 30 mm board with no Stock operation -> the 20 mm file byte for byte (fail-first without the rule:
+  .evidence/898/fail-first-nostock.txt "2: no Stock operation, a 30 mm board: today's file, byte for byte (Top)"); with a Stock operation -> Floor as before. The
+  roughing-contour-792-node record workaround is dropped (its v2 document has no Stock operation: the part stays at the top).
+- Merge-gate follow-up: (1) selection-mirror-795c-live read the declared RECORD after Undo of a card edit (expected the part's 12 mm, which the record held only because a
+  selection wrote it before T2); the app is right (Undo restores the record's own value; the board stays 12 mm from the part, the Stock row kept): the test now asserts
+  the record back to its pre-edit value and the board 12 mm with the Stock row ['model'] after the Undo. (2) OWNER ruling turns 3710-3712: the Stock row is UNNUMBERED
+  (a header-like row at the top); cutting operations are numbered 1, 2, 3 without it. ONE numbering: operations.js listNumbers (describeOperations gives each op its
+  `number`; op-list.js shows it, its words name an unnumbered row by its text; prepare-stage.js card header "Stock · no shapes yet"; export-payload.js tickedNamePart /
+  chunkFileName (leavable) and exportTickLine read it). File names are as before 898 (split-files-888-live's names unchanged). Website designs with a Stock op also
+  lose the Stock's number: opbar-s3-node, op-ticks-798-node, visfix-825-node, shaperhub-keep-884-node updated (TASK 898 comments).

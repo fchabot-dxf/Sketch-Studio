@@ -169,7 +169,7 @@ try {
   clickAt('B'); pressEl('#op-type-stock'); pressEl('.cut-ok');
   eq(ops().filter((o) => o.startsWith('stock')), ['stock:B'], '2: Stock with B selected: B is the Stock');
   clickAt('none'); pressEl('#op-type-stock');
-  eq([head(), ops().filter((o) => o.startsWith('stock'))], ['Stock 1 · no shapes yet', ['stock:']], '2: Stock with nothing selected: an empty Stock replaces it (one Stock per document)');
+  eq([head(), ops().filter((o) => o.startsWith('stock'))], ['Stock · no shapes yet', ['stock:']], '2: Stock with nothing selected: an empty Stock replaces it (one Stock per document; TASK 898, owner turns 3710-3712: the Stock is unnumbered)');
   pressEl('.cut-cancel');
   eq(ops().filter((o) => o.startsWith('stock')), ['stock:B'], '2: Cancel: B is the Stock again');
 

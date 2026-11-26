@@ -145,7 +145,7 @@ try {
   eq(keysOf(planReliefItems(st, { ticked: true })), [K.H, K.Q].sort(), '5: the 3D Review\'s items: the ticked Pocket and Inside only');
   eq(keysOf(planReliefItems(st)), [K.H, K.P, K.Q].sort(), '5: (every operation without the filter)');
   eq(exportFileOf(st, { preview: true }).ops.map((o) => o.cutType), ['stock', 'pocket', 'interior'], '5: the 2D / Paths preview lists the ticked operations');
-  eq(exportTickLine(opsNow()), 'Exporting 2 of 3 operations (unticked: 4. Outside · 19 mm (⅛″ end mill)). Place it with the same anchor as the earlier file.', '5: the Export line names the unticked one');
+  eq(exportTickLine(opsNow()), 'Exporting 2 of 3 operations (unticked: 3. Outside · 19 mm (⅛″ end mill)). Place it with the same anchor as the earlier file.', '5: the Export line names the unticked one (TASK 898: by its list number, the Stock unnumbered)');
   tickOnly([]);
   eq(exportTickLine(opsNow()), 'Exporting 0 of 3 operations: every one is unticked. Tick one in Prepare\'s Operations list.', '5: everything unticked: the line says so');
   tickOnly(['pocket', 'interior', 'exterior']);

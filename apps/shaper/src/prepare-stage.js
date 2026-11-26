@@ -54,7 +54,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
   // card shows only the quick flow's type menu. An incompatible pick is TOLD in one plain line in the card's note area (cut-plan.js typeRefusal), never greyed.
   let opsNow = null;
   const opsOf = () => opsNow || (getController() ? describeOperations(getController().state) : []);
-  const numberOf = (ops, id) => ops.findIndex((o) => o.id === id) + 1;
+  const numberOf = (ops, id) => { const d = ops.find((o) => o.id === id); return d && d.number != null ? ` ${d.number}` : ''; }; // TASK 898: its list number (operations.js listNumbers; the Stock none)
   const typeName = (id) => (cutTypeById(id) || {}).menuLabel || id;
   const pickedKeys = () => (prepareView ? prepareView.selectedTargets().map((t) => keyOf(t.kind, t.id)) : []);
   let line = null; // the card's one plain line (a refusal), shown at the top of its note area until the next action
@@ -71,7 +71,7 @@ export function createPrepareStage({ getController, getMode, history, panelEl, c
       const wallSideFree = op.type === CONTOUR_TYPE && (!n || keys.some((k) => { const r = regionOf(k) || {}; return !r.slope && !(Array.isArray(r.levels) && r.levels.length); }));
       const depthFromModel = !(Number(op.settings.cutDepth) > 0); // TASK S2: the Depth from the model ('model' / unset) or a typed value (a Roughing's / Contour's Bottom)
       return { mode: 'op', ...f, note: [...lineItems, ...f.note], boundary: { hasStock: Boolean(stockKeyOf()), picking: boundaryPicking }, opId: op.id, wallSideFree, depthFromModel, preview: previewState(),
-        title: `${typeName(op.type)} ${numberOf(ops, op.id)} \u00b7 ${n === 0 ? 'no shapes yet' : n === 1 ? '1 shape' : `${n} shapes`}`,
+        title: `${typeName(op.type)}${numberOf(ops, op.id)} \u00b7 ${n === 0 ? 'no shapes yet' : n === 1 ? '1 shape' : `${n} shapes`}`,
         shapes: keys.map((key) => ({ key, label: pv.shapeLabel(key) })) };
     }
     return null; // TASK S3 (owner: "dont understand why there a window with cut type when i select a path"): a selection shows no card (its operations' rows are lit)

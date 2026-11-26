@@ -17,7 +17,7 @@ import { planEntries, planReliefItems } from '../apps/shaper/src/cut-plan.js';
 import { describeOperations } from '../apps/shaper/src/operations.js';
 import { shaperSvgOf } from '../apps/shaper/src/export-payload.js';
 import { getStlSource } from '../apps/shaper/src/stl-source.js';
-import { getStock } from '../apps/shaper/src/stock.js';
+import { resolveStock } from '../apps/shaper/src/stock.js';
 import { isStlOperation } from '../apps/shaper/src/fusion-bridge.js';
 import { getSelections } from '../apps/shaper/src/selection-list.js';
 
@@ -40,20 +40,20 @@ async function run(payload, label) {
     eq(entries.map((e) => e.rec.cutType), ['roughing'], `${label}: ONE Roughing operation`);
     const rough = entries[0];
     ok(Array.isArray(rough.rec.levels) && rough.rec.levels.length === payload.regions[0].levels.length, `${label}: it carries the relief's ${payload.regions[0].levels.length} levels`);
-    eq(getStock().thickness, payload.stock.thicknessMm, `${label}: the stock = the part's height`);
+    eq(resolveStock(app.state).board.thickness, payload.stock.thicknessMm, `${label}: the stock = the part's height (TASK 898: the Stock row, from the part)`);
     // 2. a Contour on the part: the operations toolbar with the part's shape picked (a NEW operation, OK)
     const key = rough.planKey, i = key.indexOf(':');
     app.prepare.view().setSelection([{ kind: key.slice(0, i), id: key.slice(i + 1) }]);
     app.press(app.document.getElementById('op-type-contour'));
     app.prepare.ok();
     const ops = describeOperations(app.state, planEntries());
-    eq(ops.map((o) => o.cutType), ['roughing', 'contour'], `${label}: Roughing then its Contour`);
+    eq(ops.map((o) => o.cutType), ['stock', 'roughing', 'contour'], `${label}: the Stock row (TASK 898: a Fusion selection's, from the part), the Roughing, then its Contour`);
     const svg = shaperSvgOf(app.state, planEntries());
     const pockets = (svg.match(/shaper:cutType="pocket"/g) || []).length, contours = (svg.match(/shaper:cutType="(outside|inside)"/g) || []).length;
     ok(pockets >= 2 && contours >= 2, `${label}: the Shaper SVG has the Roughing's pockets (${pockets}) and the Contour's cuts (${contours})`);
     const relief = planReliefItems(app.state);
     ok(relief.length >= 1 && relief.every((r) => Array.isArray(r.footprints) && r.footprints.length), `${label}: the 3D Review's relief items (${relief.length}) carve the levels`);
-    return { svg, ops: ops.map((o) => o.label), stl: getStlSource(), kinds: getSelections().map((e) => e.kind), selectable: describeOperations(app.state, planEntries()).map((o) => !isStlOperation(o)) };
+    return { svg, ops: ops.map((o) => o.label), stl: getStlSource(), kinds: getSelections().map((e) => e.kind), selectable: describeOperations(app.state, planEntries()).filter((o) => o.cutType !== 'stock').map((o) => !isStlOperation(o)) }; // TASK 898: the cut operations (the Stock row's Select in Fusion is T4's)
   } finally { await app.close(); }
 }
 

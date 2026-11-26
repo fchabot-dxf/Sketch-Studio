@@ -32,10 +32,10 @@ const GRIP_SVG = '<svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="t
 export const OUT_OF_DATE_SVG = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.6L13 12.4H1z" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.2" stroke-linejoin="round"/><path d="M7 5.4v3.4" stroke="#111" stroke-width="1.6" stroke-linecap="round"/><circle cx="7" cy="10.6" r="0.9" fill="#111"/></svg>';
 const FUSION_SEL_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 5V2.5H5M11 2.5h2.5V5M13.5 11v2.5H11M5 13.5H2.5V11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.2 5.2l5 4.2-2.4.5.9 2.3-1.2.5-.9-2.3-1.4 1.6z" fill="currentColor"/></svg>';
 const ACTIONS = [ // TASK S2: the selected row's actions, in this order (their label = aria-label and tooltip)
-  { cls: 'ops-fusion-sel', svg: FUSION_SEL_SVG, words: (n) => `Select in Fusion for operation ${n}`, call: 'onSelectInFusion', show: true },
-  { cls: 'ops-edit', glyph: '\u270E', words: (n) => `Edit operation ${n}`, call: 'onEdit' },
-  { cls: 'ops-dup', glyph: '\u29C9', words: (n) => `Duplicate operation ${n}`, call: 'onDuplicate' },
-  { cls: 'ops-del', glyph: '\u2715', words: (n) => `Delete operation ${n} (its shapes stay in their other operations)`, call: 'onDelete' },
+  { cls: 'ops-fusion-sel', svg: FUSION_SEL_SVG, words: (w) => `Select in Fusion for ${w}`, call: 'onSelectInFusion', show: true },
+  { cls: 'ops-edit', glyph: '\u270E', words: (w) => `Edit ${w}`, call: 'onEdit' },
+  { cls: 'ops-dup', glyph: '\u29C9', words: (w) => `Duplicate ${w}`, call: 'onDuplicate' },
+  { cls: 'ops-del', glyph: '\u2715', words: (w) => `Delete ${w} (its shapes stay in their other operations)`, call: 'onDelete' },
 ];
 
 /**
@@ -187,11 +187,14 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
         out.push(h);
       }
       const row = doc.createElement('div'); row.className = 'ops-row'; row.dataset.key = op.key; row.dataset.id = op.id;
+      // TASK 898 (owner turns 3710-3712): its NUMBER is the operation's own (operations.js listNumbers: the one numbering, the file names' too); an unnumbered row
+      // (the Stock: null) shows no number and is named by its text
+      const n = op.number, what = n != null ? `operation ${n}` : op.rowText;
       if (isPicked(op)) row.classList.add('is-picked');
       if (isOpen(op)) row.classList.add('is-open'); // TASK S2: the operation open in the card
       if (op.on === false) row.classList.add('is-off'); // TASK 798: unticked (dimmed: left out of the views and the file)
       const grip = doc.createElement('span'); grip.className = 'ops-grip'; grip.tabIndex = 0; grip.setAttribute('role', 'button');
-      grip.title = 'Drag to reorder (or Arrow Up / Down)'; grip.setAttribute('aria-label', `Reorder operation ${i + 1}: Arrow Up / Arrow Down`);
+      grip.title = 'Drag to reorder (or Arrow Up / Down)'; grip.setAttribute('aria-label', `Reorder ${what}: Arrow Up / Arrow Down`);
       grip.innerHTML = GRIP_SVG;
       grip.addEventListener('keydown', (e) => {
         const to = e.key === 'ArrowUp' ? i - 1 : e.key === 'ArrowDown' ? i + 1 : null;
@@ -199,9 +202,9 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
         e.preventDefault();
         if (move(i, to)) focusGrip(op.key);
       });
-      const pick = doc.createElement('button'); pick.type = 'button'; pick.className = 'ops-pick'; pick.title = `${i + 1}. ${op.label}`;
-      const num = doc.createElement('span'); num.className = 'ops-num'; num.textContent = String(i + 1);
-      if (isGenerating(op)) { row.classList.add('is-generating'); const spin = doc.createElement('span'); spin.className = 'ops-spin'; spin.setAttribute('role', 'img'); spin.setAttribute('aria-label', `Operation ${i + 1}: generating its paths`); num.append(spin); } // TASK 817
+      const pick = doc.createElement('button'); pick.type = 'button'; pick.className = 'ops-pick'; pick.title = n != null ? `${n}. ${op.label}` : op.label;
+      const num = doc.createElement('span'); num.className = 'ops-num'; num.textContent = n != null ? String(n) : '';
+      if (isGenerating(op)) { row.classList.add('is-generating'); const spin = doc.createElement('span'); spin.className = 'ops-spin'; spin.setAttribute('role', 'img'); spin.setAttribute('aria-label', `${what[0].toUpperCase()}${what.slice(1)}: generating its paths`); num.append(spin); } // TASK 817
       const text = doc.createElement('span'); text.className = 'ops-text';
       const name = doc.createElement('span'); name.className = 'ops-name'; name.textContent = op.rowText;
       const sub = doc.createElement('span'); sub.className = 'ops-sub'; sub.textContent = [op.regions, op.detail].filter(Boolean).join(' · ');
@@ -209,7 +212,7 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
       pick.append(num, text);
       if (op.outOfDate) { // TASK S3: the out-of-date mark, after the text (the row's height never changes)
         row.classList.add('is-out-of-date');
-        const mark = doc.createElement('span'); mark.className = 'ops-stale'; mark.dataset.hint = 'opOutOfDate'; mark.setAttribute('role', 'img'); mark.setAttribute('aria-label', `Operation ${i + 1}: out of date, press Recalculate`); mark.innerHTML = OUT_OF_DATE_SVG;
+        const mark = doc.createElement('span'); mark.className = 'ops-stale'; mark.dataset.hint = 'opOutOfDate'; mark.setAttribute('role', 'img'); mark.setAttribute('aria-label', `${what[0].toUpperCase()}${what.slice(1)}: out of date, press Recalculate`); mark.innerHTML = OUT_OF_DATE_SVG;
         bindHint({ el: mark, iconOnly: true });
         pick.append(mark);
       }
@@ -219,13 +222,13 @@ export function createOpList(hostEl, { getOps, onMove, onPick, isPicked = () => 
       const acts = isSelected(op) ? ACTIONS.filter((a) => !a.show || Boolean(onSelectInFusion && showSelectInFusion(op))).map((a) => {
         const b = doc.createElement('button'); b.type = 'button'; b.className = `ops-act ${a.cls}`;
         if (a.svg) b.innerHTML = a.svg; else b.textContent = a.glyph;
-        b.title = a.words(i + 1); b.setAttribute('aria-label', b.title);
+        b.title = a.words(what); b.setAttribute('aria-label', b.title);
         b.addEventListener('click', () => calls[a.call](op));
         return b;
       }) : [];
       row.addEventListener('pointerdown', (e) => onDown(e, i, row));
       const tick = tickBox(op.on !== false, false, op.tickable === false,
-        op.tickable === false ? 'The Stock is always exported: every file is placed by it' : op.on === false ? `Tick operation ${i + 1}: show and export it` : `Untick operation ${i + 1}: leave it out of the views and the file`);
+        op.tickable === false ? 'The Stock is always exported: every file is placed by it' : op.on === false ? `Tick ${what}: show and export it` : `Untick ${what}: leave it out of the views and the file`);
       tick.querySelector('input').addEventListener('change', (e) => onTick([op.id], e.target.checked));
       row.append(grip, tick, pick, ...acts);
       out.push(row);

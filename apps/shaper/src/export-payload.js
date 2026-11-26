@@ -7,7 +7,7 @@ import { exportJob, idle as pathsIdle, onRecalculate } from './op-paths.js'; // 
 import { docUnit, lengthText } from '#core/settings-manager.js';
 import { splitOf } from './split-files.js'; // TASK 888: Split into files (the setting; the chunks are made with the file, op-derive.js exportFilesOf)
 import { exportEncoding, cutTypeById, STOCK_TYPE_ID } from './shaper.js';            // injected as the exporter's encoding; TASK 884: the type labels (the Operations list's)
-import { describeOperations } from './operations.js'; // TASK 743: the operations (display only) the preview copy maps its elements to
+import { describeOperations, listNumbers } from './operations.js'; // TASK 743: the operations (display only) the preview copy maps its elements to
 import { hintLabel } from './param-hints.js'; // TASK S3: the Recalculate action's name (the toolbar button's)
 import { planEntries, isTicked } from './cut-plan.js'; // TASK 798: the ticked operations (the file) and the whole plan (its frame); TASK 884: THE tick filter
 import { storeOps } from './operations-store.js'; // TASK 884: the operations in the Operations list's order
@@ -15,10 +15,10 @@ import { shaperFileName, SHAPER_DEFAULT_NAME } from '#core/shaper-cloud.js';   /
 import { UNTITLED } from '#ui/document-buffer-core.js'; // TASK 881: the autosave loop's own module (not the page-store wrapper)
 
 // TASK 884 (owner turns 3607-3608): the file holds the TICKED operations only (task 798), so its NAME says which when it is not all of them. The operations a file can
-// leave out = every one but the Stock (cut-plan.js isTicked: the board, always in the file), each with its NUMBER in the Operations list: its place in the list
-// (operations-store.js storeOps, the order describeOperations lists and op-list.js numbers `i + 1`, the Stock counted), so reordering or deleting an operation
+// leave out = every one but the Stock (cut-plan.js isTicked: the board, always in the file), each with its NUMBER in the Operations list (operations.js listNumbers,
+// THE numbering the list shows: its place among the cutting operations in list order, TASK 898: the Stock unnumbered), so reordering or deleting an operation
 // before it changes the number (and so the name of a partial file).
-const leavable = (ops) => ops.map((op, i) => ({ op, n: i + 1 })).filter(({ op }) => op.type !== STOCK_TYPE_ID);
+const leavable = (ops) => { const nums = listNumbers(ops); return ops.filter((op) => nums.get(op.id) != null).map((op) => ({ op, n: nums.get(op.id) })); };
 /** TASK 884: the ticked part of a file's name: '' when every operation is ticked (the full file), else each ticked operation's type label (the Operations list's,
  *  cut type menuLabel) and its number there, in list order, joined by " - " ("Outside 1 - Outside 2": owner turn 3611, a dash survives shaperFileName where a comma became _). `ops` = the stored operations in list order. */
 export function tickedNamePart(ops = storeOps()) {
@@ -179,6 +179,6 @@ export function exportTickLine(ops) {
   if (on.length === tickable.length) return '';
   const n = tickable.length, ops1 = n === 1 ? 'operation' : 'operations';
   if (!on.length) return `Exporting 0 of ${n} ${ops1}: every one is unticked. Tick one in Prepare's Operations list.`;
-  const name = (op) => `${ops.indexOf(op) + 1}. ${op.rowText}` + (op.tool ? ` (${op.tool.label})` : ''); // TASK 825 (V2): the operation's words in the Operations list (its row's text: a Spiral pocket is "Pocket (spiral) · 6 mm") and its number there
+  const name = (op) => `${op.number}. ${op.rowText}` + (op.tool ? ` (${op.tool.label})` : ''); // TASK 825 (V2): the operation's words in the Operations list (its row's text: a Spiral pocket is "Pocket (spiral) · 6 mm") and its number there (TASK 898: op.number, operations.js listNumbers)
   return `Exporting ${on.length} of ${n} ${ops1} (unticked: ${tickable.filter((op) => op.on === false).map(name).join(', ')}). Place it with the same anchor as the earlier file.`;
 }

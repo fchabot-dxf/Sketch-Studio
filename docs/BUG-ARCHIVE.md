@@ -1850,11 +1850,11 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **What was wrong:** Every other snap reach of `findSnap` grows by `snapBoostFor(isTouch)` (task 562); the joint-over-line priority radius stayed 15 px.
 - **Cause:** `packages/ui/snap-detection.js` `findSnap`: `JOINT_PRIORITY_RADIUS = 15` -> `15 * boost` (30 px for a touch); the header comment lists it with the other scaled reaches.
 - **Task id(s):** `1010`
-- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
-- **Guarding test file(s):** `tests/snap-touch-priority-b20c-node.test.js`, `tests/snap-display-1010-live.test.js` (phone 390: a finger 21 px from a point and 4 px from a line starts the Line tool at the point)
-- **Status:** fixed
+- **Fix merge sha:** none (B-20c reverted in task `1010`)
+- **Guarding test file(s):** none yet
+- **Status:** open
 - **Family:** `snap-not-applied`
-- **History:** found in `1000B` (`B-20c`) -> fixed in task `1010`. A mouse (boost 1) is unchanged. Behaviour change for phone users: a touch press within 30 px of a point picks the point even when a line is closer (before: 15 px). Two live tests had presses placed inside that radius and moved: `tests/bezier-snap-872-live.test.js` (phone press x) and `tests/dim-box-outside-press-723-live.test.js` (0.85 -> 0.72 along the line).
+- **History:** found in `1000B` (`B-20c`); a fix (`15 * boost`) was tried in task `1010` and REVERTED by the advisor: needs a touch design, a flat 30 px point priority breaks line picks near endpoints (coincident-868-live, offset-fusion-match-667-live, pattern-params-694-live, toast-done-689-live fail with it).
 
 ---
 
@@ -1902,7 +1902,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
-| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26), BUG-137 (11-26), BUG-138 (11-26) |
+| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26) |
 | `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |

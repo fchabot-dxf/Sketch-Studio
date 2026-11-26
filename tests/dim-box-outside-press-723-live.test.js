@@ -138,7 +138,7 @@ try {
     await openBox(d1);
     await typeText('9');
     const typed1 = await box();
-    await P.tap(along((await lines())[idB], 0.72)); // 0.72 along: more than 30 px from the line end and from its midpoint at the phone size (task 1010 B-20c: a touch press within 30 px of a point picks the point)
+    await P.tap(along((await lines())[idB], 0.85));
     const after1 = await box();
     await P.away(empty); await sleep(250);
     const ls1 = await lines();
@@ -211,7 +211,7 @@ try {
     await openBox(d1);
     await typeText('11');
     const lb = (await lines())[idB];
-    const from = along(lb, 0.72), to = { x: from.x, y: from.y + 40 };
+    const from = along(lb, 0.85), to = { x: from.x, y: from.y + 40 };
     await P.drag(from, to);
     await P.away(empty); await sleep(200);
     const after5 = await box();

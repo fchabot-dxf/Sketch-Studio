@@ -2,7 +2,6 @@
 // and phone 390x844 (touch):
 //   UX-27 / B-18b  an arc shows a midpoint snap (hover with the Line tool)               desktop + phone-sized canvas
 //   B-18a          a corner dragged to a line midpoint sits exactly on it while dragged    desktop (mouse)
-//   B-20c          a finger press 21 px from a point and 4 px from a line picks the point  phone (touch)
 //   UX-20          the contradictory triangle is drawn in the error red                     desktop + phone
 // Screenshots (zoomed) go to .evidence/1010/.
 import assert from 'node:assert';
@@ -67,21 +66,6 @@ async function run(tag, width, height, touch) {
       console.log(tag, 'B-18a after release', JSON.stringify(after));
       assert.ok(during.snap === 'midpoint' && Math.hypot(during.x, during.y - 8) < 1e-3, `while dragged the point sits exactly on the previewed midpoint (0, 8): ${JSON.stringify(during)}`);
       assert.ok(Math.hypot(after.x - during.x, after.y - during.y) < 1e-3 && after.mids === 1, `the drop uses that snap: ${JSON.stringify(after)}`);
-    } else {
-      // ---- B-20c: a finger press in the Line tool, 4 px from a line and 21 px from a free point: the point wins (priority radius 30 px, not 15)
-      await openSeeded(cdp, docOf({ a: [-20, 0, true], b: [20, 0, true], p: [-5, 3.7] }, [{ id: 'T', type: 'line', joints: ['a', 'b'] }]), SHAPER);
-      await setView(cdp, SHAPER.canvas, 0, 3, 60);
-      const pp = await w2s(cdp, SHAPER.canvas, -5, 3.7), lp = await w2s(cdp, SHAPER.canvas, -5, 0);
-      await tool('line');
-      const finger = { x: pp.x, y: lp.y + (pp.y > lp.y ? 4 : -4) }; // 4 px off the line, on the point's side
-      const toPoint = Math.hypot(finger.x - pp.x, finger.y - pp.y);
-      console.log(tag, 'B-20c finger', JSON.stringify(finger), 'px to the point', toPoint.toFixed(1), 'px to the line 4');
-      assert.ok(toPoint > 15 && toPoint < 30, `the scene is set up so the point is between 15 and 30 px away (${toPoint.toFixed(1)})`);
-      await touchTap(cdp, finger.x, finger.y);
-      const start = await ST(cdp, 'st.active && st.active.start');
-      console.log(tag, 'B-20c the Line tool started at', JSON.stringify(start));
-      assert.ok(start === 'p' || (start && start.id === 'p'), `the finger picked the point p (not the line): ${JSON.stringify(start)}`);
-      await shot(cdp, `${tag}-b20c-touch-picks-point.png`, { x: pp.x - 100, y: pp.y - 80, width: 200, height: 160 });
     }
     console.log(`PASS ${tag}`);
   } finally { await cdp.close(); }

@@ -38,8 +38,8 @@ export function findCoincidentCluster(jointId, constraints = []){
 }
 
 // TASK 562: the ONE touch reach multiplier. A finger is less exact than a mouse, so EVERY pick reach of findSnap (joint, line / shape,
-// midpoint inference, X / Y axis, the joint-over-line priority) grows by the same factor when the press is a touch: joint 30 -> 60 px, line
-// 20 -> 40 px, midpoint 15 -> 30 px, axis 20 -> 40 px, joint priority 15 -> 30 px. Callers pass snapBoostFor(isTouch); nothing else multiplies a reach.
+// midpoint inference, X / Y axis) grows by the same factor when the press is a touch: joint 30 -> 60 px, line
+// 20 -> 40 px, midpoint 15 -> 30 px, axis 20 -> 40 px. Callers pass snapBoostFor(isTouch); nothing else multiplies a reach.
 export const TOUCH_SNAP_BOOST = 2.0;
 export function snapBoostFor(isTouch){ return isTouch ? TOUCH_SNAP_BOOST : 1.0; }
 
@@ -179,7 +179,7 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
   }
   // Priority: Joint > Shape (if close enough to joint, joint wins) > X / Y axis. The axis is the last real target: any joint
   // (the origin included), point-on-line or midpoint is a more specific feature and beats it; only the bare grid is below it.
-  const JOINT_PRIORITY_RADIUS = 15 * boost; // B-20c: scaled by the touch boost like every other reach
+  const JOINT_PRIORITY_RADIUS = 15;
   if (bestJoint && bestJoint.dist < JOINT_PRIORITY_RADIUS) return bestJoint;
   if(bestJoint && bestShape) return (bestJoint.dist <= bestShape.dist) ? bestJoint : bestShape;
   if(bestJoint) return bestJoint;

@@ -11,13 +11,13 @@
   }
  },
  "0.2px/touch": {
-  "hash": "5d6cf85ed124c514d692c082",
+  "hash": "245bd11158247ca38bc7c700",
   "counts": {
-   "shape": 20617,
+   "shape": 25388,
    "none": 5829,
-   "joint": 13053,
+   "joint": 8224,
    "axis-y": 72,
-   "midpoint": 419,
+   "midpoint": 477,
    "axis-x": 411
   }
  },
@@ -33,13 +33,13 @@
   }
  },
  "1px/touch": {
-  "hash": "9adc59336333c5322b91c5c3",
+  "hash": "c14281a9a45bb38519783b2d",
   "counts": {
-   "shape": 20617,
+   "shape": 25388,
    "none": 5829,
-   "joint": 13053,
+   "joint": 8224,
    "axis-y": 72,
-   "midpoint": 419,
+   "midpoint": 477,
    "axis-x": 411
   }
  },
@@ -55,13 +55,13 @@
   }
  },
  "5px/touch": {
-  "hash": "73c1aae8bcaf12837e7ac12f",
+  "hash": "a2f861ff09458c21e71905d6",
   "counts": {
-   "shape": 20617,
+   "shape": 25388,
    "none": 5829,
-   "joint": 13053,
+   "joint": 8224,
    "axis-y": 72,
-   "midpoint": 419,
+   "midpoint": 477,
    "axis-x": 411
   }
  },
@@ -77,13 +77,13 @@
   }
  },
  "78px/touch": {
-  "hash": "04243b481dbb53f814d6ca0b",
+  "hash": "150abd56030c099c6ceb788e",
   "counts": {
-   "shape": 20617,
+   "shape": 25388,
    "none": 5829,
-   "joint": 13053,
+   "joint": 8224,
    "axis-y": 72,
-   "midpoint": 419,
+   "midpoint": 477,
    "axis-x": 411
   }
  }

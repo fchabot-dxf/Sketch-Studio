@@ -16,8 +16,7 @@ for (const phone of [false, true]) {
     await t.fresh('line');
     const { evalJs, press, drag, mouse, keys, ribbon, toScreen } = t;
     await ribbon('tool-bezier');
-    const nx = phone ? 14 : 10; // task 1010 B-20c: at the phone zoom (2 px/mm) a touch press within 30 px of a point picks the point, and within 8 px of a midpoint the midpoint: it stays clear of both
-    const A = await toScreen(nx, 24), B = await toScreen(nx, 0); // the first anchor is also a point: 48 px from the press at the phone zoom
+    const A = await toScreen(10, 14), B = await toScreen(10, 0);
     const near = { x: B.x + 4, y: B.y }; // 4 px off the line: a hand never hits the pixel
     await press(A);
     if (!phone) { await mouse('mouseMoved', near); await sleep(300); }

@@ -1,5 +1,5 @@
 ﻿﻿import { worldToScreen, screenToWorld, getZoomFactor } from '#ui/coords.js';
-import { projectPointOnSegment, projectPointOnLine, getDist, getArcParams, resolveJoints, arcSweepInfo, angleInArcSweep } from '#core/geometry.js';
+import { projectPointOnSegment, projectPointOnLine, getDist, getArcParams, resolveJoints, arcSweepInfo, angleInArcSweep, arcSweepMidpoint } from '#core/geometry.js';
 import { SNAP, AXIS_SNAP_TARGETS, ORIGIN_JOINT_ID } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { findInference } from '#core/inference-engine.js';
@@ -38,8 +38,8 @@ export function findCoincidentCluster(jointId, constraints = []){
 }
 
 // TASK 562: the ONE touch reach multiplier. A finger is less exact than a mouse, so EVERY pick reach of findSnap (joint, line / shape,
-// midpoint inference, X / Y axis) grows by the same factor when the press is a touch: joint 30 -> 60 px, line 20 -> 40 px, midpoint
-// 15 -> 30 px, axis 20 -> 40 px. Callers pass snapBoostFor(isTouch); nothing else multiplies a reach.
+// midpoint inference, X / Y axis) grows by the same factor when the press is a touch: joint 30 -> 60 px, line
+// 20 -> 40 px, midpoint 15 -> 30 px, axis 20 -> 40 px. Callers pass snapBoostFor(isTouch); nothing else multiplies a reach.
 export const TOUCH_SNAP_BOOST = 2.0;
 export function snapBoostFor(isTouch){ return isTouch ? TOUCH_SNAP_BOOST : 1.0; }
 
@@ -68,6 +68,22 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
     const lineThreshold = SNAP.LINE_PX * boost;
     const worldMouse = screenToWorld(svg, lastMouse.x, lastMouse.y);
 
+    // ONE midpoint-or-shape rule for a curve (a line's midpoint, an arc's sweep midpoint): the midpoint wins when it is within the inference reach and
+    // no more than MIDPOINT_BIAS px farther than the nearest point of the curve, so it participates in the same lock/hysteresis as other snaps.
+    const MIDPOINT_BIAS = 2; // pixels
+    const offerMidpointOrShape = (s, mid, snapPt, dist) => {
+      const midSC = worldToScreen(svg, mid);
+      const dmid = Math.hypot(midSC.x - lastMouse.x, midSC.y - lastMouse.y);
+      let chosen = null; // { type: 'midpoint'|'shape', dist }
+      if (dmid < inferencePx && dmid <= dist + MIDPOINT_BIAS && dmid <= lineThreshold) chosen = { type: 'midpoint', dist: dmid };
+      else if (dist < lineThreshold) chosen = { type: 'shape', dist };
+      if (!chosen || chosen.dist >= bestShapeDist) return;
+      bestShapeDist = chosen.dist;
+      bestShape = chosen.type === 'midpoint'
+        ? { type: 'midpoint', targetId: s.id, x: mid.x, y: mid.y, shape: s, dist: chosen.dist, pt: mid }
+        : { type: 'shape', targetId: s.id, x: snapPt.x, y: snapPt.y, shape: s, dist: chosen.dist };
+    };
+
     for(const s of shapes){
       if(s.joints && s.joints.some(jid => excluded.includes(jid))) continue;
       let dist = Infinity;
@@ -90,30 +106,8 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
         const sc = worldToScreen(svg, snapPt);
         dist = Math.hypot(sc.x - lastMouse.x, sc.y - lastMouse.y);
 
-        // Midpoint candidate: treat midpoint as a first-class snap so it participates
-        // in the same lock/hysteresis behavior as other snaps (uses SNAP.INFERENCE_PX).
-        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-        const midSC = worldToScreen(svg, mid);
-        const dmid = Math.hypot(midSC.x - lastMouse.x, midSC.y - lastMouse.y);
-        // Bias allowance so midpoint can win even if projection point is slightly closer
-        const MIDPOINT_BIAS = 2; // pixels
-
-        // Decide whether midpoint or closest projected point wins for this segment
-        let chosen = null; // { type: 'midpoint'|'shape', dist, pt }
-        if (dmid < inferencePx && dmid <= dist + MIDPOINT_BIAS && dmid <= lineThreshold) {
-          chosen = { type: 'midpoint', dist: dmid, pt: mid };
-        } else if (dist < lineThreshold) {
-          chosen = { type: 'shape', dist: dist, pt: snapPt };
-        }
-
-        if (chosen && chosen.dist < bestShapeDist) {
-          bestShapeDist = chosen.dist;
-          if (chosen.type === 'midpoint') {
-            bestShape = { type: 'midpoint', targetId: s.id, x: mid.x, y: mid.y, shape: s, dist: chosen.dist, pt: mid };
-          } else {
-            bestShape = { type: 'shape', targetId: s.id, x: snapPt.x, y: snapPt.y, shape: s, dist: chosen.dist };
-          }
-        }
+        // Midpoint candidate: a first-class snap (see offerMidpointOrShape)
+        offerMidpointOrShape(s, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, snapPt, dist);
       } else if (s.type === 'circle') {
         const center = joints.get(s.joints[0]);
         let radius = (typeof s.radius === 'number') ? s.radius : 0;
@@ -151,6 +145,8 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
             const sc = worldToScreen(svg, snapPt);
             dist = Math.hypot(sc.x - lastMouse.x, sc.y - lastMouse.y);
           }
+          // Midpoint candidate (UX-27): the middle of the arc's drawn sweep, as a line's midpoint (see offerMidpointOrShape)
+          offerMidpointOrShape(s, arcSweepMidpoint(center, start, end, { sweep: s.sweep }), snapPt || { x: start.x, y: start.y }, dist);
         }
       } else if (s.type === 'bezier') {
         // TASK 762: a BEZIER's body: the point of its curve nearest the pointer, the curve as #core/curve-kinds.js declares it (CURVE_KINDS.bezier.points:
@@ -175,7 +171,6 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
 
       // Only accept a 'shape' snap if it's significantly closer than any midpoint preference
       // This prevents tiny projection advantages from overriding a nearby midpoint snap.
-      const MIDPOINT_BIAS = 2; // pixels
       if(snapPt && dist < lineThreshold && dist + MIDPOINT_BIAS < bestShapeDist){
         bestShapeDist = dist;
         bestShape = { type: 'shape', targetId: s.id, x: snapPt.x, y: snapPt.y, shape: s, dist };
@@ -184,7 +179,7 @@ export function findSnap(joints, shapes, svg, lastMouse, excludeIds=[], excludeL
   }
   // Priority: Joint > Shape (if close enough to joint, joint wins) > X / Y axis. The axis is the last real target: any joint
   // (the origin included), point-on-line or midpoint is a more specific feature and beats it; only the bare grid is below it.
-  const JOINT_PRIORITY_RADIUS = 15; 
+  const JOINT_PRIORITY_RADIUS = 15;
   if (bestJoint && bestJoint.dist < JOINT_PRIORITY_RADIUS) return bestJoint;
   if(bestJoint && bestShape) return (bestJoint.dist <= bestShape.dist) ? bestJoint : bestShape;
   if(bestJoint) return bestJoint;

@@ -798,9 +798,10 @@ function dragToward(e, svg, state, wpt, atPointer) {
         }
     }
 
-    // Normalize the candidate's snap point (some snap objects use .pt, others use x/y or id/targetId)
+    // Normalize the candidate's snap point (some snap objects use .pt, others use x/y or id/targetId). A MIDPOINT snap is pulled to only by a CLUSTER drag (B-18a):
+    // it infers nothing (below), so the previewed midpoint must come through the snap; a single-joint drag gets the midpoint from findInference.
     let snapPt = null;
-    if (state.activeSnap && activeIsLocked && (state.activeSnap.type === 'joint' || state.activeSnap.type === 'line' || state.activeSnap.type === 'shape' || state.activeSnap.type === 'grid' || AXIS_SNAP_TARGETS[state.activeSnap.type])) {
+    if (state.activeSnap && activeIsLocked && (state.activeSnap.type === 'joint' || state.activeSnap.type === 'line' || state.activeSnap.type === 'shape' || (state.activeSnap.type === 'midpoint' && state.drag.type === DRAG_TYPES.CLUSTER) || state.activeSnap.type === 'grid' || AXIS_SNAP_TARGETS[state.activeSnap.type])) {
         try{
             if (state.activeSnap.pt) snapPt = state.activeSnap.pt;
             else if (typeof state.activeSnap.x === 'number' && typeof state.activeSnap.y === 'number') snapPt = { x: state.activeSnap.x, y: state.activeSnap.y };

@@ -1,89 +1,89 @@
 {
  "0.2px/mouse": {
-  "hash": "02369ec901994973237c7a70",
+  "hash": "49538dcef38594535e13e110",
   "counts": {
    "none": 16419,
-   "shape": 17791,
+   "shape": 17727,
    "axis-y": 341,
-   "joint": 4992,
-   "midpoint": 182,
+   "joint": 4984,
+   "midpoint": 254,
    "axis-x": 676
   }
  },
  "0.2px/touch": {
-  "hash": "5e54e6a028eeff60781c7c80",
+  "hash": "245bd11158247ca38bc7c700",
   "counts": {
-   "shape": 25473,
+   "shape": 25388,
    "none": 5829,
-   "joint": 8264,
+   "joint": 8224,
    "axis-y": 72,
-   "midpoint": 352,
+   "midpoint": 477,
    "axis-x": 411
   }
  },
  "1px/mouse": {
-  "hash": "c6f7e42bdb6eef57c5371c48",
+  "hash": "c07a1c22fde7cb8af55d7245",
   "counts": {
    "none": 16419,
-   "shape": 17791,
+   "shape": 17727,
    "axis-y": 341,
-   "joint": 4992,
-   "midpoint": 182,
+   "joint": 4984,
+   "midpoint": 254,
    "axis-x": 676
   }
  },
  "1px/touch": {
-  "hash": "fe16c774e8c58b82bddf62fa",
+  "hash": "c14281a9a45bb38519783b2d",
   "counts": {
-   "shape": 25473,
+   "shape": 25388,
    "none": 5829,
-   "joint": 8264,
+   "joint": 8224,
    "axis-y": 72,
-   "midpoint": 352,
+   "midpoint": 477,
    "axis-x": 411
   }
  },
  "5px/mouse": {
-  "hash": "0bf9fd96f1cc2a11818ca8e1",
+  "hash": "1858d94ca03e80b02219636f",
   "counts": {
    "none": 16419,
-   "shape": 17791,
+   "shape": 17727,
    "axis-y": 341,
-   "joint": 4992,
-   "midpoint": 182,
+   "joint": 4984,
+   "midpoint": 254,
    "axis-x": 676
   }
  },
  "5px/touch": {
-  "hash": "a2f8509678fbd40e16238d2b",
+  "hash": "a2f861ff09458c21e71905d6",
   "counts": {
-   "shape": 25473,
+   "shape": 25388,
    "none": 5829,
-   "joint": 8264,
+   "joint": 8224,
    "axis-y": 72,
-   "midpoint": 352,
+   "midpoint": 477,
    "axis-x": 411
   }
  },
  "78px/mouse": {
-  "hash": "a855a4a77cb7f878d6104666",
+  "hash": "5be3f5213fdb694af238417a",
   "counts": {
    "none": 16419,
-   "shape": 17791,
+   "shape": 17727,
    "axis-y": 341,
-   "joint": 4992,
-   "midpoint": 182,
+   "joint": 4984,
+   "midpoint": 254,
    "axis-x": 676
   }
  },
  "78px/touch": {
-  "hash": "13206580a24bfb49bc1e2693",
+  "hash": "150abd56030c099c6ceb788e",
   "counts": {
-   "shape": 25473,
+   "shape": 25388,
    "none": 5829,
-   "joint": 8264,
+   "joint": 8224,
    "axis-y": 72,
-   "midpoint": 352,
+   "midpoint": 477,
    "axis-x": 411
   }
  }

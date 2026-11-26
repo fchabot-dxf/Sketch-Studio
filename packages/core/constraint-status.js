@@ -909,7 +909,9 @@ export function analyzeConstraintStatus({ joints, shapes, constraints, groups = 
     // fully constrained only when its centre is AND its radius is not free (truth.radiusFree).
     for (const s of shapes) {
         if (!s.joints || s.joints.length === 0) continue;
-        const radiusFree = truth.radiusFree.has(s.id);
+        // A bezier's two control points are plain shape data (shapes.js): no constraint holds them and the solver does not move them, so
+        // they are free however its two ends are held. A bezier is therefore never fixed / fully constrained (B-20b).
+        const radiusFree = truth.radiusFree.has(s.id) || s.type === 'bezier';
 
         const allFixed = !radiusFree && s.joints.every(jid => fixedJoints.has(jid));
         if (allFixed) fixedShapes.add(s.id);

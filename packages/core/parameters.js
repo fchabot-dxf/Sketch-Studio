@@ -184,7 +184,9 @@ function evaluationOrder(nodes, byKey) {
   return order;
 }
 
-const cycleError = (cycle) => ({ ok: false, code: 'CYCLE', message: cycle.map((n) => n.name).join(' -> '), cycle: cycle.map((n) => n.name) });
+// A one-item cycle is a name that reads itself: there is no path to show ("d1 -> d1"), so the message says so.
+const cycleMessage = (names) => (names.length === 2 && names[0] === names[1] ? `${names[0]} refers to itself` : names.join(' -> '));
+const cycleError = (cycle) => { const names = cycle.map((n) => n.name); return { ok: false, code: 'CYCLE', message: cycleMessage(names), cycle: names }; };
 
 // buildDependencyGraph(state) → { ok:true, order:[names, dependencies first] } | { ok:false, code:'CYCLE', cycle:[names], message }
 export function buildDependencyGraph(state) {

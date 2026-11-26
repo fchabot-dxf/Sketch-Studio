@@ -1456,7 +1456,7 @@ export const showDimInput = showEditInput;
 // Shared exit cleanup when switching tools (both switchToTool and tool-ribbon's host-owned onToolClick path).
 export function leaveActiveTool(state, nextTool) {
     commitTextEditor(); // TASK 845: another tool (its button or its key) keeps the text being edited, as a press outside the editor does
-    state.closeDrawStep(); // TASK 549: picking another tool in the middle of a draw cancels it (the ribbon button does the same)
+    if (typeof state.closeDrawStep === 'function') state.closeDrawStep(); // TASK 549: picking another tool in the middle of a draw cancels it (the ribbon button does the same)
     // TASK 1004 (B-7/D-20, D-6): leaving Dimension mid-placement or mid-pick cancels it like Esc (a new dim removed, an existing one kept).
     // Re-clicking Dimension or pressing its key keeps an active placement / pick (owner tool rule).
     if (nextTool !== TOOL_MODES.DIMENSION) resetDimensionState(state);

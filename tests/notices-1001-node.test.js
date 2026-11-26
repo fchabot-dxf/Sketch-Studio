@@ -8,6 +8,7 @@ import { setDebugSink } from '#core/debug.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { showEditInput } from '#ui/numeric-input-manager.js';
 import { handleDimensionPointerDown } from '#ui/input-handlers/dimension-tool.js';
+import { handleConstraintPointerDown } from '#ui/input-handlers/constraint-tools.js';
 import * as exportMgr from '../apps/sketchstudio/ui/export-manager.js';
 
 setConstraintNotifier(showNotification);
@@ -73,6 +74,18 @@ try {
   eq(eqText, 'Equal needs two lines, or two circles or arcs.', 'Equal toast is one plain sentence');
   ok(!/ERR-|Reason:|Args:/.test(eqText), 'Equal toast has no code, Reason, or Args');
   ok(logHas('ERR-EQUAL-01'), 'Equal invalid selection logs ERR-EQUAL-01');
+  st.selectedShapes.clear();
+
+  // 2b. Equal tool (constraint-tools.js) on a line + a circle -> identical plain sentence and ERR-EQUAL-01 logged
+  clear(doc);
+  logs.length = 0;
+  st.currentTool = TOOL_MODES.EQUAL;
+  st.pendingConstraint = null;
+  handleConstraintPointerDown(null, app.svg, st, null, { shape: eqLine }, null);
+  handleConstraintPointerDown(null, app.svg, st, null, { shape: eqCircle }, null);
+  eq(notices(doc).length, 1, 'Equal tool invalid selection shows 1 toast');
+  eq(notices(doc)[0].textContent.trim().replace(/^[^A-Za-z]+/, ''), 'Equal needs two lines, or two circles or arcs.', 'Equal tool toast matches hotkey plain sentence');
+  ok(logHas('ERR-EQUAL-01'), 'Equal tool invalid selection logs ERR-EQUAL-01');
   st.selectedShapes.clear();
 
   // 3. Dimension on already-defined geometry (both dimension-tool.js paths + numeric-input-manager.js) -> no toast, code logged

@@ -5,10 +5,16 @@
 import { TOOL_MODES, CONSTRAINT_TYPES, CONSTRAINT_TOOLS } from '#core/constants.js';
 import { ConstraintManager, announceOverConstrained } from '#core/constraint-manager.js';
 import { curveRefusal } from '#core/curve-kinds.js';
-import { dbg } from '#core/debug.js';
+import { dbg, logDiagnostic } from '#core/debug.js';
 import { findShapeById } from '#core/reference-lines.js';
 import { findCoincidentCluster } from '#ui/snap-detection.js';
 import { showNotification } from '#ui/notification-manager.js';
+
+export const EQUAL_SELECTION_REFUSAL = 'Equal needs two lines, or two circles or arcs.';
+export function canConstrainEqual(s1, s2) {
+    const isCircleLike = (s) => s && (s.type === 'circle' || s.type === 'arc');
+    return !!((s1 && s2 && s1.type === 'line' && s2.type === 'line') || (isCircleLike(s1) && isCircleLike(s2)));
+}
 
 /** A refused or invalid pick of a constraint tool: tell the user why (the one notice every handler below uses; never a console.warn only). */
 function refuse(why) { showNotification(why, 'warning'); }
@@ -446,12 +452,14 @@ function handleEqualPointerDown(e, svg, state, hitShape) {
         const s1 = state.pendingConstraint.selectionBuffer[0];
         const s2 = state.pendingConstraint.selectionBuffer[1];
 
-            // Only allow equal between two lines or two circles/arcs
-        const isCircleLike = (s) => s.type === 'circle' || s.type === 'arc';
-        if ((s1.type === 'line' && s2.type === 'line') || (isCircleLike(s1) && isCircleLike(s2))) {
+        // Only allow equal between two lines or two circles/arcs
+        if (canConstrainEqual(s1, s2)) {
             ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.EQUAL, { shapes: [s1.id, s2.id] }, { source: 'toolbar' });
         } else {
-            refuse('Equal takes two lines, or two circles / arcs (not a line and a circle).');
+            logDiagnostic('constraints', 'ERR-EQUAL-01', 'Invalid selection for equal constraint.', {
+                selectedShapes: [s1 && s1.type, s2 && s2.type]
+            }, 'warn');
+            refuse(EQUAL_SELECTION_REFUSAL);
         }
 
         state.selectedShapes.delete(s1.id);

@@ -27,7 +27,7 @@ import { watchTextOutlines } from '#ui/text-fonts.js'; // TASK 845: a text's let
 import { transformBoxPointerDown, transformBoxPointerMove, transformBoxPointerUp, cancelTransformGesture } from '#ui/transform-box.js'; // TASK 753: a group's transform box, every app
 import { updateHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
-import { setupConstraintTools, recordConstraintStep, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
+import { setupConstraintTools, recordConstraintStep, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState, EQUAL_SELECTION_REFUSAL, canConstrainEqual } from '#ui/input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState, handlePanZoomWheel } from '#ui/input-handlers/pan-zoom.js';
 import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection, anchorPlacingDimension, isDimensionPlacing, getPlacingConstraint, resetDimensionState } from '#ui/input-handlers/dimension-tool.js';
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
@@ -1365,8 +1365,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
             if (selShapes.length === 2) {
                 const s1 = state.shapes.find(x => x.id === selShapes[0]);
                 const s2 = state.shapes.find(x => x.id === selShapes[1]);
-                const isCircleLike = (s) => s && (s.type === 'circle' || s.type === 'arc');
-                if ((s1 && s2 && s1.type === 'line' && s2.type === 'line') || (isCircleLike(s1) && isCircleLike(s2))) {
+                if (canConstrainEqual(s1, s2)) {
                     recordConstraintStep(state, TOOL_MODES.EQUAL, () => ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.EQUAL, { shapes: [s1.id, s2.id] }, { source: 'toolbar' }));
                     // Keep selections and the tool active — do not reset or switch away; user will exit manually. (TASK 878: its glyph shows: no message)
                     e.preventDefault();
@@ -1375,7 +1374,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
                     logDiagnostic('constraints', 'ERR-EQUAL-01', 'Invalid selection for equal constraint.', {
                         selectedShapes: [s1 && s1.type, s2 && s2.type]
                     }, 'warn');
-                    showNotification('Equal needs two lines, or two circles or arcs.', 'warning');
+                    showNotification(EQUAL_SELECTION_REFUSAL, 'warning');
                     e.preventDefault();
                     return;
                 }

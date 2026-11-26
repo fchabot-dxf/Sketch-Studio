@@ -110,11 +110,7 @@ async function run({ width, height, tag }) {
     await sleep(200);
     const eqToasts = await toasts();
     assert.strictEqual(eqToasts.length, 1, `[${label}] 2: one Equal toast`);
-    if (isPhone) {
-      assert.ok(/Equal (needs|takes) two lines/.test(eqToasts[0]), `[${label}] 2: Equal toast is plain sentence (${eqToasts[0]})`);
-    } else {
-      assert.strictEqual(eqToasts[0], 'Equal needs two lines, or two circles or arcs.', `[${label}] 2: Equal toast is plain sentence`);
-    }
+    assert.strictEqual(eqToasts[0], 'Equal needs two lines, or two circles or arcs.', `[${label}] 2: Equal toast is plain sentence`);
     assert.ok(!/ERR-|Reason:|Args:/.test(eqToasts[0]), `[${label}] 2: no code, Reason, or Args`);
     const r = await evalJs(`(() => { const b = document.querySelector('#notification-container [data-level]').getBoundingClientRect(); return { x: Math.max(0, b.left - 10), y: Math.max(0, b.top - 10), width: b.width + 20, height: b.height + 20 }; })()`);
     const shot = await send('Page.captureScreenshot', { format: 'png', clip: { ...r, scale: 2 } });

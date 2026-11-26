@@ -1557,7 +1557,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/snap-touch-priority-b20c-node.test.js`, `tests/snap-display-1010-live.test.js` (phone 390: a finger 21 px from a point and 4 px from a line starts the Line tool at the point)
 - **Status:** fixed
 - **Family:** `snap-not-applied`
-- **History:** found in `1000B` (`B-20c`) -> fixed in task `1010`. A mouse (boost 1) is unchanged.
+- **History:** found in `1000B` (`B-20c`) -> fixed in task `1010`. A mouse (boost 1) is unchanged. Behaviour change for phone users: a touch press within 30 px of a point picks the point even when a line is closer (before: 15 px). Two live tests had presses placed inside that radius and moved: `tests/bezier-snap-872-live.test.js` (phone press x) and `tests/dim-box-outside-press-723-live.test.js` (0.85 -> 0.72 along the line).
 
 ---
 

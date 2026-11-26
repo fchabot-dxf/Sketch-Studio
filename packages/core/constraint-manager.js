@@ -4,10 +4,10 @@ import { dbg } from './debug.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import * as constraints from './constraints.js';
 import { SolverConfig } from './solver-config.js';
-import { measureResidual, measureShapeSizes, findCollapsedShape, withIndefiniteArticle } from './constraint-verifier.js';
+import { measureResidual, measureShapeSizes, findCollapsedShape, withIndefiniteArticle, unsatisfiedConstraints } from './constraint-verifier.js';
 import { isPointLineDistance, arcSweepMidpoint } from './geometry.js';
 import { snapshotSolverState, restoreSolverState } from './solver/engine.js';
-import { placeForCreation as placeByTable } from './creation-placement.js';
+import { placeForCreation as placeByTable, constraintOperands } from './creation-placement.js';
 import { reverseLineInAngleSectors } from './angle-sector.js';
 import { symmetricImpossible, SYMMETRIC_FIXED_REASON } from './symmetric.js';
 import { curveRefusal } from './curve-kinds.js'; // TASK 762: a point held on a curve kind that cannot hold one
@@ -315,6 +315,8 @@ export class ConstraintManager {
         // handled below: an over-constraining DIMENSION is KEPT as a driven reference (a measurement is useful and, now
         // that the engine skips driven rows, harmless); a non-dimension GEOMETRIC constraint is refused +
         // reverted to this last-valid shape.
+        const _tol = SolverConfig.VERIFIER_TOLERANCE || 0.001;
+        const _unsatisfiedBefore = new Set(unsatisfiedConstraints(state.constraints, state.joints, state.shapes, _tol));
         const _preAdd = snapshotSolverState(state.joints, state.shapes, state.constraints);
         const _sizesBefore = measureShapeSizes(state);
 
@@ -376,8 +378,10 @@ export class ConstraintManager {
         // structural conflicts were rejected above). Remove it, restore the last-valid geometry, re-solve,
         // and surface a clear error — never leave the sketch silently non-converged. (The EDIT-path analogue
         // lives in numeric-input-manager handleCommit.)
+        const _newlyUnsatisfied = () => unsatisfiedConstraints(state.constraints, state.joints, state.shapes, _tol)
+            .some(oc => oc === created || !_unsatisfiedBefore.has(oc));
         if (_preAdd && created && typeof created === 'object' &&
-            _solveRes && _solveRes.converged === false) {
+            _solveRes && _solveRes.converged === false && _newlyUnsatisfied()) {
             if (type === CONSTRAINT_TYPES.DISTANCE || type === CONSTRAINT_TYPES.ANGLE) {
                 // Over-constraining DIMENSION → KEEP it as a driven REFERENCE (never delete a measurement).
                 // The engine skips driven rows, so re-solving lets the geometry settle (the reference no
@@ -406,7 +410,7 @@ export class ConstraintManager {
             if (state.engine && typeof state.engine.solve === 'function') {
                 try { highRes = state.engine.solve(HIGH); } catch (_) {}
             }
-            if (highRes && highRes.converged === false) {
+            if (highRes && highRes.converged === false && _newlyUnsatisfied()) {
                 // REFUSE + REVERT when the add is genuinely infeasible — either its geometry is FULLY PINNED
                 // (no DOF, so it can never be satisfied) or it MANGLED a pre-existing constraint (deformed the
                 // sketch). Otherwise it's merely unsatisfied WITHOUT deforming anything (free DOF remain, or
@@ -417,7 +421,7 @@ export class ConstraintManager {
                 let mangled = null;
                 if (!pinned) {
                     for (const oc of state.constraints) {
-                        if (oc === created || oc.isDriven || oc.driven) continue;
+                        if (oc === created || oc.isDriven || oc.driven || _unsatisfiedBefore.has(oc)) continue;
                         if (measureResidual(oc, state.joints, state.shapes) > tol) { mangled = oc; break; }
                     }
                 }
@@ -458,11 +462,74 @@ export class ConstraintManager {
      * This is ~10x faster than full-solve verification and catches conflicts
      * earlier by detecting the solver fighting itself.
      */
+    /**
+     * Collect all active constraints in the same connected component as `seed`
+     * (walking non-fixed joints and shared shapes/circle radii) so a conflict on
+     * disconnected geometry never blocks adding a constraint here (UX-21).
+     */
+    static _componentConstraints(state, seed) {
+        const comp = new Set([seed]);
+        const seenJ = new Set();
+        const seenC = new Set();
+        const queue = [seed];
+        const active = (state.constraints || []).filter(c => c && !c.isDriven && !c.driven);
+        const byJoint = new Map();
+        const byCircle = new Map();
+        const shapesAtJoint = new Map();
+        for (const s of (state.shapes || [])) {
+            for (const jid of (s.joints || [])) {
+                if (!shapesAtJoint.has(jid)) shapesAtJoint.set(jid, []);
+                shapesAtJoint.get(jid).push(s);
+            }
+        }
+        for (const c of active) {
+            const ops = constraintOperands(state, c);
+            for (const jid of [...ops.joints, ...ops.references]) {
+                if (!byJoint.has(jid)) byJoint.set(jid, []);
+                byJoint.get(jid).push(c);
+            }
+            for (const sid of ops.circles) {
+                if (!byCircle.has(sid)) byCircle.set(sid, []);
+                byCircle.get(sid).push(c);
+            }
+        }
+        const pushJoint = (jid) => {
+            if (!jid || seenJ.has(jid)) return;
+            seenJ.add(jid);
+            const j = state.joints && state.joints.get(jid);
+            // Fixed joints (including j_origin) act as rigid boundaries between unrelated groups.
+            if (j && j.fixed) return;
+            for (const c of (byJoint.get(jid) || [])) {
+                if (!comp.has(c)) { comp.add(c); queue.push(c); }
+            }
+            for (const s of (shapesAtJoint.get(jid) || [])) {
+                for (const sj of (s.joints || [])) pushJoint(sj);
+            }
+        };
+        while (queue.length > 0) {
+            const cur = queue.shift();
+            const ops = constraintOperands(state, cur);
+            for (const jid of [...ops.joints, ...ops.references]) pushJoint(jid);
+            for (const sid of ops.circles) {
+                if (seenC.has(sid)) continue;
+                seenC.add(sid);
+                for (const c of (byCircle.get(sid) || [])) {
+                    if (!comp.has(c)) { comp.add(c); queue.push(c); }
+                }
+            }
+        }
+        return comp;
+    }
+
     static _sandboxVerify(state, type, params, _unused) {
         try {
             // 1. Snapshot the solver state (joint positions, circle radii and constraint scalar unknowns)
             const saved = snapshotSolverState(state.joints, state.shapes, state.constraints);
             const sizesBefore = measureShapeSizes(state);
+            const baseline = new Map();
+            for (const c of (state.constraints || [])) {
+                if (c && !c.isDriven && !c.driven) baseline.set(c, measureResidual(c, state.joints, state.shapes));
+            }
 
                 // 1b. Start from the pose creation will start from (placeForCreation, the one place), so the check judges
             // the real add; the positions are restored below either way.
@@ -471,11 +538,13 @@ export class ConstraintManager {
             // 2. Temporarily add the constraint
             const tempC = { ...params, type, __sandbox: true };
             state.constraints.push(tempC);
+            const comp = this._componentConstraints(state, tempC);
 
-            // 3. Run short bursts and track error trajectory
+            // 3. Run short bursts and track error trajectory (component-scoped when a conflict already exists elsewhere, UX-21)
             const BURSTS = 3;
             const ITERS_PER_BURST = SolverConfig.SANDBOX_ITERATIONS || 20; // Must align with solver's convergence check interval (k%20)
             const CONFLICT_THRESHOLD = SolverConfig.CONFLICT_THRESHOLD; // world units — same as verifier tolerance
+            const hasPreExistingConflict = [...baseline.values()].some(v => v > CONFLICT_THRESHOLD);
             const errors = [];
 
             let hasConflict = false;
@@ -487,10 +556,17 @@ export class ConstraintManager {
                         // Treat as non-conflict but abort further verification
                         break;
                     }
-                    errors.push(result.error);
+                    let compErr = 0;
+                    for (const oc of comp) {
+                        const r = measureResidual(oc, state.joints, state.shapes);
+                        const base = baseline.get(oc);
+                        const eff = (base !== undefined && base > CONFLICT_THRESHOLD) ? Math.max(0, r - base) : r;
+                        if (eff > compErr) compErr = eff;
+                    }
+                    errors.push(hasPreExistingConflict ? compErr : result.error);
 
                     // Early exit: if already converged, no conflict
-                    if (result.converged && result.error < 1e-6) break;
+                    if (hasPreExistingConflict ? compErr < 1e-6 : (result.converged && result.error < 1e-6)) break;
                 }
 
                 // 4. Analyze trajectory only if we have numeric errors

@@ -2593,7 +2593,7 @@ switch(c.type){
     const sc = { joints: opJoints, shapes: opShapes, constraints };
     const items = patternDimItemsFor(sc, c, scale);
     items.forEach((it, i) => {
-      out.push(`<g class="dim-label pattern-label" data-constraint-idx="${cIdx}" data-part="${i}" style="cursor:${currentTool === 'select' ? 'pointer' : 'default'}">
+      out.push(`<g class="dim-label pattern-label" data-constraint-idx="${cIdx}" data-part="${i}" style="cursor:${(currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) ? 'pointer' : 'default'}">
         ${dimLabelRect(it.x, it.y, it.w, scale(18), scale(2), color, strokeW)}
         <text ${placeDimLabel(it.x, it.y, null, null, it.text, it.w, false, color).attrs}>${it.text}</text>
       </g>`);

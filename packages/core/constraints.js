@@ -241,6 +241,7 @@ export function createConstraint(type, params) {
             // Branch lock: preserve 'external' (default) vs 'internal' for circle-circle tangent.
             if (params.line && params.circle) {
                 const out = { type: CONSTRAINT_TYPES.TANGENT, line: params.line, circle: params.circle };
+                if (Array.isArray(params.shapes) && params.shapes.length === 2) out.shapes = params.shapes.slice();
                 if (params.branch === 'external' || params.branch === 'internal') out.branch = params.branch;
                 return out;
             }

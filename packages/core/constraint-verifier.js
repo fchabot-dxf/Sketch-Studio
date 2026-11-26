@@ -395,6 +395,7 @@ export function measureResidual(c, joints, shapes) {
 // "converged, accept" decision (createConstraint's sandbox + post-add solve, commitDimensionEdit). A solve result in which a line
 // that had length (or an arc / circle that had a radius) now has under COLLAPSE_RATIO of it is not a solution for ANY constraint type.
 export const COLLAPSE_RATIO = 0.01;
+const COLLAPSE_ABS_SIZE = 0.02; // world mm: only a line / circle / arc actually reaching ~0 collapses, not a large relative shrink (UX-02)
 const MIN_TRACKED_SIZE = 1e-6;
 
 // shape id -> its sizes now, for the shapes that have one: a line [length], a circle [radius], an arc [radius, chord, chord / radius]. The
@@ -427,12 +428,13 @@ export function findCollapsedShape(state, before, skip = null) {
     const after = measureShapeSizes(state);
     const driving = (state.constraints || []).filter(c => c.type === CONSTRAINT_TYPES.DISTANCE && !c.isDriven && !c.driven);
     const onPair = (c, p, q) => !c.isRadius && c.joints && c.joints.length === 2 && ((c.joints[0] === p && c.joints[1] === q) || (c.joints[0] === q && c.joints[1] === p));
-    const fell = (was, now, k) => was[k] >= MIN_TRACKED_SIZE && now[k] < was[k] * COLLAPSE_RATIO;
+    const fellSize = (was, now, k) => was[k] >= MIN_TRACKED_SIZE && now[k] < Math.min(COLLAPSE_ABS_SIZE, was[k] * COLLAPSE_RATIO);
+    const fellAngle = (was, now, k) => was[k] >= MIN_TRACKED_SIZE && now[k] < was[k] * COLLAPSE_RATIO;
     for (const s of state.shapes || []) {
         const was = before.get(s.id), now = after.get(s.id);
         if (was === undefined || now === undefined || (skip && skip.has(s.id))) continue;
-        if (fell(was, now, 0) && !driving.some(c => (c.isRadius && c.shape === s.id) || (s.joints && s.joints.length >= 2 && onPair(c, s.joints[0], s.joints[1])))) return s;
-        if (was.length === 3 && now.length === 3 && fell(was, now, 1) && fell(was, now, 2) && !driving.some(c => onPair(c, s.joints[1], s.joints[2]))) return s;
+        if (fellSize(was, now, 0) && !driving.some(c => (c.isRadius && c.shape === s.id) || (s.joints && s.joints.length >= 2 && onPair(c, s.joints[0], s.joints[1])))) return s;
+        if (was.length === 3 && now.length === 3 && fellSize(was, now, 1) && fellAngle(was, now, 2) && !driving.some(c => onPair(c, s.joints[1], s.joints[2]))) return s;
     }
     return null;
 }

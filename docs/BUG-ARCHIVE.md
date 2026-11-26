@@ -1311,6 +1311,143 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **History:** noticed turn 3504 (2026-11-24) -> task 1001 dispatched 2026-11-25
 
 ### BUG-091
+- **Date / turn:** 2026-11-26 (audit ID `UX-04`; fixed in task `1007`)
+- **Reported by:** audit `1000` (`solver-ux-audit-1000-constraints-status-undo.mjs` `M1.5`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-04`: breaking a horizontal, dimensioned line left constraints behind on `[a, b]` so dragging the break point bent it into a V.
+- **What was wrong:** `breakShape` split `[a, b]` into `[a, M]` + `[M, b]` without updating `state.constraints`, leaving `horizontal(a, b)` on `[a, b]` and leaving the two pieces unconstrained relative to each other.
+- **Cause:** `packages/core/break.js` (`breakShape`, lines 24-58 orig) ignored `state.constraints`.
+- **Task id(s):** `1007`
+- **Fix merge sha:** open (`agents/trimbreak-1007`, awaiting merge)
+- **Guarding test file(s):** `tests/break-constraints-ux04-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-046
+- **History:** found in `SOLVER-UX-AUDIT-1000` (`UX-04`) -> fixed in task `1007` (shared `transferOrientationConstraints`, `collinear` between `[shape.id, newShapeId]`, retargeted `pointOnLine` past `t`, kept whole-line distance on `[a, b]`)
+
+### BUG-092
+- **Date / turn:** 2026-11-26 (audit ID `UX-11`; fixed in task `1007`)
+- **Reported by:** audit `1000` (`solver-ux-audit-1000-constraints-status-undo.mjs` `M1.6`, `M1.7`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-11`: after Trim the cut end is not held to the cutting line, and a dimension across the removed span survives when shared corners keep the old endpoints alive.
+- **What was wrong:** Trimming a line against a crossing or T-junction cutter left the newly created endpoint unconstrained (`dragging cutter` detached from the cut end), and trimming a shared-corner rectangle edge left the old edge width dimension (`d1=[a,b]`) alive across the removed span.
+- **Cause:** `packages/core/trim.js` (`trimShape`, `keepLineConstraints`) did not track cutter IDs at intersection parameters to call `applySnapConstraint(state, mId, onShapeSnap(cutterId, pt))`, and `keepLineConstraints` only ran `removeGeometry` when endpoints became unused (`gone.length`).
+- **Task id(s):** `1007`
+- **Fix merge sha:** open (`agents/trimbreak-1007`, awaiting merge)
+- **Guarding test file(s):** `tests/trim-constraints-ux11-node.test.js`, `tests/trim-constraints-789-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-046, BUG-091, BUG-094
+- **History:** `789` kept shared-corner dimensions (`BUG-046`) -> overturned by `SOLVER-UX-AUDIT-1000` (`UX-11`) -> fixed in task `1007`
+
+### BUG-093
+- **Date / turn:** 2026-11-26 (audit ID `UX-25`; fixed in task `1007`)
+- **Reported by:** audit `1000` (`solver-ux-audit-1000-irregularities.mjs` `IR2.3`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-25`: clicking an arc or circle with Trim or Break did nothing and showed no notice (unlike Bezier).
+- **What was wrong:** Neither `trim.js` nor `break.js` supports arcs or circles, yet clicking an arc or circle with Trim/Break returned silently instead of showing a plain refusal notice.
+- **Cause:** `CURVE_REFUSALS` in `packages/core/curve-kinds.js` only declared `[TOOL_MODES.TRIM]` and `[TOOL_MODES.BREAK]` entries under `bezier`, omitting `arc` and `circle`.
+- **Task id(s):** `1007`
+- **Fix merge sha:** open (`agents/trimbreak-1007`, awaiting merge)
+- **Guarding test file(s):** `tests/trim-break-curve-refusal-ux25-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-079, BUG-090
+- **History:** found in `SOLVER-UX-AUDIT-1000` (`UX-25`) -> fixed in task `1007` (`CURVE_REFUSALS.arc` and `CURVE_REFUSALS.circle`)
+
+### BUG-094
+- **Date / turn:** 2026-11-26 (audit ID `D-7`; fixed in task `1007`)
+- **Reported by:** audit `1003` (`dimension-audit-1003-values-driven.mjs` `V2.6.deleteSharedEdge`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `D-7`: deleting one edge `L1(a,b)` of a shared-corner rectangle left point-to-line dimension `d2=[p,a,b]` and edge dimension `d1=[a,b]` hanging on the deleted line.
+- **What was wrong:** Because corners `a` and `b` stayed used by surviving adjacent edges `L4` and `L2`, `removeGeometry` saw `goneJ` empty and left `H(a,b)`, `d1=[a,b]`, and point-to-line `d2=[p,a,b]` behind.
+- **Cause:** `packages/core/delete-manager.js` (`removeGeometry`) only matched deleted shape IDs (`SHAPE_FIELDS`) and orphaned/deleted joint IDs (`JOINT_FIELDS`), without matching constraints/dimensions keyed by a removed line's `[a,b]` endpoint pair.
+- **Task id(s):** `1007`
+- **Fix merge sha:** open (`agents/trimbreak-1007`, awaiting merge)
+- **Guarding test file(s):** `tests/delete-shared-edge-d7-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-092
+- **History:** found in `DIMENSION-AUDIT-1003` (`D-7`) -> fixed in task `1007`
+
+### BUG-095
+- **Date / turn:** 2026-11-26 (audit IDs `UX-07`, `B-5`, `D-21`; fixed in task `1007`)
+- **Reported by:** audits `1000`, `1000B`, `1003` (`C2.1`, `5b`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-07` / `B-5` / `D-21`: in a locked sketch, `deleteSelection(state)` still deleted selected constraints/dimensions (`delete-manager.js:182-187`).
+- **What was wrong:** Even after filtering out inert entities on line 178 (`!isConstraintInert(inert, c)`), a second unconditional loop in `deleteSelection` re-pushed every constraint from `state.selectedConstraints` (deleting locked-sketch dimensions/constraints).
+- **Cause:** `packages/core/delete-manager.js` lines 182-187 (orig) re-pushed all `state.selectedConstraints` without the inert/locked guard.
+- **Task id(s):** `1007`
+- **Fix merge sha:** open (`agents/trimbreak-1007`, awaiting merge)
+- **Guarding test file(s):** `tests/delete-locked-ux07-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`UX-07`), `1000B` (`B-5`), `1003` (`D-21`) -> fixed in task `1007` (removed duplicate loop)
+
+### BUG-096
+- **Date / turn:** 2026-11-26 (task 1009; `NEW-11` from task 875 / `1000`)
+- **Reported by:** coverage audit (`NEW-11`) / solver UX audit `1000`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, `packages/core/fillet.js`)
+- **Report:** `"fillet arcs are created with no sweep (fillet.js ~:520, sweep undefined)"` (`NEW-11`: fillet arc midpoint near 180 deg flips shortest-way on bite jitter; mirrored fillet inherits `sweep: undefined`).
+- **What was wrong:** Fillet arcs stored no `sweep` direction boolean, so `arcSweepInfo` defaulted to the shortest arc between endpoints near 180 deg, causing bite jitter flips in `coverage-matrix` (`NEW-11`, 6 cells) and missing `sweep` on mirrored fillets (`mirror.js:37`).
+- **Cause:** `packages/core/fillet.js:520` (`applyFillet`) called `makeArc(...)` without assigning `arcShape.sweep`.
+- **Task id(s):** `1009`
+- **Fix merge sha:** pending merge of `agents/arcsweep-1009`
+- **Guarding test file(s):** `tests/fillet-sweep-1009.test.js`, `tests/coverage-matrix.test.js` (`NEW-11` removed from `KNOWN`)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-060, BUG-098
+- **History:** `NEW-11` recorded in `coverage-matrix` -> fixed in `packages/core/fillet.js:522` (`arcShape.sweep = arcSweepInfo(centerPt, tA, tB).dir > 0`), `NEW-11` removed from `KNOWN` (`2026-11-26`)
+
+### BUG-097
+- **Date / turn:** 2026-11-26 (task 1009; `UX-03` from `1000` / `1000B`)
+- **Reported by:** solver UX audits `1000` / `1000B`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, `packages/ui/input-manager.js`)
+- **Report:** `"UX-03: dragging an arc's end onto its own start snaps and adds coincident:e,s, collapsing the arc to zero sweep permanently."`
+- **What was wrong:** Dragging an arc's endpoint onto its own opposite endpoint snapped onto it and created `coincident` on release, permanently collapsing the arc to zero sweep (even though the Coincident tool refused `(s, e)`).
+- **Cause:** `packages/ui/input-manager.js:451` (`updateSnapTarget`) only excluded `state.drag.jointIds` when calling `toolSnap` -> `findSnap` and checking `j_origin`, so an arc's own opposite endpoint (and `j_origin` when coincident with it) remained a snap candidate.
+- **Task id(s):** `1009`
+- **Fix merge sha:** pending merge of `agents/arcsweep-1009`
+- **Guarding test file(s):** `tests/arc-no-self-weld-1009-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-099
+- **History:** reported in `1000` (`DR4.1`) / `1000B` -> fixed in one place at `packages/ui/input-manager.js:451-462` (`2026-11-26`)
+
+### BUG-098
+- **Date / turn:** 2026-11-26 (task 1009; `UX-05` / `B-12a` from `1000` / `1000B`)
+- **Reported by:** solver UX audits `1000` (`DR4.2b`) / `1000B` (`6d`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, `packages/core/fillet.js` + `packages/core/solver/engine.js`)
+- **Report:** `"UX-05 = B-12a: dragging a corner far folds the fillet arc inside-out (centre jumps past the edge, a cusp)."`
+- **What was wrong:** Without `arc.sweep` (`BUG-096`) and without checking smooth tangent orientation during drags, dragging a filleted corner past 180 deg or shrinking a free-radius fillet folded the arc into a cusp (`filletTravel <= 0`, e.g., `6d` center jumping into a cusp). Fusion live check `(a)` (L1 `(-6,0)-(-2,0)`, L2 `(-2,0)-(-2,4)`, `r=0.6`, L2 far end dragged past straight to lower right): the fillet stays tangent on its original side and its sweep grows smoothly past 180 deg to `358.85 deg` (`r=3.079`), with no cusp and no flip.
+- **Cause:** `packages/core/fillet.js:520` omitted `arcShape.sweep`, and `packages/core/solver/engine.js` (`NewtonSolver.solve`) accepted `hasSpring` drag steps that turned a fillet's shared tangent transitions (`filletTravel`) to `<= 0` (`cusp`). (Note: parked `847-B` applied `_filletTurnedOut` to non-drag constraint solves too, breaking 5 `coverage-matrix` + 9 `fusion-oracle` graded cells; scoping `_keepsFillets` strictly to `hasSpring` drags preserves all Fusion-oracle and coverage-matrix green cells.)
+- **Task id(s):** `1009`
+- **Fix merge sha:** pending merge of `agents/arcsweep-1009`
+- **Guarding test file(s):** `tests/fillet-no-cusp-drag-1009.test.js`
+- **Status:** fixed (drag fold); see `BUG-060` for parked non-drag `847-B` dim-edit case
+- **Family:** `solver`
+- **Related:** BUG-060, BUG-096, BUG-099
+- **History:** reported in `1000` / `1000B` -> confirmed against Fusion LIVE `(a)` (`358.85 deg`, `r=3.079`) -> fixed in `fillet.js:522` + `engine.js` `_keepsFillets` (`hasSpring` drags only) (`2026-11-26`)
+
+### BUG-099
+- **Date / turn:** 2026-11-26 (task 1009; `B-12b` / `EA-4` from `1000B` / task `531`)
+- **Reported by:** extreme-arcs coverage (`EA-4`) & solver UX audit `1000B` (`6f`), Fusion LIVE checked `2026-11-26`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, `packages/core/solver/engine.js`)
+- **Report:** `"B-12b / EA-4: a 10 degree arc whose end is dragged past its start wraps to ~352 degrees."`
+- **What was wrong:** Dragging the endpoint of a short arc (`10 deg` in `6f`, `0.1 deg` in `EA-4` `s0.1ccw`) past its start wraps the arc to `~352-355 deg`.
+  - **Fusion LIVE fact `(a)` (fillet):** L1 `(-6,0)-(-2,0)`, L2 `(-2,0)-(-2,4)` with fillet `r 0.6`, L2 far end dragged past straight to lower right -> fillet stays tangent on its original side, sweep grows smoothly to `358.85 deg` (`r=3.079`), no cusp, no flip.
+  - **Fusion LIVE fact `(b)` (short arc):** `10 deg` arc (centre `(-4.5, 2.5)`, `r 1.2`), end dragged `~35 deg` past start -> arc stays short (`6.97 deg`), centre and radius re-solve to centre `(0.476, 1.207)`, `r 3.991` (no `~352 deg` wrap).
+  - **Task 1009 finding (`extreme-arcs.test.js`):** once `fillet.js` sets `arc.sweep`, `f179r10` (`179 deg` corner = `1 deg` fillet) matches Fusion `(a)` (`-358.873 deg` smooth reflex loop), but `tests/harness/coverage/arcs-rows.js:129` (`Math.abs(g1.span - g0.span) > Math.PI`) still labels those 16 `f179r10` cells `EA-4`; meanwhile a Cartesian LM min-sweep clamp does not match Fusion `(b)` (which re-solves centre across the chord). `EA-4` and `EA-5` stay in `KNOWN` and `arcs-rows.js` stays unchanged pending dedicated `B-12b` solver design.
+- **Cause:** Cartesian joint LM solver (`engine.js`) updates joint positions incrementally on one side of `s..e`, wrapping `arcSweepInfo` across `0 deg` to `~352 deg` instead of re-solving centre/radius across the chord as Fusion `(b)` does.
+- **Task id(s):** open (deferred from `1009`)
+- **Fix merge sha:** open
+- **Guarding test file(s):** `tests/extreme-arcs.test.js` (`KNOWN['EA-4']`, `KNOWN['EA-5']`)
+- **Status:** open, waiting for Fusion `(b)` centre-flip / `extreme-arcs` design
+- **Family:** `solver`
+- **Related:** BUG-097, BUG-098
+- **History:** `EA-4` logged in task `531` -> Fusion LIVE `(a)` & `(b)` measured and `f179r10` vs `arcs-rows.js:129` interaction documented in task `1009` (`2026-11-26`); deferred to its own task
+
+### BUG-100
 - **Date / turn:** 2026-11-26 (audit `D-1`, task 1003 -> fixed in task 1004)
 - **Reported by:** worker (`1003`, Dimension tool focused audit)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, desktop & phone)
@@ -1323,9 +1460,9 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/dimension-1004-node.test.js`, `tests/dimension-1004-live.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
-- **Related:** BUG-092, BUG-093, BUG-094, BUG-095
+- **Related:** BUG-101, BUG-102, BUG-103, BUG-104
 
-### BUG-092
+### BUG-101
 - **Date / turn:** 2026-11-26 (audit `D-2`, task 1003 -> fixed in task 1004)
 - **Reported by:** worker (`1003`, Dimension tool focused audit)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
@@ -1338,9 +1475,9 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/dimension-1004-node.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
-- **Related:** BUG-091, BUG-093, BUG-095
+- **Related:** BUG-100, BUG-102, BUG-104
 
-### BUG-093
+### BUG-102
 - **Date / turn:** 2026-11-26 (audit `D-3`, task 1003 -> fixed in task 1004)
 - **Reported by:** worker (`1003`, Dimension tool focused audit)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
@@ -1353,9 +1490,9 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/dimension-1004-node.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
-- **Related:** BUG-092, BUG-095
+- **Related:** BUG-101, BUG-104
 
-### BUG-094
+### BUG-103
 - **Date / turn:** 2026-11-26 (audit `D-5` + `D-6`, task 1003 -> fixed in task 1004)
 - **Reported by:** worker (`1003`, Dimension tool focused audit)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
@@ -1368,9 +1505,9 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/dimension-1004-node.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
-- **Related:** BUG-095
+- **Related:** BUG-104
 
-### BUG-095
+### BUG-104
 - **Date / turn:** 2026-11-26 (audit `B-7` / `D-20`, tasks 1000B & 1003 -> fixed in task 1004)
 - **Reported by:** worker (`1000B` solver UX audit & `1003` Dimension tool focused audit)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, desktop & phone)
@@ -1383,21 +1520,21 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/dimension-1004-node.test.js`, `tests/dimension-1004-live.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
-- **Related:** BUG-092, BUG-093, BUG-094
+- **Related:** BUG-101, BUG-102, BUG-103
 
-### BUG-096
+### BUG-105
 - **Date / turn:** 2026-11-26 (audit `DD-4`, task 1003; final owner ruling turn 3764 `"leave tool"`)
 - **Reported by:** worker (`1003`, Dimension tool focused audit — logged as divergence `DD-4`)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
 - **Report:** `"Audit DD-4: Pressing Esc mid-pick or mid-placement in the Dimension tool cancels the in-progress pick/placement and immediately exits to Select in one step."`
-- **What was wrong:** Not a bug. Initially flagged as an unverified divergence against Fusion (`DD-4`); advisor verified Fusion 360 live on 2026-11-26 that ONE `Esc` in Sketch Dimension exits mid-pick and mid-placement, and the owner ruled (turn 3764, `"leave tool"`) to keep one-step `Esc` (cancels whatever is in progress — new dimension removed, existing dimension kept per BUG-092 — and leaves the Dimension tool).
+- **What was wrong:** Not a bug. Initially flagged as an unverified divergence against Fusion (`DD-4`); advisor verified Fusion 360 live on 2026-11-26 that ONE `Esc` in Sketch Dimension exits mid-pick and mid-placement, and the owner ruled (turn 3764, `"leave tool"`) to keep one-step `Esc` (cancels whatever is in progress — new dimension removed, existing dimension kept per BUG-101 — and leaves the Dimension tool).
 - **Cause:** Intentional behaviour matching Fusion 360 (`packages/ui/input-manager.js` `handleEscape`).
 - **Task id(s):** `1003` (audit), `1004` (ruling recorded)
 - **Fix merge sha:** n/a (no code change; existing behaviour kept)
 - **Guarding test file(s):** `tests/dimension-1004-node.test.js`
 - **Status:** not a bug (closed; Fusion verified live 2026-11-26: one Esc exits mid-pick and mid-placement)
 - **Family:** `ui-input`
-- **Related:** BUG-092, BUG-095
+- **Related:** BUG-101, BUG-104
 - **History:** logged as unverified divergence `DD-4` in task 1003 -> temporary two-step `Esc` ruling turn 3759 held after live Fusion check 2026-11-26 -> final owner ruling turn 3764 `"leave tool"` closed `DD-4` as not a bug
 
 ---
@@ -1415,14 +1552,14 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
 | `storage-lifecycle` | BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-091 (11-26), BUG-092 (11-26), BUG-093 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---
@@ -1433,5 +1570,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md) & [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md) — Solver UI/UX audits (`UX-nn` / `B-nn`, tasks `1000` and `1000B`).
-- [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Dimension Tool focused audit (`D-1`..`D-26`, `DD-1`..`DD-5`, task `1003`; paired with BUG-091..BUG-096).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`).

@@ -83,59 +83,62 @@ for (const host of HOSTS) {
       checks++;
     }
 
-    // 3. Full 9-tool lifecycle matrix: use -> stays; refusal -> stays; 2nd ribbon click -> stays; Esc -> select; other tool -> exits
+    // 3. Full 9-tool lifecycle matrix: use -> stays; refusal -> stays; 2nd ribbon click -> stays;
+    //    ONE Esc after a first pick -> Select & pick buffer empty (turn 3764); other tool -> exits
+    const ptOf = (jid) => { const j = app.state.joints.get(jid); return [j.x, j.y]; };
+    const midOf = (line) => { const a = app.state.joints.get(line.a), b = app.state.joints.get(line.b); return [(a.x + b.x) / 2, (a.y + b.y) / 2]; };
     const toolOps = {
       [TOOL_MODES.HORIZONTAL_VERTICAL]: () => {
         const l = addLine(app, cx - 2 * sc, cy + 2 * sc, cx + 2 * sc, cy + 2.3 * sc);
         const c = addCircle(app, cx + 4 * sc, cy + 2 * sc, 0.7 * sc);
-        return { use: [l.mid], refuse: [c.rim] };
+        return { use: [l.mid], refuse: [c.rim], firstPick: () => ptOf(l.a) };
       },
       [TOOL_MODES.PARALLEL]: () => {
         const a = addLine(app, cx - 2 * sc, cy + 2 * sc, cx + 2 * sc, cy + 2.2 * sc);
         const b = addLine(app, cx - 2 * sc, cy + 3.2 * sc, cx + 2 * sc, cy + 3.8 * sc);
         const c = addCircle(app, cx + 4 * sc, cy + 2 * sc, 0.7 * sc);
-        return { use: [a.mid, b.mid], refuse: [c.rim] };
+        return { use: [a.mid, b.mid], refuse: [c.rim], firstPick: () => midOf(a) };
       },
       [TOOL_MODES.PERPENDICULAR]: () => {
         const a = addLine(app, cx - 2 * sc, cy + 2 * sc, cx + 2 * sc, cy + 2 * sc);
         const b = addLine(app, cx + sc, cy + 3 * sc, cx + 1.3 * sc, cy + 5 * sc);
         const c = addCircle(app, cx + 4 * sc, cy + 2 * sc, 0.7 * sc);
-        return { use: [a.mid, b.mid], refuse: [c.rim] };
+        return { use: [a.mid, b.mid], refuse: [c.rim], firstPick: () => midOf(a) };
       },
       [TOOL_MODES.COLLINEAR]: () => {
         const a = addLine(app, cx - 3 * sc, cy + 2 * sc, cx - sc, cy + 2 * sc);
         const b = addLine(app, cx + sc, cy + 2.5 * sc, cx + 3 * sc, cy + 2.5 * sc);
         const c = addCircle(app, cx + 4 * sc, cy + 4 * sc, 0.7 * sc);
-        return { use: [a.mid, b.mid], refuse: [c.rim] };
+        return { use: [a.mid, b.mid], refuse: [c.rim], firstPick: () => midOf(a) };
       },
       [TOOL_MODES.COINCIDENT]: () => {
         const a = addLine(app, cx - 3 * sc, cy + 2 * sc, cx - sc, cy + 2 * sc);
         const b = addLine(app, cx + sc, cy + 2 * sc, cx + 3 * sc, cy + 2 * sc);
-        return { use: [a.p2, b.p1], refuse: [a.mid, b.mid] };
+        return { use: [a.p2, b.p1], refuse: [a.mid, b.mid], firstPick: () => ptOf(a.a) };
       },
       [TOOL_MODES.TANGENT]: () => {
         const a = addLine(app, cx - 2 * sc, cy + 2 * sc, cx + 2 * sc, cy + 2 * sc);
         const b = addLine(app, cx - 2 * sc, cy + 3.5 * sc, cx + 2 * sc, cy + 3.5 * sc);
         const c = addCircle(app, cx, cy + 0.5 * sc, 0.8 * sc);
-        return { use: [a.mid, c.rim], refuse: [a.mid, b.mid] };
+        return { use: [a.mid, c.rim], refuse: [a.mid, b.mid], firstPick: () => midOf(a) };
       },
       [TOOL_MODES.EQUAL]: () => {
         const a = addLine(app, cx - 3 * sc, cy + 2 * sc, cx - sc, cy + 2 * sc);
         const b = addLine(app, cx + sc, cy + 2 * sc, cx + 3.5 * sc, cy + 2 * sc);
         const c = addCircle(app, cx, cy + 4 * sc, 0.7 * sc);
-        return { use: [a.mid, b.mid], refuse: [a.mid, c.rim] };
+        return { use: [a.mid, b.mid], refuse: [a.mid, c.rim], firstPick: () => midOf(a) };
       },
       [TOOL_MODES.MIDPOINT]: () => {
         const a = addLine(app, cx - 2 * sc, cy + 2 * sc, cx + 2 * sc, cy + 2 * sc);
         const b = addLine(app, cx, cy + 3.2 * sc, cx + 2 * sc, cy + 3.2 * sc);
         const c = addCircle(app, cx + 4 * sc, cy + 2 * sc, 0.7 * sc);
-        return { use: [b.p1, a.mid], refuse: [c.rim] };
+        return { use: [b.p1, a.mid], refuse: [c.rim], firstPick: () => ptOf(b.b) };
       },
       [TOOL_MODES.SYMMETRIC]: () => {
         const a = addLine(app, cx - 3 * sc, cy + 2 * sc, cx - 1.5 * sc, cy + 3 * sc);
         const b = addLine(app, cx + 1.5 * sc, cy + 2 * sc, cx + 3 * sc, cy + 3.2 * sc);
         const m = addLine(app, cx, cy + sc, cx, cy + 4 * sc);
-        return { use: [a.p1, b.p1, m.mid], refuse: [a.p2, b.mid] };
+        return { use: [a.p1, b.p1, m.mid], refuse: [a.p2, b.mid], firstPick: () => ptOf(a.a) };
       },
     };
 
@@ -145,7 +148,7 @@ for (const host of HOSTS) {
       app.state.constraints.length = 0;
       for (const id of [...app.state.joints.keys()]) if (id !== 'j_origin') app.state.joints.delete(id);
       app.esc();
-      const { use, refuse } = toolOps[tool]();
+      const { use, refuse, firstPick } = toolOps[tool]();
 
       // Enter via ribbon
       clickRibbon(app, tool);
@@ -166,9 +169,21 @@ for (const host of HOSTS) {
       for (const [x, y] of refuse) clickW(app, x, y);
       assert.strictEqual(app.state.currentTool, tool, `${host}/${tool}: stays active after refusal`);
 
-      // Esc -> exits to Select
+      // Esc (idle) -> exits to Select
       app.esc();
       assert.strictEqual(app.state.currentTool, TOOL_MODES.SELECT, `${host}/${tool}: Esc exits to Select`);
+      assert.strictEqual(app.state.pendingConstraint, null, `${host}/${tool}: Esc leaves pendingConstraint null`);
+
+      // Owner ruling turn 3764: ONE Esc after a first pick clears pending pick AND exits to Select
+      clickRibbon(app, tool);
+      clickW(app, ...firstPick());
+      const pc = app.state.pendingConstraint;
+      assert.ok(pc && (pc.firstElement || (pc.selectionBuffer && pc.selectionBuffer.length > 0)), `${host}/${tool}: first pick recorded in pendingConstraint`);
+      app.esc();
+      assert.strictEqual(app.state.currentTool, TOOL_MODES.SELECT, `${host}/${tool}: ONE Esc after first pick exits to Select`);
+      assert.strictEqual(app.state.pendingConstraint, null, `${host}/${tool}: ONE Esc after first pick clears pick buffer`);
+      assert.strictEqual(app.state.selectedJoints.size, 0, `${host}/${tool}: ONE Esc clears selectedJoints`);
+      assert.strictEqual(app.state.selectedShapes.size, 0, `${host}/${tool}: ONE Esc clears selectedShapes`);
 
       // Re-enter then pick another tool -> exits to Line
       clickRibbon(app, tool);

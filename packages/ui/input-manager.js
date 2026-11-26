@@ -9,7 +9,7 @@ import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntitie
 import { dbg, logDiagnostic } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS, ACTIVE_SKETCH_SNAP_TOOLS } from '#core/constants.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
-import { findSnap, snapBoostFor } from '#ui/snap-detection.js';
+import { findSnap, snapBoostFor, findCoincidentCluster } from '#ui/snap-detection.js';
 import { gridSpacing } from '#ui/canvas-grid.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
@@ -412,7 +412,19 @@ function updateSnapTarget(e, svg, state) {
     
     if (needsSnap) {
         // ACTIVE OPERATION: Compute snap targets for magnetic attraction
-        const excludeIds = (state.drag && state.drag.jointIds) ? state.drag.jointIds : [];
+        const baseExclude = (state.drag && state.drag.jointIds) ? state.drag.jointIds : [];
+        const excludeSet = new Set(baseExclude);
+        if (baseExclude.length) {
+            // UX-03: an arc's dragged endpoint must never snap-weld onto its own opposite endpoint (nor anything coincident with it).
+            const baseSet = new Set(baseExclude);
+            for (const s of (state.shapes || [])) {
+                if (!s || s.type !== 'arc' || !Array.isArray(s.joints) || s.joints.length < 3) continue;
+                const d1 = baseSet.has(s.joints[1]), d2 = baseSet.has(s.joints[2]);
+                if (d1 === d2) continue;
+                for (const jid of findCoincidentCluster(d1 ? s.joints[2] : s.joints[1], state.constraints)) excludeSet.add(jid);
+            }
+        }
+        const excludeIds = Array.from(excludeSet);
         let snapResult = toolSnap(state, svg, { x: e.clientX, y: e.clientY }, excludeIds, snapBoost);
         
         // Explicitly check for origin snap if findSnap didn't return a joint.
@@ -1254,8 +1266,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
                 if (pc && !pc.isDriven && !pc.driven) {
                     try {
                         const svgEl = canvasSvg || inputCtx.getCanvasSvg?.() || (typeof document !== 'undefined' ? (document.getElementById('svgCanvas') || document.querySelector('svg')) : null);
-                        anchorPlacingDimension(svgEl, state);
-                        showEditInput(svgEl, state, pc, e.key);
+                        anchorPlacingDimension(svgEl, state, e.key);
                     } catch(_){ }
                     e.preventDefault();
                     return;
@@ -1441,16 +1452,27 @@ export function toggleFixedSelection(state) {
 // Re-export showDimInput so higher-level modules (e.g. main.js) can open the dim editor
 export const showDimInput = showEditInput;
 
-// ONE shared tool activation path for all hosts (ribbon clicks, keyboard shortcuts, programmatic switches).
+
+// Shared exit cleanup when switching tools (both switchToTool and tool-ribbon's host-owned onToolClick path).
+export function leaveActiveTool(state, nextTool) {
+    commitTextEditor(); // TASK 845: another tool (its button or its key) keeps the text being edited, as a press outside the editor does
+    state.closeDrawStep(); // TASK 549: picking another tool in the middle of a draw cancels it (the ribbon button does the same)
+    // TASK 1004 (B-7/D-20, D-6): leaving Dimension mid-placement or mid-pick cancels it like Esc (a new dim removed, an existing one kept).
+    // Re-clicking Dimension or pressing its key keeps an active placement / pick (owner tool rule).
+    if (nextTool !== TOOL_MODES.DIMENSION) resetDimensionState(state);
+}
+
+// Helper: Switch the active tool programmatically with UI update fallback
 export function switchToTool(state, toolName) {
     // TASK 1005 (owner ruling turn 3741): re-clicking the active constraint tool's button or key stays in the tool (never exits or re-fires preselection).
     if (state.currentTool === toolName && CONSTRAINT_TOOLS.includes(toolName)) {
         inputCtx.highlightActiveTool?.(toolName);
         return;
     }
+    leaveActiveTool(state, toolName);
+    // Primary path: let the host's toolbar handle the switch (default = SketchStudio's #tool-<name> button click +
+    // active-state sync). Returns true when handled; a host without a toolbar omits it -> we fall through.
 
-    commitTextEditor(); // TASK 845: another tool (its button or its key) keeps the text being edited, as a press outside the editor does
-    if (typeof state.closeDrawStep === 'function') state.closeDrawStep(); // TASK 549: picking another tool in the middle of a draw cancels it
     if (inputCtx.setActiveTool && inputCtx.setActiveTool(toolName)) return;
 
     // Cleanup for tool being left

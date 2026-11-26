@@ -6,7 +6,7 @@
 // → Shaper) from the SAME component. Self-contained: injects its <style> once + inject-IF-MISSING icon symbols
 // (reuses cursor-manager's ICONS, the single source of truth) so #icon-* resolve in any host.
 
-import { switchToTool, toggleFixedSelection, selectionLockState, TOOL_BEGIN } from '#ui/input-manager.js';
+import { switchToTool, leaveActiveTool, toggleFixedSelection, selectionLockState, TOOL_BEGIN } from '#ui/input-manager.js';
 import { ensureIconSymbols } from '#ui/cursor-manager.js';
 import { TOOL_MODES, RECT_MODES, SLOT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
@@ -322,11 +322,11 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
 
   const fire = (name, detail) => { if (typeof on === 'function') { try { on(name, detail); } catch (_) {} } };
   function selectTool(tool) {
-    state.closeDrawStep(); // TASK 549: picking a tool in the middle of a draw cancels it (nothing committed: no orphan point, no undo step)
     if (typeof onToolClick === 'function') {                                              // host owns activation
+      leaveActiveTool(state, tool);
       try { onToolClick(tool); } catch (_) {}
       if (TOOL_BEGIN[tool]) TOOL_BEGIN[tool](state); // TASK 585 / 740: Mirror / a pattern starts its pick from the state the switch left
-    } else { try { switchToTool(state, tool); } catch (_) {} }                          // default: shared tool-switch (it runs TOOL_BEGIN)
+    } else { try { switchToTool(state, tool); } catch (_) {} }                          // default: shared tool-switch (it runs leaveActiveTool + TOOL_BEGIN)
     fire('tool', tool);
     refresh();
   }

@@ -343,7 +343,50 @@ export class NewtonSolver {
     this._mark = new Uint8Array(x.length);
     this._touched = new Int32Array(x.length);
     this._ops = new Int32Array(16);
+    this._packX = x;
+    this._fillets = null;
     return x;
+  }
+
+  // UX-05 (during drags): keep fillet arcs smooth at their shared tangent ends (no cusp fold, while allowing sweep > 180 deg as Fusion does).
+  _keepsFillets(xCand) {
+    if (!this._fillets) {
+      const byId = new Map(), fillets = new Map(), J = (id) => this._jointIndex.get(id);
+      for (const s of this.shapes) if (s && !byId.has(s.id)) byId.set(s.id, s);
+      for (const c of this.constraints) {
+        if (!c || c.type !== 'tangent' || !c.line || !c.circle || c.isDriven || c.driven) continue;
+        const arc = byId.get(c.circle), line = byId.get(c.line);
+        if (!arc || arc.type !== 'arc' || !arc.filletSharp || !line || line.type !== 'line' || !Array.isArray(line.joints)) continue;
+        const k = line.joints.findIndex(j => arc.joints.indexOf(j) > 0);
+        if (k < 0 || k > 1) continue;
+        if (!fillets.has(arc.id)) fillets.set(arc.id, { start: J(arc.joints[1]), end: J(arc.joints[2]), sweep: arc.sweep, centre: J(arc.joints[0]), joins: [] });
+        fillets.get(arc.id).joins.push({ p: J(line.joints[k]), f: J(line.joints[1 - k]) });
+      }
+      const posStart = fillets.size ? this._positionsFromVector(this._packX) : null;
+      const filletTravel = (a, pos, p, f) => {
+        const cx = pos[a.centre * 2], cy = pos[a.centre * 2 + 1];
+        const dir = arcSweepInfo({ x: cx, y: cy }, { x: pos[a.start * 2], y: pos[a.start * 2 + 1] }, { x: pos[a.end * 2], y: pos[a.end * 2 + 1] }, { sweep: a.sweep }).dir;
+        const sigma = p === a.start ? 1 : -1;
+        const rx = pos[p * 2] - cx, ry = pos[p * 2 + 1] - cy, dx = pos[p * 2] - pos[f * 2], dy = pos[p * 2 + 1] - pos[f * 2 + 1];
+        return sigma * dir * (rx * dy - ry * dx) / (Math.hypot(dx, dy) || 1e-12);
+      };
+      this._fillets = [...fillets.values()].filter(a => a.joins.every(j => filletTravel(a, posStart, j.p, j.f) > 0)).map(a => {
+        const tMin = Math.min(...a.joins.map(j => filletTravel(a, posStart, j.p, j.f)));
+        return { ...a, minT: tMin > 1e-2 ? 1e-2 : tMin * 0.5 };
+      });
+    }
+    if (!this._fillets.length) return true;
+    const pos = this._positionsFromVector(xCand);
+    for (const a of this._fillets) {
+      const cx = pos[a.centre * 2], cy = pos[a.centre * 2 + 1];
+      const dir = arcSweepInfo({ x: cx, y: cy }, { x: pos[a.start * 2], y: pos[a.start * 2 + 1] }, { x: pos[a.end * 2], y: pos[a.end * 2 + 1] }, { sweep: a.sweep }).dir;
+      for (const j of a.joins) {
+        const sigma = j.p === a.start ? 1 : -1;
+        const rx = pos[j.p * 2] - cx, ry = pos[j.p * 2 + 1] - cy, dx = pos[j.p * 2] - pos[j.f * 2], dy = pos[j.p * 2 + 1] - pos[j.f * 2 + 1];
+        if (!(sigma * dir * (rx * dy - ry * dx) / (Math.hypot(dx, dy) || 1e-12) > a.minT)) return false;
+      }
+    }
+    return true;
   }
 
   // Unpack solution vector back into joints map
@@ -1160,9 +1203,9 @@ export class NewtonSolver {
       const residual0 = Math.sqrt(r0);
       if (residual0 > this.config.prepassResidualSkip) {
         const pre = this._preRelax(x, full.asm);
-        x = pre.x;
+        if (!hasSpring || this._keepsFillets(pre.x)) x = pre.x;
         if (pre.converged) {
-          if (!this._scalarsValid(x)) {
+          if (!this._scalarsValid(x) || (hasSpring && !this._keepsFillets(x))) {
             x = new Float64Array(x0);
           } else {
             // Even a converged pre-pass deserves the rank check — the user may
@@ -1218,7 +1261,8 @@ export class NewtonSolver {
         try { console.log('[NewtonSolver] iter=', k, 'cost=', cost.toExponential(), 'costNew=', costNew.toExponential(), 'lambda=', lambda.toExponential(), 'maxStep=', maxStep.toExponential()); } catch(_) {}
       }
 
-      if (costNew < cost) {
+      const validCand = !hasSpring || this._keepsFillets(xCand);
+      if (costNew < cost && validCand) {
         // Accept step
         x = xCand; lastCost = costNew; lambda = Math.max(this.config.lambdaInit, lambda * this.config.lambdaDown);
       } else {
@@ -1227,7 +1271,7 @@ export class NewtonSolver {
       }
 
       // Convergence by step magnitude
-      if (maxStep < this.config.tol) { converged = true; finalError = Math.sqrt(2 * costNew); x = xCand; exitedByStep = true; break; }
+      if (validCand && maxStep < this.config.tol) { converged = true; finalError = Math.sqrt(2 * costNew); x = xCand; exitedByStep = true; break; }
 
       // keep last cost
       finalError = Math.sqrt(2 * costNew);
@@ -1250,7 +1294,7 @@ export class NewtonSolver {
         for (let i = 0; i < n; ++i) xPolish[i] = x[i] + dx[i];
         const rPolish = this._assemble(xPolish, { jacobian: false }).r;
         let costPolish = 0.0; for (let i = 0; i < rPolish.length; ++i) costPolish += rPolish[i] * rPolish[i]; costPolish *= 0.5;
-        if (costPolish < 0.5 * finalError * finalError) {
+        if (costPolish < 0.5 * finalError * finalError && (!hasSpring || this._keepsFillets(xPolish))) {
           x = xPolish; finalError = Math.sqrt(2 * costPolish);
         }
       }

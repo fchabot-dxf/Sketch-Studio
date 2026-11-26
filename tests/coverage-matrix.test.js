@@ -96,7 +96,7 @@ ok('a diameter dimension is covered through Slot width (not a separate matrix ro
 const KNOWN = {
   'NEW-6': 'feasible tangent refused in the shared variant: equal concentric circles (lockTangentBranch locks external) and an arc centred on another arc rim (the nearest solve collapses it); the radius-must-change cells were fixed by tasks 515 and 523',
   'NEW-10': 'coincident onto a fillet arc whose centre is shared with the other operand (LF / CF / SF shared): feasible (PlaneGCS keeps the fillet arc at 83 degrees) but our solve collapses it (its two ends meet, 79 -> 0 degrees): refused (task 550: a zero-sweep arc is never accepted; before task 550 the collapse was accepted and the cell read PASS); solving to the non-collapsed pose is follow-up work, the same family as the feasible cells refused by task 521',
-  'NEW-11': 'midpoint of a FILLET arc (task 875), bite only: a fillet arc stores no direction (drawn the shortest way, its midpoint on the side it is drawn on) and the bite jitter (3 % of the drawing, the size of the fillet radius 10) flips that side when the arc is near 180 deg (locked LF / CF / OF: the creation solve bends the fillet to 169 deg, the who-moves placement moving the fillet without its virtual-sharp point V) or is moved by a shared joint (FF shared): the re-solve does not come back. Carrying V with its fillet in the placement is follow-up work',
+  // NEW-11 (fillet arc stored sweep=undefined) deleted in task 1009: applyFillet sets arcShape.sweep from creation orientation.
   // NEW-9 (coincident of a line end onto a rect corner that shares the line's other end, refused by a collapsing solve) was deleted by task 525:
   // the who-moves placement moves one operand and no matrix cell fails it any more.
 };

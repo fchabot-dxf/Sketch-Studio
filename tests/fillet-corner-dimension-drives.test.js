@@ -65,7 +65,8 @@ const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion fai
   assert(!r2.reverted && Math.abs(dist() - 22) < 1e-3, 'edit to 22 moves the geometry, got ' + dist());
 
   // 2. a second dimension on the same pair is now genuinely determined: still reference
-  const dim2 = { type: CONSTRAINT_TYPES.DISTANCE, joints: [...vs], value: 22, dimMode: 'aligned', isDriven: false };
+  // (TASK 1006 UX-16: the "determined -> reference" rule is the BIRTH rule: the dimension is a just-placed one)
+  const dim2 = { type: CONSTRAINT_TYPES.DISTANCE, joints: [...vs], value: 22, dimMode: 'aligned', isDriven: false, __newlyPlaced: true };
   state.constraints.push(dim2);
   showEditInput(svg, state, dim2);
   assert(dim2.isDriven === true, 'a second dimension on an already-determined pair stays driven');

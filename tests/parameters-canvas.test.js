@@ -204,19 +204,23 @@ function drawing() {
   void d3;
 }
 
-// ================================================================ 4. a REFERENCE dimension and a DETERMINED one never open the box; a formula cannot read a reference (O9)
+// ================================================================ 4. a REFERENCE dimension and a DETERMINED one are never typed (TASK 1006 DIV-03: the box opens READ-ONLY, Enter changes
+// nothing); a formula cannot read a reference (O9)
 {
   const { S, d1, d2, A } = drawing();
   const diag = ConstraintManager.createConstraint(S.state, 'distance', { joints: [A.at(0, 0), A.at(100, 40)], value: Math.hypot(100, 40), dimMode: 'aligned', isDriven: true, driven: true }, { source: 'audit' });
   ok(diag, 'a reference dimension was made');
+  const v0 = diag.value;
+  showEditInput(svg, S.state, diag);
+  ok(isInputActive() && dimInput.readOnly === true, 'a reference dimension opens its box read-only');
   const r = typeInto(S, diag, '50');
-  ok(!r.opened, 'a reference dimension has no input box');
+  ok(r.opened && !r.stillOpen && diag.isDriven && diag.value === v0 && dimInput.readOnly === false, 'Enter closes it and changes nothing');
   const pv = previewDimensionInput(S.state, d1, diag.name);
   ok(!pv.ok && pv.code === 'REFERENCE_DIM', 'a formula cannot read a reference dimension: ' + pv.hint);
   ok(!completionsFor(S.state, 'd', 1) || !completionsFor(S.state, 'd', 1).items.some((i) => i.name === diag.name), 'the autocomplete never offers a reference dimension');
   // a dimension the other driving constraints already determine is placed driven and is never typed
   const dup = ConstraintManager.createConstraint(S.state, 'distance', { joints: [A.at(0, 0), A.at(100, 0)], value: 100, dimMode: 'horizontal' }, { source: 'audit' });
-  if (dup) { const t = typeInto(S, dup, '30'); ok(!t.opened && (dup.isDriven || dup.driven), 'a determined dimension is a reference and never opens'); }
+  if (dup) { const t = typeInto(S, dup, '30'); ok((dup.isDriven || dup.driven) && !t.stillOpen && dup.value === 100, 'a determined dimension is a reference and is never typed'); }
   void d2;
 }
 

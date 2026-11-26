@@ -66,10 +66,10 @@ import { arcSweepInfo } from './geometry.js';
 import { buildNodeMap, curveEnds, findConnectedChain } from './loop-finder.js';
 import { makeArc } from './shapes.js';
 import { newJointId, newShapeId } from './shape-id.js';
-import { parse as parseUnit } from './units.js';
-import { nextDimensionName } from './parameters.js';
+import { nextDimensionName, evaluateBoxText, OFFSET_ZERO_REASON } from './parameters.js';
 import { SolverConfig } from './solver-config.js';
 import { inActiveSketch } from './sketch-model.js';
+export { OFFSET_ZERO_REASON };
 // (No import of ./constraints.js: the solver reads this module, and constraints.js -> constraint-manager.js -> creation-placement.js imports the
 // solver. The stored record is built by offsetConstraintRecord below, the one form constraints.js createConstraint also returns.)
 
@@ -92,11 +92,17 @@ export function defaultOffsetDistance(docUnit = 'mm') { return docUnit === 'in' 
 // |value| >= its source radius) is REFUSED (offsetValueRefusal; Fusion accepts it and the offset circle disappears: we refuse, the curve would
 // lose its constraints). The FREE distance of an undimensioned offset (task 667, the solver's scalar unknown) stays > 0: undimensionOffset turns
 // a negative value into |value| with every side flipped (the same geometry) when the dimension is deleted, so a drag can never flip it.
-export const OFFSET_ZERO_REASON = 'an offset distance cannot be 0 (a negative distance puts the offset on the other side)';
-/** A typed distance in the document unit (a suffix overrides) -> world mm, SIGNED (task 690), or null when it is not a number or it is 0. */
-export function parseOffsetDistance(str, docUnit = 'mm') {
-  const v = parseUnit(str, docUnit);
-  return (v != null && Number.isFinite(v) && v !== 0) ? v : null;
+/** TASK 1013 (B-19e): evaluate a signed offset distance expression (number, unit, formula `d1 / 2`, `-d1 / 2`, or `name = expr`) through evaluateBoxText. */
+export function evaluateOffsetDistance(state, str, unit = 'mm') {
+  const r = evaluateBoxText(state, str, 'length', { unit, allowAssign: !!state });
+  if (!r.ok) return r;
+  if (!(Number.isFinite(r.v) && r.v !== 0)) return { ok: false, code: 'OUT_OF_RANGE', message: OFFSET_ZERO_REASON };
+  return r;
+}
+/** A typed distance in the document unit (a suffix overrides; with `state`, formulas like `d1 / 2` resolve too) -> world mm, SIGNED (task 690), or null when invalid or 0. */
+export function parseOffsetDistance(str, unit = 'mm', state = null) {
+  const r = evaluateOffsetDistance(state, str, unit);
+  return r.ok ? r.v : null;
 }
 /** THE negative rule of the Offset tool (task 690): a signed distance v on `side` -> { side, d }: a negative v is the other side at |v|. */
 export function offsetSideAndDistance(side, v) {
@@ -322,7 +328,7 @@ export function offsetArcSpan(p) {
  * the stored per-piece sides stay the ones of `side` (sides[k] * value = the geometry: exactly what editing the dimension to d gives later).
  * -> { ok: true, shapes: [ids], joints: [ids], constraint } or { ok: false, reason } (nothing changes).
  */
-export function applyOffset(state, chain, d, side) {
+export function applyOffset(state, chain, d, side, options = {}) {
   if (chain.pieces.some((p) => { const s = state.shapes.find((x) => x.id === p.id); return !s || !inActiveSketch(state, s); })) return { ok: false, reason: 'Offset works in the active sketch only' };
   const o = offsetSideAndDistance(side, d), flip = d < 0 ? -1 : 1;
   const g = offsetChainGeometry(state, chain, o.d, o.side);
@@ -361,7 +367,9 @@ export function applyOffset(state, chain, d, side) {
   // (the dimensions' fixed default, 30 mm, puts it past the end of a short piece).
   const f0 = frames[0], size = f0.kind === 'line' ? f0.len : f0.kind === 'arc' ? f0.R * f0.span : f0.R;
   out.constraint = { ...offsetConstraintRecord({ shapes, rev: chain.pieces.map((p) => !!p.rev), sides, joins: chain.joins, closed: chain.closed, value: d, offset: size / 4 }),
-    isDriven: false, driven: false, name: nextDimensionName(state.constraints, state.parameters) };
+    isDriven: false, driven: false,
+    name: (options && options.name) || nextDimensionName(state.constraints, state.parameters),
+    ...(options && options.expression ? { expression: options.expression } : {}) };
   state.constraints.push(out.constraint);
   return out;
 }

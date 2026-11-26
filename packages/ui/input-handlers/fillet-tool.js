@@ -17,7 +17,7 @@ import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { snapBoostFor } from '#ui/snap-detection.js';
 import {
   findCornerAtPoint, findCornerAtJoint, findFilletShapeAtPoint, findCornerBetweenLines, cornerFilletGeometry, applyFillet,
-  diagnoseNoFillet, T_JUNCTION_MESSAGE, defaultFilletRadius, parseFilletRadius
+  diagnoseNoFillet, T_JUNCTION_MESSAGE, defaultFilletRadius, parseFilletRadius, evaluateFilletRadius
 } from '#core/fillet.js';
 import { SNAP, TOOL_MODES } from '#core/constants.js';
 import { dragArrowSvg, dragArrowHit, dragArrowDirection } from '#ui/drag-arrow-handle.js';
@@ -28,7 +28,8 @@ import { resolveCanvasSvg, setCanvasCursor } from '#ui/cursor-manager.js';
 import { formatConstraintValue, formatLenLabel } from '#ui/svg-renderer.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's curve warns
-import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox } from '#ui/numeric-input-manager.js';
+import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox, attachExternalCompletion } from '#ui/numeric-input-manager.js';
+import { applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 const OVERLAY_ID = 'fillet-tool-overlay';
@@ -284,7 +285,7 @@ export function handleFilletKeyDown(e, svg, state) {
     const unit = docUnit();
     const input = prompt('Enter Fillet Radius (' + unit + '):', formatLenLabel(currentRadius));
     if (input !== null) {
-      const val = parseFilletRadius(input, unit); // world mm; a typed unit suffix overrides the doc unit
+      const val = parseFilletRadius(input, unit, state); // world mm; a typed unit suffix or formula resolves in state
       if (val != null) {
         setFilletRadius(val); // TASK 878: the radius just typed: no message
         if (hoverCorner) {
@@ -318,20 +319,32 @@ function openInput(svg, state, viewState, corner) {
   document.body.appendChild(el);
   // a history change (Undo / Redo) ends the fillet in progress; the corner it was on may be gone
   const unsubHistory = typeof state.addHistoryListener === 'function' ? state.addHistoryListener(() => { if (!_committing) cancelAll(); }) : null;
-  _input = { el, corners: [corner], radius: currentRadius, invalid: false, svg, state, viewState, unsubHistory };
+  _input = { el, corners: [corner], radius: currentRadius, expression: null, name: null, assign: null, invalid: false, svg, state, viewState, unsubHistory, completion: null };
   ensureViewListener();
 
   const applyInputValue = () => {
-    const v = parseFilletRadius(el.value, docUnit());
-    if (v != null) { _input.radius = v; _input.invalid = false; }
-    else _input.invalid = true;
+    const r = evaluateFilletRadius(state, el.value, docUnit());
+    if (r.ok) {
+      _input.radius = r.v;
+      _input.expression = r.expression;
+      _input.name = r.name || null;
+      _input.assign = r.assign || null;
+      _input.invalid = false;
+    } else {
+      _input.expression = null;
+      _input.name = null;
+      _input.assign = null;
+      _input.invalid = true;
+    }
     el.setAttribute('aria-invalid', _input.invalid ? 'true' : 'false');
     refreshPreview();
   };
-  el.addEventListener('input', applyInputValue);
+  _input.completion = attachExternalCompletion(el, state, () => { applyInputValue(); });
+  el.addEventListener('input', () => { applyInputValue(); if (_input && _input.completion) _input.completion.update(); });
   el.addEventListener('keydown', (ev) => {
     ev.stopPropagation(); // typing must never reach the canvas shortcuts (Delete, F, R, ...)
-    if (handleBoxUndoKey(ev, el, defaultValue, applyInputValue)) return;
+    if (_input && _input.completion && _input.completion.handleKey(ev)) { ev.stopImmediatePropagation(); return; }
+    if (handleBoxUndoKey(ev, el, defaultValue, () => { applyInputValue(); if (_input && _input.completion) _input.completion.close(); })) return;
     if (ev.key === 'Enter') { ev.preventDefault(); commitFilletInput(); }
     else if (ev.key === 'Escape') { ev.preventDefault(); cancelAll(); }
   });
@@ -416,7 +429,11 @@ function dragHandleTo(svg, e) {
   if (v == null) return;
   _input.el.value = text;
   _input.radius = v;
+  _input.expression = null;
+  _input.name = null;
+  _input.assign = null;
   _input.invalid = false;
+  if (_input.completion) _input.completion.close();
   _input.el.setAttribute('aria-invalid', 'false');
   refreshPreview();
 }
@@ -447,8 +464,13 @@ export function commitFilletInput() {
   if (!_input) return;
   const { el, corners, state } = _input;
   const unit = docUnit();
-  const val = parseFilletRadius(el.value, unit);
-  if (val == null) { showNotification('Enter a radius greater than zero', 'warning'); return; }
+  const parsed = evaluateFilletRadius(state, el.value, unit);
+  if (!parsed.ok) {
+    const formulaErr = parsed.code === 'UNKNOWN_NAME' || parsed.code === 'UNIT_MISMATCH' || parsed.code === 'NAME_TAKEN' || parsed.code === 'RESERVED_NAME' || parsed.code === 'REFERENCE_DIM';
+    showNotification(formulaErr ? parsed.message : 'Enter a radius greater than zero', 'warning');
+    return;
+  }
+  const val = parsed.v;
   for (const c of corners) {
     const pre = cornerFilletGeometry(c, val);
     if (!pre.valid) { showNotification(`Can't fillet: ${pre.reason}`, 'warning'); return; } // input stays open
@@ -464,7 +486,8 @@ export function commitFilletInput() {
   let failReason = null;
   try {
     state.saveState?.('fillet');
-    const res0 = applyFillet(state, corners[0], val);
+    if (parsed.assign) applyLiveAssign(state, parsed.assign);
+    const res0 = applyFillet(state, corners[0], val, { expression: parsed.expression, name: parsed.name });
     if (!res0 || !res0.success) {
       failReason = (res0 && res0.reason) || 'unknown';
     } else {
@@ -500,6 +523,7 @@ export function commitFilletInput() {
 }
 
 function removeInput() {
+  if (_input && _input.completion) _input.completion.detach();
   if (_input && _input.unsubHistory) _input.unsubHistory();
   if (_input && _input.el && _input.el.parentNode) _input.el.parentNode.removeChild(_input.el);
   _input = null;

@@ -7,7 +7,7 @@ import { applySnapConstraint } from '#core/snap-constraints.js';
 import { hideInput, setupNumericInput } from '#ui/numeric-input-manager.js';
 import { angleBetween } from '#core/geometry.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, MIN_SHAPE_SIZE, tooSmall, liveExpression } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, MIN_SHAPE_SIZE, tooSmall, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 
 const localState = { isDragging: false, dragStartScreen: null };
 
@@ -39,7 +39,7 @@ export const ARC_MODES = {
 // arc gets the radius dimension it always got); after the start click the SWEEP box (degrees: a typed sweep is the arc's exact angle, the winding
 // direction follows the cursor). Both through base-tool's shared creation-box path; a value not typed follows the cursor.
 // lockedRadius / lockedSweep = what the user TYPED (null = the cursor sets it); `cursor` = the last world point, `screen` = the last pointer.
-let arcState = { lockedRadius: null, radiusExpression: null, lockedSweep: null, field: null, cursor: null, screen: null };
+let arcState = { lockedRadius: null, radiusExpression: null, radiusName: null, radiusAssign: null, lockedSweep: null, field: null, cursor: null, screen: null };
 const BOX_RADIUS = { single: { field: 'radius' } };
 const BOX_SWEEP = { single: { field: 'sweep', quantity: 'angle' } }; // TASK 769: degrees (the radius box is a length)
 const MIN_R = MIN_SHAPE_SIZE;   // TASK 782: the one minimum size (base-tool.js)
@@ -50,7 +50,7 @@ function openArcBox(pos, field) {
   openCreationBoxes(pos || { clientX: 0, clientY: 0 }, field === 'radius' ? BOX_RADIUS : BOX_SWEEP, [0]);
 }
 function closeArcBoxes() {
-  arcState.lockedRadius = null; arcState.radiusExpression = null; arcState.lockedSweep = null;
+  arcState.lockedRadius = null; arcState.radiusExpression = null; arcState.radiusName = null; arcState.radiusAssign = null; arcState.lockedSweep = null;
   if (arcState.field) hideInput();
   arcState.field = null; arcState.cursor = null; arcState.screen = null;
 }
@@ -71,12 +71,17 @@ function endAngleFor(state, startAngle, cursorAngle) {
 /** Only a TYPED field locks (the box otherwise shows the live value, rounded). */
 function takeTyped(detail) {
   if (detail.reset && detail.reset[0]) {
-    if (detail.field === 'radius') { arcState.lockedRadius = null; arcState.radiusExpression = null; }
+    if (detail.field === 'radius') { arcState.lockedRadius = null; arcState.radiusExpression = null; arcState.radiusName = null; arcState.radiusAssign = null; }
     else if (detail.field === 'sweep') arcState.lockedSweep = null;
     return;
   }
   if (!detail.typed || !detail.typed[0]) return;
-  if (detail.field === 'radius') { arcState.lockedRadius = detail.value > 0 ? detail.value : null; arcState.radiusExpression = arcState.lockedRadius !== null ? liveExpression(detail, 0) : null; }
+  if (detail.field === 'radius') {
+    arcState.lockedRadius = detail.value > 0 ? detail.value : null;
+    arcState.radiusExpression = arcState.lockedRadius !== null ? liveExpression(detail, 0) : null;
+    arcState.radiusName = arcState.lockedRadius !== null ? liveName(detail, 0) : null;
+    arcState.radiusAssign = arcState.lockedRadius !== null ? liveAssign(detail, 0) : null;
+  }
   else if (detail.field === 'sweep') arcState.lockedSweep = detail.value > 0 ? Math.min(detail.value, 359.999) : null;
 }
 /** The preview of the arc phase: start -> the cursor's angle, or the typed sweep. Returns the end point. */
@@ -145,7 +150,7 @@ export function setupArcTool(svg, state) {
       takeTyped(detail);
       redrawArcPreview(state);
     },
-    onCancel: () => { arcState.lockedRadius = null; arcState.radiusExpression = null; arcState.lockedSweep = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
+    onCancel: () => { arcState.lockedRadius = null; arcState.radiusExpression = null; arcState.radiusName = null; arcState.radiusAssign = null; arcState.lockedSweep = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
   });
 
   if (!state.arcMode) state.arcMode = ARC_MODES.CENTER_START_END;
@@ -278,9 +283,9 @@ function handleCenterArc(state, snap, pt, w, pos) {
     state.active.totalSweep = 0;
 
     arcLog('create-start-point', { id: startId, pt });
-    const typedRadius = arcState.lockedRadius, typedRadiusExpression = arcState.radiusExpression;
+    const typedRadius = arcState.lockedRadius, typedRadiusExpression = arcState.radiusExpression, typedRadiusName = arcState.radiusName, typedRadiusAssign = arcState.radiusAssign;
     openArcBox(pos || (arcState.screen ? { clientX: arcState.screen.x, clientY: arcState.screen.y } : null), 'sweep');   // TASK 597: the sweep shows now, after the start click
-    arcState.lockedRadius = typedRadius; arcState.radiusExpression = typedRadiusExpression;   // the radius typed in the first box still becomes the arc's radius dimension
+    arcState.lockedRadius = typedRadius; arcState.radiusExpression = typedRadiusExpression; arcState.radiusName = typedRadiusName; arcState.radiusAssign = typedRadiusAssign;   // the radius typed in the first box still becomes the arc's radius dimension
     return true;
   } else if (state.active.phase === 'start') {
     const center = state.joints.get(state.active.center);
@@ -321,11 +326,13 @@ function handleCenterArc(state, snap, pt, w, pos) {
         const shapeId = res.shapes[0].id;
         // Only add a radius distance constraint if the user explicitly entered a radius
         if (arcState.lockedRadius != null) {
+          if (arcState.radiusAssign) applyLiveAssign(state, arcState.radiusAssign);
           ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
             shape: shapeId,
             value: radius,
             isRadius: true,
-            expression: arcState.radiusExpression
+            expression: arcState.radiusExpression,
+            ...(arcState.radiusName ? { name: arcState.radiusName } : {})
           }, { source: 'arc' });
         }
       }

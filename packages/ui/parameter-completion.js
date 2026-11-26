@@ -12,16 +12,23 @@
 import { completionsFor } from '#core/parameters.js';
 
 export function createParameterCompletion({ input, list, context, onInsert = () => {}, onChange = () => {} }) {
+  const getInput = typeof input === 'function' ? input : () => input;
+  let boundEl = null;
   let open = null; // { from, to, prefix, items, index, moved } while the list is open
 
   function close() {
     open = null;
     list.replaceChildren();
     list.classList.add('hidden');
-    input.removeAttribute('aria-activedescendant');
+    const el = boundEl || getInput();
+    if (el && typeof el.removeAttribute === 'function') el.removeAttribute('aria-activedescendant');
+    boundEl = null;
   }
 
   function render() {
+    const el = getInput();
+    if (!el) return;
+    boundEl = el;
     list.replaceChildren();
     open.items.forEach((it, i) => {
       const li = document.createElement('li');
@@ -38,25 +45,27 @@ export function createParameterCompletion({ input, list, context, onInsert = () 
       li.append(name, val);
       list.appendChild(li);
     });
-    input.setAttribute('aria-activedescendant', `${list.id}-${open.index}`);
+    el.setAttribute('aria-activedescendant', `${list.id}-${open.index}`);
     list.classList.remove('hidden');
   }
 
   // the list for the word under the caret (called after every edit); closes when nothing matches or there is nothing to complete against
   function update() {
-    const ctx = context();
-    const found = ctx ? completionsFor(ctx.state, input.value, input.selectionStart, { unit: ctx.unit, exclude: ctx.exclude }) : null;
+    const el = getInput();
+    const ctx = el ? context() : null;
+    const found = ctx ? completionsFor(ctx.state, el.value, el.selectionStart, { unit: ctx.unit, exclude: ctx.exclude }) : null;
     if (found) { open = { ...found, index: 0, moved: false }; render(); } else close();
     onChange();
   }
 
   function insert(i) {
-    if (!open || !open.items[i]) return;
-    const v = input.value;
-    input.value = v.slice(0, open.from) + open.items[i].insert + v.slice(open.to);
+    const el = boundEl || getInput();
+    if (!el || !open || !open.items[i]) return;
+    const v = el.value;
+    el.value = v.slice(0, open.from) + open.items[i].insert + v.slice(open.to);
     const caret = open.from + open.items[i].insert.length;
-    input.setSelectionRange(caret, caret);
-    input.focus();
+    el.setSelectionRange(caret, caret);
+    el.focus();
     close(); // closed until the next keystroke, so Enter then commits
     onInsert();
   }

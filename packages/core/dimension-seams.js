@@ -14,23 +14,17 @@ import { ConstraintManager } from '#core/constraint-manager.js';
 import { solveGivingWay } from '#core/creation-placement.js';
 import { recordUndo } from '#core/sketch-model.js';
 import { projectDimLabel } from '#core/dim-label.js';
-import { replaceParameters, usersOf, planChange, entryName, entryValue, writeEntry, reconcileKeptDimensions } from '#core/parameters.js';
+import { replaceParameters, usersOf, planChange, entryName, entryValue, writeEntry, reconcileKeptDimensions, SIZE_REFUSAL, sizeRefusal, dimensionValueRefusal } from '#core/parameters.js';
 import { editPatterns, patternValuesRefusal } from '#core/pattern.js';
 import { patternSlotChanges, patternValuesIn, patternValueSlots } from '#core/pattern-values.js';
-import { OFFSET_ZERO_REASON, offsetValueRefusal } from '#core/offset.js';
+import { offsetValueRefusal } from '#core/offset.js';
 import { format as formatUnit } from '#core/units.js';
 import { docUnit } from '#core/settings-manager.js';
 
 const ITER = () => SolverConfig.ITERATIONS || 500;
 
-// TASK 782 / 789 / 789b: THE length rule. A length (a size a drawing tool's box is typed; the value of ANY distance dimension, from any path: typed,
-// a formula, a parameter re-evaluating it; a radius / diameter, a line's length, a distance between two shapes' points, aligned / horizontal / vertical,
-// point-to-line, line-to-line) must be more than 0: 0 collapses a line / circle or puts two points on each other (owner ruling, turn 2465: points that
-// meet are the Coincident constraint's job; Fusion's dimension BOX refuses 0 and -5 too, task 789b) and a negative one is no length. ONE message, shown by the drawing tools' box (numeric-input-manager.js
-// SIZE_REFUSAL_HINT) and by every dimension edit's refusal (commitDimensionEdits). An OFFSET (#core/offset.js) and an ANGLE have their own rules.
-export const SIZE_REFUSAL = 'a length must be more than 0';
-/** null, or SIZE_REFUSAL when `v` (a number, base unit) is 0 or less. */
-export const sizeRefusal = (v) => (Number(v) <= 0 ? SIZE_REFUSAL : null);
+// Re-export the ONE length rule from #core/parameters.js (shared by previewDimensionInput, evaluateBoxText, numeric-input-manager, commitDimensionEdits).
+export { SIZE_REFUSAL, sizeRefusal };
 const STEP_FRACTION = 0.1;
 const MAX_EDIT_STEPS = 40;
 
@@ -87,10 +81,7 @@ export function commitDimensionEdits(state, edits, opts = {}) {
   // TASK 789b: every DISTANCE dimension takes the length rule (sizeRefusal): 0 and negative values are refused (owner ruling, turn 2465).
   for (let i = 0; i < edits.length; i++) {
     const e = edits[i];
-    let why = null;
-    if (e.c.type === CONSTRAINT_TYPES.ANGLE) why = !(Number(e.value) > 0) ? 'an angle must be more than 0 degrees' : !(Number(e.value) <= 360) ? 'an angle must be at most 360 degrees' : null;
-    else if (e.c.type === CONSTRAINT_TYPES.OFFSET && !(Number(e.value) !== 0)) why = OFFSET_ZERO_REASON;
-    else if (e.c.type === CONSTRAINT_TYPES.DISTANCE) why = sizeRefusal(e.value);
+    const why = dimensionValueRefusal(e.c, e.value);
     if (why) return { reverted: true, clash: '', reason: why, culprit: { index: i, name: labelOf(e, i), reason: why } };
   }
   if (opts.refuseReference) {

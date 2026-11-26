@@ -131,13 +131,13 @@ function tokenize(text) {
 }
 
 // ── parser ──
-function makeParser(toks, firstTok) {
+function makeParser(toks, firstTok, allowAssign = true) {
   let p = firstTok;
   let depth = 0;
   const peek = (k = 0) => toks[Math.min(p + k, toks.length - 1)];
   const isOp = (t, c) => t.type === 'op' && t.text === c;
   const unexpected = (t) => {
-    if (isOp(t, '=')) return new Bail(fail('ASSIGN_NOT_TOP', '"=" only as  name = value  at the start', t));
+    if (isOp(t, '=')) return new Bail(fail('ASSIGN_NOT_TOP', allowAssign ? '"=" only as  name = value  at the start' : '"=" is not allowed here', t));
     const what = t.type === 'eof' ? 'the end of the input' : t.type === 'num' ? 'a number' : `'${t.text}'`;
     return new Bail(fail('SYNTAX', `unexpected ${what} at ${t.start}`, t));
   };
@@ -296,7 +296,7 @@ export function parseInput(text, { allowAssign = true } = {}) {
     }
     const toks = tokenize(text);
     if (toks.length === 1) return fail('SYNTAX', 'nothing to evaluate', toks[0]);
-    const ast = makeParser(toks, firstTok).parseAll();
+    const ast = makeParser(toks, firstTok, allowAssign).parseAll();
     return { ok: true, assign, ast };
   } catch (e) {
     if (e instanceof Bail) return e.err;

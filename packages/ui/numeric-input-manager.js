@@ -8,7 +8,7 @@ import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { applyParameterChange, dimensionInputLabel, isDimensionDetermined, sizeRefusal, SIZE_REFUSAL } from '#core/dimension-seams.js';
 import SettingsManager, { docUnit, isPrecisionKey } from '#core/settings-manager.js';
 import { basePer } from '#core/units.js';
-import { previewDimensionInput, quantityText, isDimension, evaluateBoxText } from '#core/parameters.js';
+import { previewDimensionInput, quantityText, dimensionUnit, isDimension, evaluateBoxText } from '#core/parameters.js';
 import { createParameterCompletion } from '#ui/parameter-completion.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
 import { dimLabelAt } from '#ui/hover-manager.js';
@@ -27,8 +27,9 @@ export const boxValueText = (v, quantity = 'length') => quantityText(Number(v), 
  *  { ok:true, v (base mm / degrees / a number), expression (the canonical text when the text reads a name, else null) } | { ok:false, message }.
  *  A length is read with the DOCUMENT unit as the default: a bare 2 in an inch document is 2 in (50.8 mm), "50mm", "1 1/2", 1 1/2" and "3/8 in" convert,
  *  "d1/2" is half of dimension d1. An angle or a count is read by the same parser (45, 45°, 0.5 rad). */
-export function readBoxText(text, quantity = 'length', state = uiState.appState) {
-    return evaluateBoxText(state, text, quantity, { unit: docUnit() });
+export function readBoxText(text, quantity = 'length', state = uiState.appState, opts = {}) {
+    const allowAssign = opts.allowAssign !== undefined ? opts.allowAssign : (quantity === 'length');
+    return evaluateBoxText(state, text, quantity, { unit: docUnit(), allowAssign });
 }
 /** The value a box's text means (see readBoxText), or NaN. */
 export function parseBoxValue(text, quantity = 'length', state = uiState.appState) {
@@ -209,6 +210,11 @@ let uiState = {
     values: [null, null], // TASK 769: the live value each field shows (base units), and `parsed` what each typed field reads as: a unit change shows them again
     parsed: [NaN, NaN],
     expressions: [null, null], // TASK 876: what each typed field READS when its text names a dimension / parameter (d1 / 2): the canonical formula the new dimension is driven by; null = a plain value
+    names: [null, null], // TASK 1013 (UX-17a): dimension name assigned via `w = expr` in a draw-time box, per field
+    assigns: [null, null], // TASK 1013 (UX-17a): existing user parameter update `{ name, text }` via `param = expr` in a draw-time box, per field
+    externalInput: null, // TASK 1013 (UX-17c / B-19e): active external box (Fillet / Offset) borrowing the ONE #dimComplete list
+    externalState: null,
+    externalOnInsert: null,
     refusalText: '', // TASK 782 / 876: why the refused field is refused (a size of 0 or less, or the edit box's own reason: an unknown name, a syntax error)
     openValues: [null, null], // TASK 769: the values the box opened with (its Ctrl+Z default text, shown again on a unit change)
     refusing: false, // TASK 782: a typed size is 0 or less: the box shows it as invalid, Enter and a click place nothing
@@ -297,6 +303,16 @@ export function setupNumericInput(svg, state) {
     uiState.dualInputW = inputW;
     uiState.dualInputH = inputH;
     uiState.dualSep = sep;
+    for (const el of [inputW, inputH]) {
+        if (el && typeof el.setAttribute === 'function') {
+            el.setAttribute('aria-describedby', 'dimHint');
+            el.setAttribute('aria-controls', 'dimComplete');
+            el.setAttribute('aria-autocomplete', 'list');
+            el.setAttribute('autocomplete', 'off');
+            el.setAttribute('autocapitalize', 'off');
+            el.setAttribute('spellcheck', 'false');
+        }
+    }
 
     // --- Event Listeners ---
     setupListeners();
@@ -326,8 +342,8 @@ export function handleBoxUndoKey(ev, el, defaultValue, onReset, opts = {}) {
 function setupListeners() {
     // Single Input Handler
     uiState.singleInput.addEventListener('keydown', (e) => {
-        // TASK 535 autocomplete: while the list is open Up / Down move, Enter / Tab insert, Esc closes the list (a second Esc is the box's own Esc)
-        if (uiState.mode === 'edit' && uiState.completion && uiState.completion.handleKey(e)) {
+        // TASK 535 / 1013 (UX-17c) autocomplete: works in BOTH edit mode and live draw-time mode (ONE completion path)
+        if (uiState.mode !== 'view' && uiState.completion && uiState.completion.handleKey(e)) {
             e.stopImmediatePropagation(); return;
         }
         if (handleBoxUndoKey(e, uiState.singleInput, uiState.defaults[0], () => {
@@ -338,6 +354,7 @@ function setupListeners() {
                 uiState.typed[0] = false;
                 uiState.undoneToDefault = true;
                 handlePreview(0);
+                updateAssist({ complete: false });
             }
         }, uiState.mode === 'edit' ? undefined : {
             dirty: () => !!uiState.typed[0],
@@ -356,10 +373,15 @@ function setupListeners() {
     const handleDualKey = (e, field) => {
         const idx = field === 'width' ? 0 : 1;
         const el = idx === 0 ? uiState.dualInputW : uiState.dualInputH;
+        // TASK 1013 (UX-17c): completion handles Up/Down, Tab (insert), Enter (when moved), Esc (close list) BEFORE field-switch Tab or box Esc
+        if (uiState.completion && uiState.completion.handleKey(e)) {
+            e.stopImmediatePropagation(); return;
+        }
         if (handleBoxUndoKey(e, el, uiState.defaults[idx], () => {
             uiState.typed[idx] = false;
             uiState.undoneToDefault = true;
             handlePreview(idx);
+            updateAssist({ complete: false });
         }, {
             dirty: () => !!uiState.typed[idx],
             onAtDefault: (!uiState.typed[0] && !uiState.typed[1] && !uiState.undoneToDefault) ? handleCancel : null
@@ -368,7 +390,10 @@ function setupListeners() {
         if (e.key === 'Escape') handleCancel();
         if (e.key === 'Tab') {
             e.preventDefault();
-            const next = field === 'width' ? uiState.dualInputH : uiState.dualInputW;
+            if (uiState.completion) uiState.completion.close();
+            const nextIdx = idx === 0 ? 1 : 0;
+            const next = nextIdx === 0 ? uiState.dualInputW : uiState.dualInputH;
+            uiState.typingIndex = nextIdx;
             next.focus();
             next.select();
         }
@@ -377,9 +402,11 @@ function setupListeners() {
 
     uiState.dualInputW.addEventListener('keydown', (e) => handleDualKey(e, 'width'));
     uiState.dualInputH.addEventListener('keydown', (e) => handleDualKey(e, 'height'));
+    uiState.dualInputW.addEventListener('focus', () => { if (uiState.typingIndex !== 0 && uiState.completion) uiState.completion.close(); uiState.typingIndex = 0; });
+    uiState.dualInputH.addEventListener('focus', () => { if (uiState.typingIndex !== 1 && uiState.completion) uiState.completion.close(); uiState.typingIndex = 1; });
     
-    uiState.dualInputW.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; uiState.typingIndex = 0; handlePreview(); });
-    uiState.dualInputH.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[1] = true; uiState.typingIndex = 1; handlePreview(); });
+    uiState.dualInputW.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; uiState.typingIndex = 0; handlePreview(); updateAssist(); });
+    uiState.dualInputH.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[1] = true; uiState.typingIndex = 1; handlePreview(); updateAssist(); });
 }
 
 // --- Public API ---
@@ -703,7 +730,9 @@ function handleCommit() {
             if (res.reverted) {
                 const why = res.reason || (res.clash ? `conflicts with ${res.clash}` : '');
                 const who = res.culprit && res.culprit.name && res.culprit.name !== target.name ? `${res.culprit.name}: ` : '';
-                showNotification(`Can't set to ${pv.kind === 'value' ? pv.value : uiState.singleInput.value.trim()}${why ? ` — ${who}${why}` : ''}. Reverted.`, "warning");
+                // TASK 1013 (UX-18): format refused values in document units (quantityText), never raw internal mm
+                const shown = pv.kind === 'value' ? quantityText(pv.value, dimensionUnit(target, docUnit()), 'unit') : uiState.singleInput.value.trim();
+                showNotification(`Can't set to ${shown}${why ? ` — ${who}${why}` : ''}. Reverted.`, "warning");
             }
         }
         target.__editing = false;
@@ -723,6 +752,8 @@ function handleCommit() {
             detail.value = readLiveField(0);
         }
         detail.expressions = typedExpressions();
+        detail.names = typedNames();
+        detail.assigns = typedAssigns();
         window.dispatchEvent(new CustomEvent('liveDimensionApplied', { detail }));
         if (detail.keepOpen) return;   // a tool that cannot place anything yet (a zero size) keeps its box open
         hideInput();
@@ -821,6 +852,7 @@ function insertBoxText(name, field) {
         if (uiState.completion) uiState.completion.close();
         updateAssist({ complete: false });
     } else {
+        if (uiState.completion) uiState.completion.close();
         handlePreview();   // the drawing shows what the name means now (and a name that cannot be read is refused under the box)
     }
 }
@@ -898,6 +930,8 @@ function handlePreview(resetIdx = -1) {
         if (!isNaN(w)) detail.width = w;
         if (!isNaN(h)) detail.height = h;
         detail.expressions = typedExpressions();
+        detail.names = typedNames();
+        detail.assigns = typedAssigns();
     } else {
         const v = readLiveField(0);
         detail.typed = uiState.typed.slice();
@@ -907,6 +941,8 @@ function handlePreview(resetIdx = -1) {
             detail.value = v;
         }
         detail.expressions = typedExpressions();
+        detail.names = typedNames();
+        detail.assigns = typedAssigns();
     }
     window.dispatchEvent(new CustomEvent('liveDimensionPreview', { detail }));
 }
@@ -921,10 +957,21 @@ function liveField(index) {
 function typedExpressions() {
     return uiState.expressions.map((x, i) => (uiState.typed[i] ? x : null));
 }
+function typedNames() {
+    return uiState.names.map((x, i) => (uiState.typed[i] ? x : null));
+}
+function typedAssigns() {
+    return uiState.assigns.map((x, i) => (uiState.typed[i] ? x : null));
+}
 function readLiveField(index) {
     const r = readBoxText(liveField(index).value, uiState.quantities[index]);
     const v = r.ok ? r.v : NaN;
-    if (uiState.typed[index]) { uiState.parsed[index] = v; uiState.expressions[index] = r.ok ? r.expression : null; }
+    if (uiState.typed[index]) {
+        uiState.parsed[index] = v;
+        uiState.expressions[index] = r.ok ? r.expression : null;
+        uiState.names[index] = r.ok ? (r.name || null) : null;
+        uiState.assigns[index] = r.ok ? (r.assign || null) : null;
+    }
     return v;
 }
 // TASK 782: THE refusal of a typed size, one check for every drawing tool's box: a TYPED 'length' field (a rectangle's W / H, a line's L, a circle's
@@ -1032,16 +1079,75 @@ function createAssistElements(single) {
     attachCompletion(single);
 }
 
+// the currently active text input for #dimComplete: an external box (Fillet/Offset), the active field of #dualInput, or #dimInput
+function activeBoxInput() {
+    if (uiState.externalInput) return uiState.externalInput;
+    if (uiState.mode === 'live-dual') return uiState.typingIndex === 1 ? uiState.dualInputH : uiState.dualInputW;
+    return uiState.singleInput;
+}
+
 // the list's behaviour is the shared one (the same function a Parameters-window expression field calls)
 function attachCompletion(single) {
     uiState.completion = createParameterCompletion({
-        input: single,
+        input: () => activeBoxInput(),
         list: uiState.listEl,
-        context: () => (uiState.mode === 'edit' && uiState.target
-            ? { state: uiState.appState, unit: docUnit(), exclude: uiState.target.name ? [uiState.target.name] : [] } : null),
-        onInsert: () => { updateAssist({ complete: false }); placeAssist(); },
+        context: () => {
+            if (uiState.externalInput) {
+                return uiState.externalState ? { state: uiState.externalState, unit: docUnit(), exclude: [] } : null;
+            }
+            if (!uiState.active || uiState.mode === 'view') return null;
+            if (uiState.mode === 'edit') {
+                return uiState.target ? { state: uiState.appState, unit: docUnit(), exclude: uiState.target.name ? [uiState.target.name] : [] } : null;
+            }
+            return uiState.appState ? { state: uiState.appState, unit: docUnit(), exclude: [] } : null;
+        },
+        onInsert: () => {
+            if (uiState.externalInput) {
+                if (typeof uiState.externalOnInsert === 'function') uiState.externalOnInsert();
+                placeAssist();
+                return;
+            }
+            if (uiState.mode === 'edit') {
+                updateAssist({ complete: false });
+                placeAssist();
+                return;
+            }
+            const idx = uiState.mode === 'live-dual' && uiState.typingIndex === 1 ? 1 : 0;
+            uiState.undoneToDefault = false;
+            uiState.typed[idx] = true;
+            uiState.typingIndex = idx;
+            handlePreview();
+            updateAssist({ complete: false });
+            placeAssist();
+        },
         onChange: placeAssist,
     });
+}
+
+/** TASK 1013 (UX-17c / B-19e): borrow the ONE shared #dimComplete list for an external value box (Fillet / Offset). */
+export function attachExternalCompletion(el, state, onInsert) {
+    const noop = { update: () => {}, handleKey: () => false, close: () => {}, detach: () => {} };
+    if (!el || !uiState.completion) return noop;
+    el.setAttribute('aria-controls', 'dimComplete');
+    el.setAttribute('aria-autocomplete', 'list');
+    el.setAttribute('autocomplete', 'off');
+    el.setAttribute('autocapitalize', 'off');
+    el.setAttribute('spellcheck', 'false');
+    uiState.externalInput = el;
+    uiState.externalState = state;
+    uiState.externalOnInsert = onInsert;
+    return {
+        update: () => { if (uiState.externalInput === el) uiState.completion.update(); },
+        handleKey: (e) => (uiState.externalInput === el ? uiState.completion.handleKey(e) : false),
+        close: () => { if (uiState.externalInput === el) uiState.completion.close(); },
+        detach: () => {
+            if (uiState.externalInput !== el) return;
+            uiState.completion.close();
+            uiState.externalInput = null;
+            uiState.externalState = null;
+            uiState.externalOnInsert = null;
+        },
+    };
 }
 
 function hideAssist() {
@@ -1052,6 +1158,11 @@ function hideAssist() {
 // hint = what Enter will do (value preview, the O4 change list) or why it will not; list = names under the caret
 function updateAssist({ complete = true } = {}) {
     if (!uiState.hintEl) return;
+    if (uiState.mode === 'live-single' || uiState.mode === 'live-dual') {
+        if (complete && uiState.completion) uiState.completion.update();
+        placeAssist();
+        return;
+    }
     if (uiState.mode !== 'edit' || !uiState.target) { if (!uiState.refusing) hideAssist(); return; }   // TASK 782: a live box's refusal hint stays
     const input = uiState.singleInput;
     const state = uiState.appState;
@@ -1072,7 +1183,7 @@ function updateAssist({ complete = true } = {}) {
 
 // the list sits right under the box, the hint under the list; when the bottom of the screen is too near both go above the box. Kept inside the viewport.
 function placeAssist() {
-    const input = uiState.mode === 'live-dual' ? uiState.dualContainer : uiState.singleInput;   // TASK 782: the refusal hint sits under the live box it belongs to
+    const input = uiState.externalInput || (uiState.mode === 'live-dual' ? uiState.dualContainer : uiState.singleInput);   // TASK 782 / 1013: sits under the active box
     if (!uiState.hintEl || !input || typeof input.getBoundingClientRect !== 'function') return;
     const els = [uiState.listEl, uiState.hintEl].filter((el) => el && !el.classList.contains('hidden'));
     if (!els.length) return;
@@ -1120,6 +1231,8 @@ function resetState() {
     uiState.parsed = [NaN, NaN];
     uiState.typingIndex = -1;
     uiState.expressions = [null, null];
+    uiState.names = [null, null];
+    uiState.assigns = [null, null];
     uiState.refusalText = '';
     uiState.openValues = [null, null];
     

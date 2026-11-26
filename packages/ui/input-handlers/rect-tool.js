@@ -9,10 +9,10 @@ import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { findSnap } from '#ui/snap-detection.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, snapPoint, tooSmall, liveExpression } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, snapPoint, tooSmall, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
-let rectState = { lockedWidth: null, lockedHeight: null, widthExpression: null, heightExpression: null, previewWidth: null, previewHeight: null };   // TASK 876: *Expression = the formula a typed side reads as (d1 / 2), or null
+let rectState = { lockedWidth: null, lockedHeight: null, widthExpression: null, heightExpression: null, widthName: null, heightName: null, widthAssign: null, heightAssign: null, previewWidth: null, previewHeight: null };   // TASK 876 / 1013
 const localState = { isDragging: false, dragStartScreen: null, boxes: false, cursor: null };
 // TASK 596: after the first click of a two-point rectangle the W x H boxes show at once (base-tool's shared creation-box path); the sides follow the cursor until typed
 const BOX = { dual: { kind: 'rect', labels: ['W', 'H'], separator: '×', quantities: ['length', 'length'] } };
@@ -54,8 +54,14 @@ function addTypedSideDimensions(state, rectResult) {
         return horizontal ? dy < TOL && dx > TOL : dx < TOL && dy > TOL;
     });
     const w = rectState.lockedWidth && side(true), h = rectState.lockedHeight && side(false);
-    if (w) ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [w.joints[0], w.joints[1]], value: rectState.lockedWidth, expression: rectState.widthExpression }, { source: 'rect' });
-    if (h) ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [h.joints[0], h.joints[1]], value: rectState.lockedHeight, expression: rectState.heightExpression }, { source: 'rect' });
+    if (w) {
+        if (rectState.widthAssign) applyLiveAssign(state, rectState.widthAssign);
+        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [w.joints[0], w.joints[1]], value: rectState.lockedWidth, expression: rectState.widthExpression, ...(rectState.widthName ? { name: rectState.widthName } : {}) }, { source: 'rect' });
+    }
+    if (h) {
+        if (rectState.heightAssign) applyLiveAssign(state, rectState.heightAssign);
+        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [h.joints[0], h.joints[1]], value: rectState.lockedHeight, expression: rectState.heightExpression, ...(rectState.heightName ? { name: rectState.heightName } : {}) }, { source: 'rect' });
+    }
 }
 
 export function setupRectTool(svg, state){
@@ -74,17 +80,17 @@ export function setupRectTool(svg, state){
         },
         onPreview: (detail) => {
             dbg.log('rect-tool', '[DEBUG RECT] liveDimensionPreview:', detail);
-            if (detail.reset && detail.reset[0]) { rectState.lockedWidth = null; rectState.widthExpression = null; }
-            else if (detail.typed[0]) { rectState.lockedWidth = detail.width > 0 ? detail.width : null; rectState.widthExpression = rectState.lockedWidth !== null ? liveExpression(detail, 0) : null; }   // only a TYPED side locks; the other shows the live cursor size
-            if (detail.reset && detail.reset[1]) { rectState.lockedHeight = null; rectState.heightExpression = null; }
-            else if (detail.typed[1]) { rectState.lockedHeight = detail.height > 0 ? detail.height : null; rectState.heightExpression = rectState.lockedHeight !== null ? liveExpression(detail, 1) : null; }
+            if (detail.reset && detail.reset[0]) { rectState.lockedWidth = null; rectState.widthExpression = null; rectState.widthName = null; rectState.widthAssign = null; }
+            else if (detail.typed[0]) { rectState.lockedWidth = detail.width > 0 ? detail.width : null; rectState.widthExpression = rectState.lockedWidth !== null ? liveExpression(detail, 0) : null; rectState.widthName = rectState.lockedWidth !== null ? liveName(detail, 0) : null; rectState.widthAssign = rectState.lockedWidth !== null ? liveAssign(detail, 0) : null; }   // only a TYPED side locks; the other shows the live cursor size
+            if (detail.reset && detail.reset[1]) { rectState.lockedHeight = null; rectState.heightExpression = null; rectState.heightName = null; rectState.heightAssign = null; }
+            else if (detail.typed[1]) { rectState.lockedHeight = detail.height > 0 ? detail.height : null; rectState.heightExpression = rectState.lockedHeight !== null ? liveExpression(detail, 1) : null; rectState.heightName = rectState.lockedHeight !== null ? liveName(detail, 1) : null; rectState.heightAssign = rectState.lockedHeight !== null ? liveAssign(detail, 1) : null; }
             const c1 = state.active && (state.active.startPt || (state.active.start ? state.joints.get(state.active.start) : null));
             if (c1 && sizedMode(rectModeOf(state))) {
                 const centre = rectModeOf(state) === RECT_MODES.CENTER;
                 safeUpdatePreview(state, 'rect', [state.active.start], lockedCorner(c1, localState.cursor || c1, centre), { mode: centre ? 'center' : RECT_MODES.TWO_POINT });
             }
         },
-        onCancel: () => { rectState.lockedWidth = null; rectState.lockedHeight = null; rectState.widthExpression = null; rectState.heightExpression = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
+        onCancel: () => { rectState.lockedWidth = null; rectState.lockedHeight = null; rectState.widthExpression = null; rectState.heightExpression = null; rectState.widthName = null; rectState.heightName = null; rectState.widthAssign = null; rectState.heightAssign = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
     });
 }
 
@@ -163,7 +169,7 @@ export function finalizeRectFromActive(svg, state){
     }catch(_){ try{ state.endUndoGroup(); }catch(_){ } state.active = null; return false; }
 }
 /** The W x H boxes and the sides typed in them go away (a rectangle was placed, or the tool was left). */
-function closeRectBoxes(){ rectState.lockedWidth = null; rectState.lockedHeight = null; rectState.widthExpression = null; rectState.heightExpression = null; localState.boxes = false; localState.cursor = null; try{ hideInput(); }catch(_){ } }
+function closeRectBoxes(){ rectState.lockedWidth = null; rectState.lockedHeight = null; rectState.widthExpression = null; rectState.heightExpression = null; rectState.widthName = null; rectState.heightName = null; rectState.widthAssign = null; rectState.heightAssign = null; localState.boxes = false; localState.cursor = null; try{ hideInput(); }catch(_){ } }
 export function resetRectState(state){ if(state && state.active && state.active.mode===TOOL_MODES.RECT){ closeRectBoxes(); state.active=null } }
 
 export function handleRectPointerDown(e, svg, state, hitSnap, w){

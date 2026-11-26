@@ -5,6 +5,9 @@
 import { updatePreview } from '#ui/preview-manager.js';
 import { showDualInput, showSingleInput, setLiveInputValue, updateInputPosition } from '#ui/numeric-input-manager.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
+import { planChange } from '#core/parameters.js';
+import { applyParameterChange } from '#core/dimension-seams.js';
+import { docUnit } from '#core/settings-manager.js';
 
 /** Extract `{ x, y }` from a snap target (`.pt` or `.x`/`.y`). */
 export const snapPoint = (snap) => (snap ? (snap.pt || (typeof snap.x === 'number' && typeof snap.y === 'number' ? { x: snap.x, y: snap.y } : null)) : null);
@@ -113,6 +116,21 @@ export function followCreationBoxes(e, values) {
  *  so the new dimension is driven by the name it was typed from and follows it. */
 export function liveExpression(detail, i) {
     return (detail.typed && detail.typed[i] && detail.expressions && detail.expressions[i]) || null;
+}
+/** TASK 1013 (UX-17a): custom dimension name typed via `w = expr` in field `i` of a draw-time box, or null. */
+export function liveName(detail, i) {
+    return (detail.typed && detail.typed[i] && detail.names && detail.names[i]) || null;
+}
+/** TASK 1013 (UX-17a): existing user parameter update `{ name, text }` typed via `param = expr` in field `i` of a draw-time box, or null. */
+export function liveAssign(detail, i) {
+    return (detail.typed && detail.typed[i] && detail.assigns && detail.assigns[i]) || null;
+}
+/** TASK 1013 (UX-17a): commit an existing user parameter update (`param = expr`) inside the active draw/modify undo step (snapshot: false). */
+export function applyLiveAssign(state, assign) {
+    if (!state || !assign || !assign.name) return { ok: true };
+    const plan = planChange(state, { type: 'setParameter', name: assign.name, text: assign.text }, { unit: docUnit() });
+    if (!plan.ok) return plan;
+    return applyParameterChange(state, plan, `change parameter ${assign.name}`, { snapshot: false });
 }
 
 /**

@@ -2194,6 +2194,70 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 
 ---
 
+### BUG-180
+- **Date / turn:** 2026-11-26 (audit ID `UX-17`; fixed in task `1013`)
+- **Reported by:** audits `1000` (`IR8.1a/b/c`, `IR8.4`, `D1.1/D1.2`), `CROSS-1000B` (`UX-17`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-17`: draw-time value boxes diverge from the dimension edit box: (a) typing `w = 50` in the Line draw-time box is refused with the self-contradictory hint `"=" only as  name = value  at the start` while the edit box accepts it; (b) typing `-5` or `0` keeps draw-time boxes open with inline `#dimHint` while the edit box closes and discards typed text with a toast; (c) `#dimComplete` autocomplete works in the edit box but not in draw-time boxes.
+- **What was wrong:** `evaluateBoxText` called `parseInput(text, { allowAssign: false })`, `expression.js` emitted `"=" only as name = value at the start` even when `allowAssign` was `false`, `previewDimensionInput` omitted the value-domain check (`dimensionValueRefusal`, so `-5`/`0` fell through to `commitDimensionEdits` + toast + `hideInput`), and `numeric-input-manager.js` gated `#dimComplete` completion strictly on `mode === 'edit'` and `singleInput`.
+- **Cause:** ONE shared parse/validate/autocomplete path: `packages/core/parameters.js` exports `dimensionValueRefusal` (used by `previewDimensionInput`, `evaluateBoxText`, and `commitDimensionEdits`), `evaluateBoxText` supports `name = expr` (dimension naming + O4 user-param update) with `expression.js` reporting `"=" is not allowed here` when `allowAssign: false`, `packages/ui/parameter-completion.js` accepts a dynamic input getter, and `packages/ui/numeric-input-manager.js` binds the ONE `#dimComplete` list to `#dimInput`, `#dualInput` fields, and external Fillet/Offset boxes while passing `detail.names` / `detail.assigns` to drawing tools via `base-tool.js` (`liveName`, `liveAssign`, `applyLiveAssign`).
+- **Task id(s):** `1013`
+- **Fix merge sha:** open (`agents/boxes-1013`, awaiting merge)
+- **Guarding test file(s):** `tests/boxes-parity-ux17-1013-node.test.js`, `tests/boxes-parity-ux17-1013-live.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000` (`UX-17`) -> fixed in task `1013`. Probes before: `IR8.1b` `invalid=true, hint="\"=\" only as name = value at the start", shapes=1`, `D1.1/D1.2` `box closed toasts [...]`, `IR8.4` `draw-time box=false vs edit box=true`; after: `IR8.1b` `invalid=false, hint="", shapes=2`, `D1.1/D1.2` `box STAYS OPEN hint "a length must be more than 0" toasts []`, `IR8.4` `draw-time box=true vs edit box=true`.
+
+---
+
+### BUG-181
+- **Date / turn:** 2026-11-26 (audit ID `UX-18`; fixed in task `1013`)
+- **Reported by:** audits `1000` (`D8.1`, `D8.2`), `CROSS-1000B` (`UX-18`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-18`: in an inch document (`DOC_UNIT = 'in'`), a refused dimension edit's warning toast prints raw internal millimetres (`"Can't set to 2540"` for `100 in`, `"-50.8"` for `-2 in`).
+- **What was wrong:** `handleCommit` interpolated raw base-unit `pv.value` directly into `Can't set to ${pv.value} ... Reverted.`.
+- **Cause:** `packages/ui/numeric-input-manager.js` (`handleCommit`): formats `pv.value` with `quantityText(pv.value, dimensionUnit(target, docUnit()), 'unit')`, using the existing document-unit formatter (decimal inches `"100 in"`, fractional `100"`, millimetres `"100 mm"`, degrees `"180 deg"`).
+- **Task id(s):** `1013`
+- **Fix merge sha:** open (`agents/boxes-1013`, awaiting merge)
+- **Guarding test file(s):** `tests/refusal-units-ux18-1013-node.test.js`
+- **Status:** fixed
+- **Family:** `units`
+- **History:** found in `1000` (`UX-18`) -> fixed in task `1013`. Probe `D8.1` before: `Can't set to 2540 — conflicts with distance. Reverted.`; after: `Can't set to 100 in — conflicts with distance. Reverted.`.
+
+---
+
+### BUG-182
+- **Date / turn:** 2026-11-26 (audit ID `B-19b/c/e`; fixed in task `1013`)
+- **Reported by:** audits `1000B` (`P9`), `CROSS-1000` (`XB-19b/c/e`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-19b/c/e`: draw-time and modify boxes drop or reject typed formulas: (b) Polygon `d1 / 2` evaluates once, drops the formula, and creates no radius dimension; (c) Slot `slot-c2c` / `slot-overall` drop span dim+formula and all slot modes drop width formula; (e) Fillet and Offset boxes call `parseUnit` and reject formulas like `d1 / 2`.
+- **What was wrong:** `polygon-tool.js` never stored `radiusExpression` or created a driving radial `DISTANCE` constraint; `slot-tool.js` only created a span dim for `CENTER_POINT` and never stored `widthExpression` on `widthDim`; `fillet.js` / `offset.js` called `parseUnit` and accepted no `expression`/`name` options.
+- **Cause:** `packages/ui/input-handlers/polygon-tool.js` creates a driving radial `DISTANCE` constraint carrying `expression`/`name`; `packages/ui/input-handlers/slot-tool.js` creates the typed span dim across all straight modes (`CENTER_TO_CENTER`, `OVERALL`, `CENTER_POINT`) + `CENTER_POINT_ARC` and preserves `widthExpression`/`widthName` on `widthDim`; `packages/core/fillet.js` (`evaluateFilletRadius`, `applyFillet`) and `packages/core/offset.js` (`evaluateOffsetDistance`, `applyOffset`) plus `fillet-tool.js` / `offset-tool.js` evaluate through `evaluateBoxText`, preserve `expression`/`name`, and attach `#dimComplete`. (`B-19a` skipped for task `1008`; `B-19d` is a separate divergence, not formula dropping.)
+- **Task id(s):** `1013`
+- **Fix merge sha:** open (`agents/boxes-1013`, awaiting merge)
+- **Guarding test file(s):** `tests/formulas-draw-boxes-b19-1013-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000B` (`B-19`), `CROSS-1000` (`XB-19`) -> fixed in task `1013`. Probes before: `XB-19b` `distDims=[d1]`, `XB-19c.slot-c2c` `newDims=[{"val":"15","expr":null}]`, Fillet/Offset rejected `d1 / 2`; after: `XB-19b` `d2=30 expr="d1 / 2"`, `XB-19c.slot-c2c` `[{"val":"15","expr":"d1 / 4"},{"val":"30","expr":"d1 / 2"}]`, Fillet/Offset accept `d1 / 4` / `d1 / 6` and follow `d1`.
+
+---
+
+### BUG-183
+- **Date / turn:** 2026-11-26 (audit ID `B-8`; fixed in task `1013`)
+- **Reported by:** audits `1000B` (`P9`), `CROSS-1000` (`XB-8a/b`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-8`: Circle tool clicked with centre snapped onto an existing joint then committed via typed diameter + Enter drops the centre's `coincident` constraint (whereas click-2 keeps it); typing diameter + Enter without prior mouse move does nothing.
+- **What was wrong:** `finalizeCircleFromActive` duplicated `handleCirclePointerUp`'s commit logic, omitted `applySnapConstraint(state, state.active.start, state.active.centerSnapTarget)`, and returned `false` whenever `state.active.preview` was `null`.
+- **Cause:** `packages/ui/input-handlers/circle-tool.js` (`commitCircle`, `finalizeCircleFromActive`, `onPreview`): unified both click and Enter commits into ONE `commitCircle` helper that always applies `centerSnapTarget` and allows `finalizeCircleFromActive` to commit from `circleState.lockedRadius` when `previewPt` is `null` (while keeping the box open on Enter with no move and no typed diameter).
+- **Task id(s):** `1013`
+- **Fix merge sha:** open (`agents/boxes-1013`, awaiting merge)
+- **Guarding test file(s):** `tests/circle-typed-snap-b8-1013-node.test.js`
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **History:** found in `1000B` (`B-8`), `CROSS-1000` (`XB-8`) -> fixed in task `1013`. Probes before: `XB-8a` `coincidentOnCenter=0`, `XB-8b` `created=false, stillActive=true`; after: `XB-8a` `coincidentOnCenter=1`, `XB-8b` `created=true, stillActive=false`.
+
+---
+
 ## Family index
 
 Entries in each family are listed in chronological date order (`MM-DD`, oldest first) so recurring patterns read as a timeline.
@@ -2206,7 +2270,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
-| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26) |
+| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26) |
 | `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-146 (11-26) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
@@ -2215,8 +2279,8 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26) |
-| `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26) |
+| `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 
 ---
 
@@ -2226,4 +2290,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-150..BUG-154 fixed in task `1011`; BUG-160..BUG-161 fixed in task `1012`; BUG-170..BUG-174 fixed in task `1014`; BUG-140..BUG-147 fixed in task `1008`).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-150..BUG-154 fixed in task `1011`; BUG-160..BUG-161 fixed in task `1012`; BUG-170..BUG-174 fixed in task `1014`; BUG-180..BUG-183 fixed in task `1013`; BUG-140..BUG-147 fixed in task `1008`).

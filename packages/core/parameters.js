@@ -27,6 +27,24 @@ export const AUTO_NAME_PREFIX = 'd';                  // O22  the automatic dime
 export const PARAMETER_UNITS = ['', 'mm', 'cm', 'in', 'deg', 'rad']; // O18  '' = unitless (a count); the rest are the UNIT_TABLE entries
 const SAME_VALUE = 1e-9;                              // two values closer than this are the same value (the design's value == evaluate(expression) tolerance)
 
+// TASK 782 / 789 / 789b / 1013 (UX-17b): THE ONE value-domain rule for every dimension kind, shared by previewDimensionInput (canvas edit box +
+// Parameters table), evaluateBoxText (draw-time boxes, fillet, offset) and commitDimensionEdits (solver commit seam).
+export const SIZE_REFUSAL = 'a length must be more than 0';
+/** null, or SIZE_REFUSAL when `v` (a number, base unit) is 0 or less. */
+export const sizeRefusal = (v) => (Number(v) <= 0 ? SIZE_REFUSAL : null);
+export const OFFSET_ZERO_REASON = 'an offset distance cannot be 0 (a negative distance puts the offset on the other side)';
+/** null, or the refusal sentence when dimension constraint `c` cannot take `value` (base mm / degrees). */
+export function dimensionValueRefusal(c, value) {
+  if (!c) return null;
+  const v = Number(value);
+  if (c.type === CONSTRAINT_TYPES.ANGLE) {
+    return !(v > 0) ? 'an angle must be more than 0 degrees' : !(v <= 360) ? 'an angle must be at most 360 degrees' : null;
+  }
+  if (c.type === CONSTRAINT_TYPES.OFFSET) return !(v !== 0) ? OFFSET_ZERO_REASON : null;
+  if (c.type === CONSTRAINT_TYPES.DISTANCE) return sizeRefusal(v);
+  return null;
+}
+
 // ── dimension helpers (the ONE definition of "a dimension" and "a reference dimension") ──
 export const isDimension = (c) => !!c && (c.type === CONSTRAINT_TYPES.DISTANCE || c.type === CONSTRAINT_TYPES.ANGLE || (c.type === CONSTRAINT_TYPES.OFFSET && c.dimensioned !== false));
 export const isReferenceDimension = (c) => !!c && !!(c.isDriven || c.driven);
@@ -573,6 +591,17 @@ export function previewDimensionInput(state, c, text, { unit = 'mm', slot = null
   if (!plan.ok) return { ok: false, code: plan.code, hint: plan.message, at: plan.at, plan };
   const mine = plan.edits.find((e) => e.c === c && (e.slot || null) === slot);
   const myValue = mine ? mine.value : entryValue(entry);
+  // TASK 1013 (UX-17b): refuse domain-invalid values (<= 0 lengths, <= 0 or > 360 angles, 0 offsets) HERE in previewDimensionInput,
+  // so the edit box stays open with the inline #dimHint — matching draw-time boxes and Fusion's dimension box.
+  if (!slot) {
+    const ownWhy = dimensionValueRefusal(c, myValue);
+    if (ownWhy) return { ok: false, code: 'OUT_OF_RANGE', hint: ownWhy, plan };
+  }
+  for (const e of plan.edits) {
+    if (e.slot) continue;
+    const why = dimensionValueRefusal(e.c, e.value);
+    if (why) return { ok: false, code: 'OUT_OF_RANGE', hint: e.c === c ? why : `${e.name}: ${why}`, plan };
+  }
   const shown = entryUnit(entry, unit);
   if (plan.named && plan.named !== own) { // the dimension is renamed (owner ruling, task 677): it keeps being a dimension, now called plan.named
     const others = plan.affected.filter((n) => n !== plan.named);
@@ -599,20 +628,72 @@ export function previewDimensionInput(state, c, text, { unit = 'mm', slot = null
   return { ok: true, kind: 'value', own, others: [], plan, value: myValue, hint: `= ${quantityText(myValue, shown, 'unit')}` };
 }
 
-// TASK 876: THE reading of a text typed in a drawing tool's value box (a line's length, a rectangle's side, a circle's diameter, an angle): the SAME parser and the
-// SAME name lookup as a dimension's edit box (planChange 'setDimension': parseInput, canonicalize against the sketch's evaluated names; a reference
-// dimension and an unknown name are refused with the evaluator's own message). `kind` = 'length' | 'angle' | 'count'.
-// → { ok:true, v (base mm / degrees / a number), expression (the canonical text when the text READS A NAME, else null: a number or "10/2" is just a value) }
-//   | { ok:false, code, message }
-export function evaluateBoxText(state, text, kind = 'length', { unit = 'mm' } = {}) {
-  const parsed = parseInput(String(text == null ? '' : text), { allowAssign: false });
+// TASK 876 / 1013 (UX-17a): THE reading of a text typed in a drawing / modify tool's value box (a line's length, a rectangle's side, a circle's diameter,
+// polygon radius, slot span/width, fillet radius, offset distance, an angle): the SAME parser, assignment (`name = expr`) rules and name lookup as a
+// dimension's edit box (planChange 'setDimension': parseInput, validateName, canonicalize against the sketch's evaluated names; a reference dimension and
+// an unknown name are refused with the evaluator's own message). `kind` = 'length' | 'angle' | 'count'. `allowAssign`: true for boxes that create a
+// dimension (default for length/angle), false for non-dimension fields (count, or draw-time angle/sweep boxes that make no constraint).
+// → { ok:true, v (base mm / degrees / a number), expression (canonical text when reading a name, else null), name (new dim name from `w = expr`, else null),
+//     assign ({ name, text } when `param = expr` updates an existing user parameter, else null) }
+//   | { ok:false, code, message, at? }
+export function evaluateBoxText(state, text, kind = 'length', { unit = 'mm', allowAssign = (kind !== 'count') } = {}) {
+  const raw = String(text == null ? '' : text);
+  const parsed = parseInput(raw, { allowAssign });
   if (!parsed.ok) return parsed;
+  const params = (state && Array.isArray(state.parameters)) ? state.parameters : [];
+  const constraints = (state && Array.isArray(state.constraints)) ? state.constraints : [];
   const values = new Map();
-  const ev = state && Array.isArray(state.constraints) ? evaluateAll({ parameters: state.parameters || [], constraints: state.constraints }, { unit }) : null;
-  if (ev && ev.values) for (const [name, q] of ev.values) values.set(foldName(name), q);
-  const r = canonicalize(parsed.ast, (key) => values.get(key), { target: targetOf(kind), unit });
+  const reference = new Map();
+  if (state && Array.isArray(state.constraints)) {
+    const ev = evaluateAll({ parameters: params, constraints }, { unit });
+    if (ev && ev.values) for (const [name, q] of ev.values) values.set(foldName(name), q);
+    for (const e of dimensionEntries(constraints)) {
+      const n = entryName(e);
+      if (isReferenceEntry(e) && n) reference.set(foldName(n), n);
+    }
+  }
+  const lookup = (key) => {
+    if (values.has(key)) return values.get(key);
+    if (reference.has(key)) return { ok: false, code: 'REFERENCE_DIM', message: `${reference.get(key)} is a reference dimension` };
+    return undefined;
+  };
+  if (parsed.assign) {
+    const assignKey = foldName(parsed.assign.name);
+    const existing = params.find((p) => foldName(p.name) === assignKey);
+    if (existing) {
+      // O4: `name = expr` where name is an existing USER parameter updates that parameter and the new dimension reads it
+      if (parameterKind(existing) !== targetOf(kind)) {
+        const want = kind === 'length' ? 'a length' : kind === 'angle' ? 'an angle' : 'a plain number';
+        const got = parameterKind(existing) === 'length' ? 'a length' : parameterKind(existing) === 'angle' ? 'an angle' : 'a plain number';
+        return { ok: false, code: 'UNIT_MISMATCH', message: `${want} cannot be ${got}`, at: parsed.assign.at };
+      }
+      const rhsText = raw.slice(raw.indexOf('=') + 1).trim();
+      const plan = planChange(state, { type: 'setParameter', name: existing.name, text: rhsText }, { unit });
+      if (!plan.ok) return plan;
+      for (const e of plan.edits) {
+        if (e.slot) continue;
+        const why = dimensionValueRefusal(e.c, e.value);
+        if (why) return { ok: false, code: 'OUT_OF_RANGE', message: `${e.name}: ${why}` };
+      }
+      const evAfter = evaluateAll({ parameters: plan.paramsAfter, constraints }, { unit });
+      const q = evAfter && evAfter.values && evAfter.values.get(existing.name);
+      if (!q) return { ok: false, code: 'SYNTAX', message: 'not a valid value' };
+      return { ok: true, v: q.v, expression: existing.name, name: null, assign: { name: existing.name, text: rhsText } };
+    }
+    // Free name: names the dimension being created (task 677 rule); reject names already taken by another dimension or parameter
+    const taken = new Set([
+      ...params.map((p) => foldName(p.name)),
+      ...dimensionEntries(constraints).map(entryName).filter(Boolean).map(foldName),
+    ]);
+    const check = validateName(parsed.assign.name, { kind: 'dimension', isTaken: (k) => taken.has(k) });
+    if (!check.ok) return { ...check, at: parsed.assign.at };
+    const r = canonicalize(parsed.ast, lookup, { target: targetOf(kind), unit });
+    if (!r.ok) return r;
+    return { ok: true, v: r.v, expression: dependencies(parsed).length > 0 ? r.text : null, name: parsed.assign.name, assign: null };
+  }
+  const r = canonicalize(parsed.ast, lookup, { target: targetOf(kind), unit });
   if (!r.ok) return r;
-  return { ok: true, v: r.v, expression: dependencies(parsed).length > 0 ? r.text : null };
+  return { ok: true, v: r.v, expression: dependencies(parsed).length > 0 ? r.text : null, name: null, assign: null };
 }
 
 // ── autocomplete (OWNER REQUIREMENT R3, docs/PARAMETERS-DESIGN.md section E): ONE pure function; the DOM list is a thin view over it ──

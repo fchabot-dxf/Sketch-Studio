@@ -5,11 +5,12 @@ import { setupNumericInput, showSingleInput, hideInput, resetLockedDimensions, i
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint, onShapeSnap } from '#core/snap-constraints.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, tooSmall, applyLockedSnap, snapPoint, liveExpression } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, tooSmall, applyLockedSnap, snapPoint, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { newShapeId } from '#core/shape-id.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
-let circleState = { lockedRadius: null, diameterExpression: null, boxOpen: false };   // TASK 876: diameterExpression = the formula of the typed DIAMETER, or null
+let circleState = { lockedRadius: null, diameterExpression: null, radiusName: null, radiusAssign: null, boxOpen: false };   // TASK 876 / 1013: diameterExpression = formula of the typed DIAMETER (task 1008: a circle's dimension is a diameter); radiusName / radiusAssign from `w = expr`
+const clearCircleLocks = () => { circleState.lockedRadius = null; circleState.diameterExpression = null; circleState.radiusName = null; circleState.radiusAssign = null; };
 const localState = { isDragging: false, dragStartScreen: null };
 // TASK 596: after the first click the size box shows at once (base-tool's shared creation-box path); the size follows the cursor until one is typed.
 // TASK 597: the box is the DIAMETER (like Fusion); the circle keeps its radius, and a typed one adds its DIAMETER dimension (task 1008, radialDimensionParams: value = the typed diameter)
@@ -17,11 +18,16 @@ const BOX = { single: { field: 'diameter' } };
 
 export function setupCircleTool(svg, state){
     setupNumericInput(svg, state);
-    state.onDrawCancelled(() => { if (circleState.boxOpen) { circleState.boxOpen = false; circleState.lockedRadius = null; circleState.diameterExpression = null; hideInput(); } });   // another tool picked / Undo mid-draw: the box goes with the draw
+    state.onDrawCancelled(() => { if (circleState.boxOpen) { circleState.boxOpen = false; clearCircleLocks(); hideInput(); } });   // another tool picked / Undo mid-draw: the box goes with the draw
     setupDimensionListeners(state, TOOL_MODES.CIRCLE, {
         onApply: (detail) => {
             if (detail.mode === 'single' && detail.field === 'diameter') {
-                if (detail.typed[0] && detail.value > 0) { circleState.lockedRadius = detail.value / 2; circleState.diameterExpression = liveExpression(detail, 0); } // only a typed diameter locks (the box otherwise shows the live one, rounded)
+                if (detail.typed[0] && detail.value > 0) {
+                    circleState.lockedRadius = detail.value / 2;
+                    circleState.diameterExpression = liveExpression(detail, 0);
+                    circleState.radiusName = liveName(detail, 0);
+                    circleState.radiusAssign = liveAssign(detail, 0);
+                } // only a typed diameter locks (the box otherwise shows the live one, rounded)
                 if (detail.confirmedBy === 'enter') {
                     let placed = false;
                     try { placed = finalizeCircleFromActive(svg, state); } catch (_) { }
@@ -34,19 +40,21 @@ export function setupCircleTool(svg, state){
             const v = detail.value / 2;
             circleState.lockedRadius = (detail.reset && detail.reset[0]) ? null : (v > 0 ? v : null);
             circleState.diameterExpression = circleState.lockedRadius !== null ? liveExpression(detail, 0) : null;
+            circleState.radiusName = circleState.lockedRadius !== null ? liveName(detail, 0) : null;
+            circleState.radiusAssign = circleState.lockedRadius !== null ? liveAssign(detail, 0) : null;
             const center = state.joints.get(state.active.start) || state.active.startPt;
-            if (center && state.active.preview) {
-                const pt = state.active.preview && state.active.preview.pt ? state.active.preview.pt : center;
+            if (center) {
+                const pt = (state.active.preview && state.active.preview.pt) || center;
                 try { updatePreview(state, 'circle', [state.active.start], pt, { radius: v }); } catch (_) { }
                 try { state.tempMousePos = pt; } catch (_) { }
             }
         },
-        onCancel: () => { circleState.lockedRadius = null; circleState.diameterExpression = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
+        onCancel: () => { clearCircleLocks(); } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
     });
 }
 
 export function resetCircleState(state){ 
-    if (state && state.active && state.active.mode === TOOL_MODES.CIRCLE) { circleState.lockedRadius = null; circleState.diameterExpression = null; try { hideInput(); } catch (_) { /* no DOM (node) */ } } // the radius box open since the first click goes with the circle
+    if (state && state.active && state.active.mode === TOOL_MODES.CIRCLE) { clearCircleLocks(); try { hideInput(); } catch (_) { /* no DOM (node) */ } } // the radius box open since the first click goes with the circle
     resetToolState(state, TOOL_MODES.CIRCLE, localState);
 }
 
@@ -93,6 +101,43 @@ function applyRimSnap(state, shapeId, snap, rimPt) {
     applyLockedSnap(state, snap.id || snap.targetId, onShapeSnap(shapeId, rimPt));
 }
 
+/**
+ * TASK 1013 (B-8): ONE commit path for BOTH pointer-up and Enter finalization, so typed and clicked circles
+ * always keep the centre's snap constraint (`centerSnapTarget`), dimension formula/name, and cleanup identically.
+ */
+function commitCircle(state, r, { snapForEnd = null, endPt = null } = {}) {
+    if (tooSmall(r)) return false;
+    state.saveState();
+    const shapeId = newShapeId('s');
+    state.shapes.push({ id: shapeId, type: 'circle', joints: [state.active.start], radius: r, isConstruction: !!state.isConstructionMode });
+
+    // Only add a radius distance constraint if the user explicitly entered a radius
+    if (circleState.lockedRadius != null) {
+        if (circleState.radiusAssign) applyLiveAssign(state, circleState.radiusAssign);
+        addConstraint(state, CONSTRAINT_TYPES.DISTANCE, {
+            ...radialDimensionParams({ id: shapeId, type: 'circle' }, r),
+            expression: circleState.diameterExpression,
+            ...(circleState.radiusName ? { name: circleState.radiusName } : {}),
+        });
+    }
+
+    try {
+        if (state.active && state.active.centerSnapTarget && state.active.centerSnapTarget.isLocked) {
+            applySnapConstraint(state, state.active.start, state.active.centerSnapTarget);
+        }
+    } catch (_) { }
+    if (snapForEnd && endPt) applyRimSnap(state, shapeId, snapForEnd, endPt);
+
+    clearCircleLocks(); circleState.boxOpen = false;
+    localState.isDragging = false;
+    localState.dragStartScreen = null;
+    try { resetLockedDimensions(); } catch (_) { }
+    try { hideInput(); } catch (_) { }
+    state.endUndoGroup();
+    state.active = null;
+    return true;
+}
+
 export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlobal){
     if(!state.active || state.active.mode!==TOOL_MODES.CIRCLE) return false;
 
@@ -113,35 +158,13 @@ export function handleCirclePointerUp(e, svg, state, hitSnap, w, wasDraggingGlob
     const dx = endPt.x - center.x, dy = endPt.y - center.y;
     let r = Math.hypot(dx, dy);
     if (circleState.lockedRadius) r = circleState.lockedRadius;
-    if (tooSmall(r)) return true;   // TASK 782: a click on the centre places no circle (the draw keeps waiting for a real second click)
-
-    state.saveState();
-    const shapeId = newShapeId('s');
-
-    state.shapes.push({ id: shapeId, type: 'circle', joints: [state.active.start], radius: r, isConstruction: !!state.isConstructionMode });
-    
-    // Only add a radius distance constraint if the user explicitly entered a radius
-    if (circleState.lockedRadius != null) {
-        addConstraint(state, CONSTRAINT_TYPES.DISTANCE, { ...radialDimensionParams({ id: shapeId, type: 'circle' }, r), expression: circleState.diameterExpression });
-    }
-
-    try{ 
-        if(state.active && state.active.centerSnapTarget && state.active.centerSnapTarget.isLocked){ 
-            applySnapConstraint(state, state.active.start, state.active.centerSnapTarget); 
-        } 
-    }catch(_){ }
-    applyRimSnap(state, shapeId, snapForEnd, endPt);
-
-    circleState.lockedRadius = null; circleState.diameterExpression = null; circleState.boxOpen = false;
-    localState.isDragging = false;
-    localState.dragStartScreen = null;
-    try{ resetLockedDimensions(); }catch(_){ }
-    try{ hideInput(); }catch(_){ }
-    state.endUndoGroup(); state.active=null; return true;
+    if (!commitCircle(state, r, { snapForEnd, endPt })) return true;   // TASK 782: a click on the centre places no circle (keeps waiting)
+    return true;
 }
 
 /**
- * Finalize circle creation immediately (used when Enter confirms radius)
+ * Finalize circle creation immediately (used when Enter confirms radius / diameter).
+ * TASK 1013 (B-8): works even without a prior pointermove when a diameter was typed, and shares commitCircle so centerSnapTarget is kept.
  */
 export function finalizeCircleFromActive(svg, state){
     if(!state.active || state.active.mode !== TOOL_MODES.CIRCLE) return false;
@@ -149,20 +172,9 @@ export function finalizeCircleFromActive(svg, state){
         const center = state.joints.get(state.active.start);
         if(!center) return false;
         const previewPt = state.active.preview && state.active.preview.pt ? state.active.preview.pt : null;
-        if(!previewPt) return false;
-        let r = Math.hypot(previewPt.x - center.x, previewPt.y - center.y);
+        let r = previewPt ? Math.hypot(previewPt.x - center.x, previewPt.y - center.y) : 0;
         if (circleState.lockedRadius) r = circleState.lockedRadius;
-        if (tooSmall(r)) return false;   // TASK 782: see handleCirclePointerUp
-        state.saveState();
-        const shapeId = newShapeId('s');
-        state.shapes.push({ id: shapeId, type: 'circle', joints: [state.active.start], radius: r, isConstruction: !!state.isConstructionMode });
-        // Only add a radius distance constraint if the user explicitly entered a radius
-        if (circleState.lockedRadius != null) {
-            addConstraint(state, CONSTRAINT_TYPES.DISTANCE, { ...radialDimensionParams({ id: shapeId, type: 'circle' }, r), expression: circleState.diameterExpression });
-        }
-        circleState.lockedRadius = null; circleState.diameterExpression = null; circleState.boxOpen = false; try{ resetLockedDimensions(); }catch(_){ }
-        try{ hideInput(); }catch(_){ }
-        state.endUndoGroup(); state.active = null; return true;
+        return commitCircle(state, r);
     }catch(_){ try{ state.endUndoGroup(); }catch(_){ } state.active = null; return false; }
 }
 

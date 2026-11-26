@@ -18,7 +18,7 @@ export function docOf(joints, shapes, constraints = [], parameters = []) {
 
 /** open `doc` in a fresh node app; returns the app (the caller closes it) */
 export async function openDoc(doc, opts = {}) {
-  const { open, createProfile, createNamedDesign } = await import('./node-app.js');
+  const { open, createProfile, createNamedDesign } = await import('../../helpers/node-app.js');
   const profile = await createProfile();
   await createNamedDesign(profile, opts.host || 'sketchstudio', 'Display 1010', doc);
   return open({ host: opts.host || 'sketchstudio', profile, ...(opts.open || {}) });

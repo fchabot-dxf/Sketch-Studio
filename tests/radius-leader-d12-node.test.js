@@ -2,7 +2,7 @@
 // its "R 18" text. The audit's check (the leader's bounding box overlaps the rotated text's bounding box) is a false positive for a
 // diagonal leader; against the text's real rotated box the leader ends DIM_TEXT_GAP_PX clear of it. This test pins that.
 import assert from 'node:assert';
-import { docOf, openDoc } from './helpers/display-1010.js';
+import { docOf, openDoc } from './fixtures/display-1010/doc-kit.js';
 import { dimTextWidth, DIM_TEXT_ASCENT } from '#ui/dim-placement.js';
 
 const app = await openDoc(docOf(

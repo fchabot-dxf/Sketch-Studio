@@ -9,8 +9,8 @@ import assert from 'node:assert';
 import { launchBrowser } from './helpers/cdp-browser.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js';
 import { pressRibbonTool } from './helpers/ribbon-tool.js';
-import { docOf } from './helpers/display-1010.js';
-import { NO_NET, openSeeded, setView, w2s, mouseMove, mouseDrag, touchTap, shot } from './helpers/display-1010-live.js';
+import { docOf } from './fixtures/display-1010/doc-kit.js';
+import { NO_NET, openSeeded, setView, w2s, mouseMove, mouseDrag, touchTap, shot } from './fixtures/display-1010/live-kit.js';
 
 const SHAPER = { host: 'shaper', canvas: 'design-canvas', url: '/apps/shaper/index.html' };
 const ST = (cdp, js) => cdp.evalJs(`(() => { const st = window.__designController.state; return ${js}; })()`);

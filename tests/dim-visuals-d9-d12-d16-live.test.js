@@ -4,8 +4,8 @@
 import assert from 'node:assert';
 import { launchBrowser } from './helpers/cdp-browser.js';
 import { installFakeDriveSession } from './helpers/fake-drive-session.js';
-import { docOf } from './helpers/display-1010.js';
-import { NO_NET, openSeeded, setView, w2s, mouseMove, touchTap, shot } from './helpers/display-1010-live.js';
+import { docOf } from './fixtures/display-1010/doc-kit.js';
+import { NO_NET, openSeeded, setView, w2s, mouseMove, touchTap, shot } from './fixtures/display-1010/live-kit.js';
 
 const doc = docOf(
   { a: [0, 0, true], b: [60, 0, true], c: [30, 51.9615], cc: [-45, 20, true], n1: [80, 0, true], n2: [85, 0, true] },

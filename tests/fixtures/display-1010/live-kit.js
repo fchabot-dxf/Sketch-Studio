@@ -2,8 +2,8 @@
 // project a world point to the screen, mouse / touch input, a zoomed screenshot to .evidence/1010/.
 import fs from 'node:fs';
 import path from 'node:path';
-import { sleep } from './cdp-browser.js';
-import { resetBufferLive } from './reset-buffer.js';
+import { sleep } from '../../helpers/cdp-browser.js';
+import { resetBufferLive } from '../../helpers/reset-buffer.js';
 
 export const EVID = path.resolve('.evidence/1010');
 export const NO_NET = ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1, EXCLUDE localhost'];

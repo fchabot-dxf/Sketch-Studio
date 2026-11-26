@@ -2,7 +2,7 @@
 // constrained" (black): its two control points are plain shape data nothing holds. A line with fixed ends still is.
 import assert from 'node:assert';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
-import { docOf, openDoc } from './helpers/display-1010.js';
+import { docOf, openDoc } from './fixtures/display-1010/doc-kit.js';
 
 const app = await openDoc(docOf(
   { a: [0, 0, true], b: [60, 0, true], p: [0, 30, true], q: [60, 30, true] },

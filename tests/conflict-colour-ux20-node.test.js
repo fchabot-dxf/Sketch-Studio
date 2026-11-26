@@ -1,7 +1,7 @@
 // tests/conflict-colour-ux20-node.test.js -- UX-20 (TASK 1010, BUG-133): geometry bound by a constraint the solver cannot satisfy
 // (a triangle with sides 50 / 40 / 120) is drawn in the app's error red (--sk-error); a satisfied sketch keeps its status colours.
 import assert from 'node:assert';
-import { docOf, openDoc } from './helpers/display-1010.js';
+import { docOf, openDoc } from './fixtures/display-1010/doc-kit.js';
 
 const D = (a, b, value, name) => ({ type: 'distance', joints: [a, b], value, name });
 const stroke = (app, id) => app.svg.querySelector(`[data-shape-id="${id}"]`).getAttribute('style');

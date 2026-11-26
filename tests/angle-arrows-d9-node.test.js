@@ -1,7 +1,7 @@
 // tests/angle-arrows-d9-node.test.js -- D-9 (TASK 1010, BUG-130): both arrowheads of an angle dimension point ALONG the arc
 // (tangent), out of its two ends. They were rotated 90 degrees (radial).
 import assert from 'node:assert';
-import { docOf, openDoc } from './helpers/display-1010.js';
+import { docOf, openDoc } from './fixtures/display-1010/doc-kit.js';
 
 const app = await openDoc(docOf(
   { a: [0, 0, true], b: [60, 0, true], c: [30, 51.9615] },

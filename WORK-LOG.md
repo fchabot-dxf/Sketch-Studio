@@ -18239,3 +18239,9 @@ TURN 895 (advisor follow-up): goStage moved to ONE helper, tests/helpers/go-stag
 
 ## TURN 899 — drive-rename-live waits for what it reads (Claude Sonnet subagent, branch agents/driveflake-899)
 Test only. Cause: the tab label was read once right after pagehide + flushDrive (no wait for the tab update), and the drawer / doc entry clicks aimed at a rect measured while the sidebar slid. Fix: clickSel uses tests/helpers/settled-centre.js; the label is waitFor'd (20 s) before the unchanged assertion. 5x alone ok, 3x beside gate:quick ok, gate:quick pass=607 fail=0.
+
+## TURN 1002
+Created [docs/BUG-ARCHIVE.md](docs/BUG-ARCHIVE.md) from `.evidence/1002/advisor-log.txt`, `.evidence/1002/owner-report-3380.txt`, `WORK-LOG.md`, and `git log`:
+- 90 entries (`BUG-001`..`BUG-090`, oldest first, covering both owner-reported bugs and advisor-/worker-found bugs from live Fusion checks, merge gates, and reviews, with `Reported by`, date/turn, verbatim quotes/log summaries, cause, task ids, merge shas, guarding test files, status, and family tag).
+- 16-family index at the bottom + Audits section linking `docs/SNAP-CONSTRAINT-AUDIT-869.md`, `docs/STOCK-MODEL-890.md`, and `docs/SOLVER-UX-AUDIT-1000*.md`.
+- Verified: 100 Sketch-Studio task IDs checked (97 in `WORK-LOG.md`/`git log`, 3 open/parked in `advisor-log.txt`: `686`, `898`, `1001`, 0 missing), 92 Sketch-Studio SHAs verified via `git cat-file -e` (0 bad), 144 guarding test file paths verified on disk (0 missing).

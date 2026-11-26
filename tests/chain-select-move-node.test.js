@@ -226,7 +226,8 @@ const dragBy = quiet(async (app, a, dx, dy) => {
   } finally { await app.close(); }
 }
 
-// ---- 2b. a HELD member: the rectangle's corner r1 fixed. getDragDOF (every cluster drag's rule) locks the whole group: nothing moves, no step.
+// ---- 2b. a HELD member (UX-22, task 1011): the rectangle's corner r1 is fixed (so r1 and r2 are 0-DOF), while S is free.
+// Fixed / 0-DOF members stay put while free members in the selection still move; an all-fixed selection moves nothing and leaves no step.
 {
   const doc = MOVE_SCENE();
   doc.geometry.joints = doc.geometry.joints.map(([id, j]) => [id, id === 'r1' ? { ...j, fixed: true } : j]);
@@ -236,11 +237,14 @@ const dragBy = quiet(async (app, a, dx, dy) => {
     await selectRectAndS(app);
     const all = [...MEMBERS, 'u0', 'u1'], start = new Map(all.map((id) => [id, pos(st, id)]));
     const steps0 = app.report().journal.steps.length;
-    await dragBy(app, on(app, 'S', 0.5), 60, 40);
-    const moved = Math.max(...all.map((id) => dist(pos(st, id), start.get(id))));
-    measured.heldMember = { moved, steps: app.report().journal.steps.slice(steps0).map((s) => s.label) };
-    assert.ok(moved === 0, 'a selection with a fixed member does not move (moved ' + moved + ' mm)');
-    assert.deepStrictEqual(measured.heldMember.steps, [], 'a move that changed nothing leaves no undo step');
+    const d = await dragBy(app, on(app, 'S', 0.5), 60, 40);
+    const heldMoved = Math.max(dist(pos(st, 'r1'), start.get('r1')), dist(pos(st, 'r2'), start.get('r2')));
+    const sErr = Math.max(dist(pos(st, 's1'), { x: start.get('s1').x + d.x, y: start.get('s1').y + d.y }), dist(pos(st, 's2'), { x: start.get('s2').x + d.x, y: start.get('s2').y + d.y }));
+    measured.heldMember = { heldMoved, sErr, residual: residual(st), steps: app.report().journal.steps.slice(steps0).map((s) => s.label) };
+    assert.ok(dist(pos(st, 'r1'), start.get('r1')) === 0 && heldMoved < 1e-6, '0-DOF members r1 and r2 stay put (moved ' + heldMoved + ' mm)');
+    assert.ok(sErr < 1e-3, 'free line S in the mixed selection still moves by the cursor displacement (err ' + sErr + ' mm)');
+    assert.ok(residual(st) < 1e-6, 'every constraint holds after mixed selection move');
+    assert.deepStrictEqual(measured.heldMember.steps, ['move selection'], 'ONE undo step for the mixed move');
   } finally { await app.close(); }
 }
 

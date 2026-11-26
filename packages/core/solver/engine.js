@@ -1143,6 +1143,41 @@ export class NewtonSolver {
     return { x, converged: false, residual: Math.sqrt(2 * cost) };
   }
 
+  // UX-10 / B-12d: during a drag, hold every FREE symmetry line's endpoints unless the mirror line itself is being dragged
+  // (by its body, an endpoint, or a joint coincident with an endpoint). Matches task 611's solveGivingWay rule for dimension edits.
+  _mirrorLineDragHolds(dragOpt) {
+    const syms = this.constraints.filter(c => c && c.type === 'symmetric' && !c.isDriven && !c.driven);
+    if (!syms.length) return null;
+    const dragged = new Set();
+    let bodyShape = null;
+    if (dragOpt && dragOpt.body) {
+      bodyShape = dragOpt.body.shape;
+      const sh = this.shapes.find(s => s && s.id === bodyShape);
+      if (sh && sh.joints) for (const id of sh.joints) dragged.add(id);
+    } else {
+      const list = Array.isArray(dragOpt) ? dragOpt : (dragOpt ? [dragOpt] : []);
+      for (const d of list) if (d && d.jointId) dragged.add(d.jointId);
+      for (const [id, j] of this.joints.entries()) if (j && j.dragTarget && !j.fixed) dragged.add(id);
+    }
+    if (!dragged.size && !bodyShape) return null;
+    const draggedCluster = new Set();
+    for (const id of dragged) for (const m of getCoincidentJoints(id, this.constraints)) draggedCluster.add(m);
+    const held = [];
+    const seen = new Set();
+    for (const c of syms) {
+      if (bodyShape && c.line === bodyShape) continue;
+      const o = symmetricOperands(c, this.shapes);
+      if (!o || !o.line) continue;
+      if (o.line.some(id => draggedCluster.has(id))) continue;
+      for (const id of o.line) {
+        if (seen.has(id)) continue;
+        const j = this.joints.get(id);
+        if (j && !j.fixed) { seen.add(id); held.push(j); }
+      }
+    }
+    return held.length ? held : null;
+  }
+
   // Public solve entry point. If dragTarget provided, interaction module will add temporary spring.
   solve(iter = this.config.maxIter, options = {}) {
     let dragOpt = options && options.dragTarget ? options.dragTarget : null;
@@ -1155,6 +1190,16 @@ export class NewtonSolver {
         }
       }
     }
+    const mirrorHolds = this._mirrorLineDragHolds(dragOpt);
+    if (mirrorHolds) for (const j of mirrorHolds) j.fixed = true;
+    try {
+      return this._solve(iter, dragOpt);
+    } finally {
+      if (mirrorHolds) for (const j of mirrorHolds) j.fixed = false;
+    }
+  }
+
+  _solve(iter, dragOpt) {
     const x0 = this._pack();
     // a JOINT drag: the springs of every joint carrying a dragTarget (set by the UI input handlers; a body drag never sets one, task 538)
     if (!dragOpt || !dragOpt.body) dragOpt = this._jointDragSprings(dragOpt);
@@ -1481,8 +1526,10 @@ export class NewtonSolver {
     if (!f || f.rank === 0) { hold = []; f = this.bodyPointFreedom(b, hold, at); }
     const p = f.point;
     let x = cursor.x, y = cursor.y;
+    // UX-23: only project rank === 1 when the body-point kind declares projectRank1 (RIM_POINT); a line's rank-1 motion can be a curved
+    // circle (rotating distance-constrained line) where projecting onto the instantaneous tangent f.dir stalls fast body flicks.
     if (f.rank === 0) { x = p[0]; y = p[1]; }
-    else if (f.rank === 1) { const s = (cursor.x - p[0]) * f.dir[0] + (cursor.y - p[1]) * f.dir[1]; x = p[0] + s * f.dir[0]; y = p[1] + s * f.dir[1]; }
+    else if (f.rank === 1 && kind.projectRank1) { const s = (cursor.x - p[0]) * f.dir[0] + (cursor.y - p[1]) * f.dir[1]; x = p[0] + s * f.dir[0]; y = p[1] + s * f.dir[1]; }
     return { body: { shape: body.shape, param, hold: hold.map(id => { const j = this.joints.get(id); return { joint: id, x: j.x, y: j.y }; }) }, x, y };
   }
 

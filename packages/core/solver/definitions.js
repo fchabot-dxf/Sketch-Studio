@@ -913,6 +913,8 @@ const rimDir = (op, positions) => {
 const RIM_POINT = {
   // A rim drag changes the RADIUS and keeps the CENTRE (joints[0]) whenever the constraints allow it (owner 2026-11-12, like Fusion).
   prefersHold: [0],
+  // A rim point depends on the cursor's ray (rimDir): projecting rank-1 pulls onto f.dir keeps tangential flings on fixed-end arcs bounded.
+  projectRank1: true,
   param: (P, hit) => Math.atan2(hit.y - P[0].y, hit.x - P[0].x),
   point: (op, positions) => {
     const c = op.joints[0], r = radiusValue(positions, op.radiusAt, op.radius, op.rimJoint, c), { ux, uy } = rimDir(op, positions);

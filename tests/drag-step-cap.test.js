@@ -76,7 +76,7 @@ import { undoStub } from './helpers/undo-stub.js';
     }
   }
 
-  // 5. a BODY drag (task 538) never had the step: one pass at the pointer whatever the jump
+  // 5. a BODY drag (UX-23, task 1011) walks the same MAX_DRAG_STEP sub-moves as a joint drag
   {
     const calls = [];
     const state = { joints: new Map([['a', { x: 0, y: 0 }], ['b', { x: 20, y: 0 }]]), shapes: [{ id: 'L', type: 'line', joints: ['a', 'b'] }], currentTool: TOOL_MODES.SELECT, ...undoStub() };
@@ -87,7 +87,10 @@ import { undoStub } from './helpers/undo-stub.js';
     handleSelectionPointerDown({ clientX: 10, clientY: 0, pointerId: 1, target: { closest: () => null } }, svg, state, null, { shape: state.shapes[0], pt: { x: 10, y: 0 } }, null);
     assert(state.drag && state.drag.body, 'a body drag started');
     quiet(() => handleSelectionPointerMove({ clientX: 1010, clientY: 0, pointerId: 1 }, svg, state));
-    assert(calls.length === 1 && calls[0].iters === QUICK && near(calls[0].x, 1010), 'a body drag: one quick pass at the pointer: ' + JSON.stringify(calls));
+    assert(calls.length === 10, `a body drag walks ten sub-moves (1000 / 100), got ${calls.length}`);
+    calls.forEach((c, k) => assert(near(c.x, 10 + 100 * (k + 1)), `body sub-move ${k + 1} targets x=${10 + 100 * (k + 1)}, got ${c.x}`));
+    calls.slice(0, -1).forEach((c, k) => assert(c.iters === FULL, `body sub-move ${k + 1} solved to convergence (${FULL}), got ${c.iters}`));
+    assert(calls[9].iters === QUICK && near(calls[9].x, 1010), 'body drag final pass is QUICK at pointer: ' + JSON.stringify(calls[9]));
   }
 
   console.log('drag step tests passed ✅');

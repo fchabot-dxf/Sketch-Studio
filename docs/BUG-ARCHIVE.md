@@ -1888,6 +1888,80 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `snap-not-applied`
 - **History:** found in `1000B` (`B-18a`) -> fixed in task `1010`
 
+---
+
+### BUG-150
+- **Date / turn:** 2026-11-26 (audit ID `UX-12`; fixed in task `1011`)
+- **Reported by:** audit `1000` (`DR2.3`) and `1000B` cross-review
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-12`: dragging a fully-constrained (0-DOF) item moves nothing and records no undo step, but wipes `state.redoStack` (`1 -> 0`).
+- **What was wrong:** `ensureDragUndo` called `state.saveState` on the first pointer move (which clears `redoStack` and evicts the oldest history entry at `maxHistory`), and `settleDragUndo` discarded the no-op snapshot on pointer-up without restoring `redoStack` or any evicted entry.
+- **Cause:** `packages/ui/input-handlers/selection-tools.js` (`ensureDragUndo` / `settleDragUndo`): now saves `undoEvicted` and `undoRedo` before `saveState` and restores both plus `_notifyHistory()` when `settleDragUndo` discards a no-op snapshot (same pattern as `packages/core/dimension-seams.js`).
+- **Task id(s):** `1011`
+- **Fix merge sha:** open (`agents/drag-1011`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-noop-redo-ux12-1011-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000` (`UX-12`), confirmed in `1000B` -> fixed in task `1011`
+
+### BUG-151
+- **Date / turn:** 2026-11-26 (audit ID `UX-22`; fixed in task `1011`)
+- **Reported by:** audit `1000` (`DR6.3a`) and `1000B` cross-review
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-22`: selecting a fixed/locked item together with a free item and dragging freezes the free item (`max move 0`).
+- **What was wrong:** `getDragDOF` returned `{ lockX: true, lockY: true }` for the entire group drag whenever ANY single selected joint was fixed or 0-DOF.
+- **Cause:** `packages/ui/input-handlers/selection-tools.js` (`getDragDOF` / `pullDrag`): for a multi-selection group drag (`drag.group`), held/0-DOF members are excluded into `movable`; the drag locks only when every member is held (e.g. a full-locked user group or an all-fixed selection), axis locks apply only when every movable member is locked on that axis, and `pullDrag` pulls only `movable` joints.
+- **Task id(s):** `1011`
+- **Fix merge sha:** open (`agents/drag-1011`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-mixed-selection-ux22-1011-node.test.js`, `tests/chain-select-move-node.test.js` (section 2b updated from old all-locked rule)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000` (`UX-22`), confirmed in `1000B` -> fixed in task `1011`. Behaviour change: multi-selecting fixed and free geometry now moves the free items while fixed/0-DOF items stay put (previously the whole selection was locked).
+
+### BUG-152
+- **Date / turn:** 2026-11-26 (audit ID `UX-23`; fixed in task `1011`)
+- **Reported by:** audit `1000` (`DR6.2a/b`) and `1000B` cross-review
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-23`: a fast 1-step flick on a line's body skips sub-moves and stalls far behind an equivalent flick on its joint (`(56.89, 19.07)` vs `(-12.73, 58.63)`).
+- **What was wrong:** Two causes: (1) `handleSelectionPointerMove` gated `MAX_DRAG_STEP` sub-moves on `state.joints.has(state.drag.id)`, which is always false for a body drag (`state.drag.id` is a shape ID); (2) `NewtonSolver.bodyDragTarget` projected `rank === 1` body drags onto the instantaneous linear tangent `f.dir`, discarding the off-tangent pull on curved 1-DOF motion (such as a rotating distance-constrained line).
+- **Cause:** `packages/ui/input-handlers/selection-tools.js` (`handleSelectionPointerMove`): include `state.drag.body` in the `MAX_DRAG_STEP` sub-move check; `packages/core/solver/definitions.js` (`BODY_POINTS` / `RIM_POINT.projectRank1: true`) and `packages/core/solver/engine.js` (`bodyDragTarget`): restrict the `rank === 1` instantaneous tangent projection to rim drags (`kind.projectRank1`), so line body drags do not stall on curved 1-DOF motion while fixed-end arc tangential flings stay bounded.
+- **Task id(s):** `1011`
+- **Fix merge sha:** open (`agents/drag-1011`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-body-flick-ux23-1011-node.test.js`, `tests/drag-step-cap.test.js` (case 5 updated)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`UX-23`), confirmed in `1000B` -> fixed in task `1011`. Behaviour change: body drags now step through `MAX_DRAG_STEP` sub-moves like joint drags and do not project curved 1-DOF body targets onto the instantaneous tangent.
+
+### BUG-153
+- **Date / turn:** 2026-11-26 (audit ID `UX-09`; fixed in task `1011`)
+- **Reported by:** audit `1000` (`DR6.4a/b`) and `1000B` cross-review
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-09`: when an arc centre `c` is coincident with a line endpoint `p`, dragging the point translates the arc rigidly (`r 30 -> 30`) or shrinks its radius (`r 30 -> 22.374`) depending on joint Map / z-order.
+- **What was wrong:** `handleJointSelection` checked `s.joints[0] === hitJoint.id` instead of checking the coincident cluster, so hitting `p` omitted the arc's rim joints from `arcRims` / `carried`.
+- **Cause:** `packages/ui/input-handlers/selection-tools.js` (`handleJointSelection`): changed `s.joints[0] === hitJoint.id` to `cluster.has(s.joints[0])` so dragging any joint coincident with an arc centre translates the arc rigidly (and pivots cleanly when one rim is held), consistent with Fusion (task 584).
+- **Task id(s):** `1011`
+- **Fix merge sha:** open (`agents/drag-1011`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-arc-centre-coincident-ux09-1011-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000` (`UX-09`), confirmed in `1000B` -> fixed in task `1011`
+
+### BUG-154
+- **Date / turn:** 2026-11-26 (audit IDs `UX-10`, `B-12d`; fixed in task `1011`)
+- **Reported by:** audit `1000` (`DR4.3b`) and `1000B` (`6c`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-10` / `B-12d`: dragging mirrored geometry rotates and translates a FREE mirror line (`ML m1 (0,-50) -> (8.135,-49.643)`).
+- **What was wrong:** Dimension edits held free mirror lines via `solveGivingWay` (task 611), but interactive drags left free mirror-line endpoints as free solver unknowns, so least-change solves tilted/shifted the mirror line instead of moving only the mirrored pair.
+- **Cause:** `packages/core/solver/engine.js` (`NewtonSolver.solve` / `_mirrorLineDragHolds`): during any active drag (`dragOpt` or `j.dragTarget`), temporarily holds every free driving `symmetric` constraint's mirror-line endpoints (restored in `finally`) unless the mirror line itself is being dragged (by its body, an endpoint, or a joint coincident with an endpoint).
+- **Task id(s):** `1011`
+- **Fix merge sha:** open (`agents/drag-1011`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-mirror-line-stay-ux10-1011-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`UX-10`) and `1000B` (`B-12d`) -> fixed in task `1011`. Behaviour change: dragging mirrored geometry keeps a free mirror line stationary; dragging the mirror line itself still moves it freely.
+
+---
+
 ### BUG-160
 - **Date / turn:** 2026-11-26 (audit IDs `UX-06`, `B-1`; fixed in task `1012`)
 - **Reported by:** audits `1000` (`IR2.1.C1`) & `1000B` (`1a`, `LIVE-1`, `LIVE-P2-1`)
@@ -2015,7 +2089,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -2023,7 +2097,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---
@@ -2034,4 +2108,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-160..BUG-161 fixed in task `1012`; BUG-170..BUG-174 fixed in task `1014`).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-150..BUG-154 fixed in task `1011`; BUG-160..BUG-161 fixed in task `1012`; BUG-170..BUG-174 fixed in task `1014`).

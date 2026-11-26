@@ -1,4 +1,4 @@
-# Bug Archive
+# Bug Archive, BUG-134 (11-26), BUG-135 (11-26)
 
 An archive of bugs reported by the owner and bugs found by the advisor or worker seats during live Fusion checks, merge-gate checks, and code reviews (Sketch-Studio and its paired `shaper-addin`).
 
@@ -1545,6 +1545,54 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 
 ---
 
+### BUG-136
+- **Date / turn:** 2026-11-26 (audit ID `B-20c`; fixed in task `1010`)
+- **Reported by:** audit `1000B` (F7, `snap-detection.js:187`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-20c`: `JOINT_PRIORITY_RADIUS = 15` is not scaled by the touch boost, so on a phone a line under the finger beats a point 15-30 px away.
+- **What was wrong:** Every other snap reach of `findSnap` grows by `snapBoostFor(isTouch)` (task 562); the joint-over-line priority radius stayed 15 px.
+- **Cause:** `packages/ui/snap-detection.js` `findSnap`: `JOINT_PRIORITY_RADIUS = 15` -> `15 * boost` (30 px for a touch); the header comment lists it with the other scaled reaches.
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/snap-touch-priority-b20c-node.test.js`, `tests/snap-display-1010-live.test.js` (phone 390: a finger 21 px from a point and 4 px from a line starts the Line tool at the point)
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **History:** found in `1000B` (`B-20c`) -> fixed in task `1010`. A mouse (boost 1) is unchanged.
+
+---
+
+### BUG-137
+- **Date / turn:** 2026-11-26 (audit IDs `UX-27`, `B-18b`; fixed in task `1010`)
+- **Reported by:** audits `1000` (`IR4.3`), `1000B` (`P5-B`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-27` / `B-18b`: an arc has no midpoint snap (a line has one); hovering the middle of an arc gives a plain `shape` snap.
+- **What was wrong:** `findSnap` offered a midpoint candidate for lines only; and `applySnapConstraint` / `previewSnapConstraint` would have built a line-style Midpoint on an arc's first two joints (centre, start).
+- **Cause:** `packages/ui/snap-detection.js` `findSnap`: the line's midpoint-or-shape rule is now one closure (`offerMidpointOrShape`) used by lines and arcs; an arc offers `arcSweepMidpoint` (the middle of its drawn sweep). `packages/core/snap-constraints.js` midpoint apply / preview: an arc target gives the arc form `{ joint, shape }` (task 875's Midpoint on an arc).
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/arc-midpoint-snap-ux27-node.test.js`, `tests/snap-display-1010-live.test.js` (desktop + phone: hover the arc's midpoint with the Line tool)
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **History:** found in `1000` (`UX-27`), `1000B` (`B-18b`) -> fixed in task `1010`. Behaviour change: every tool that uses `findSnap` now offers the midpoint of an arc, as of a line (hover marker, and the point gets a Midpoint constraint on a click / drop).
+
+---
+
+### BUG-138
+- **Date / turn:** 2026-11-26 (audit ID `B-18a`; fixed in task `1010`)
+- **Reported by:** audit `1000B` (`P5-A`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-18a`: the snap preview shows the midpoint of a line but a rectangle corner dragged to it ends elsewhere.
+- **What was wrong:** The drag loop pulled the dragged point to a locked snap only for `joint`, `line`, `shape`, `grid` and axis snaps; a `midpoint` snap was previewed (and its constraint added on release) but never used as the point's position while dragging. Measured before the fix: the corner sat at (0.0568, 3.9470) instead of the previewed midpoint (0, 4).
+- **Cause:** `packages/ui/input-handlers/selection-tools.js` (drag step, the snap-point whitelist): `midpoint` was missing for a CLUSTER drag (a corner of coincident joints), which infers nothing (task 584) so has no other way to reach the midpoint; added for that drag type only (a single-joint drag gets the midpoint from findInference, unchanged (tests/drag-attached-inference-node.test.js)). The cluster now sits exactly on the previewed point, and the release applies that same snap.
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-midpoint-snap-b18a-node.test.js`, `tests/snap-display-1010-live.test.js` (desktop: a joint dragged to a line midpoint is at (0, 8) during the drag and after release)
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **History:** found in `1000B` (`B-18a`) -> fixed in task `1010`
+
+---
+
 ## Family index
 
 Entries in each family are listed in chronological date order (`MM-DD`, oldest first) so recurring patterns read as a timeline.
@@ -1557,7 +1605,8 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25) |
-| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
+| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26), BUG-137 (11-26), BUG-138 (11-26) |
+| `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26) |
 | `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -1576,4 +1625,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007` and BUG-130..BUG-138 in task `1010`).

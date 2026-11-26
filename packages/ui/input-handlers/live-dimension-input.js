@@ -10,7 +10,7 @@ import { worldToScreen } from '#ui/coords.js';
 import { getDist, projectPointOnLine, perpendicularDistance, isPointLineDistance } from '#core/geometry.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { RECT_MODES } from '#core/constants.js';
-import { showNotification } from '#ui/notification-manager.js';
+import { logDiagnostic } from '#core/debug.js';
 import { dimensionEditLabel } from '#core/dimension-seams.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ensureNumericInputStyles, hideNumericInputEl, showNumericInputEl, boxValueText, parseBoxValue } from '#ui/numeric-input-manager.js'; // TASK 769: the boxes' one text / reading
@@ -296,11 +296,7 @@ function processCommit(detail) {
 
     // 3. Handle Failure/Driven
     if (result.isDriven) {
-        showNotification(
-            "Sketch is over-constrained. Dimension added as Driven. [ERR-OVERCON-01] Reason: Over-constrained system.\nArgs: " +
-            JSON.stringify({ result, valConfig }),
-            "info"
-        );
+        logDiagnostic('constraints', 'ERR-OVERCON-01', 'Over-constrained system; dimension added as driven.', { result, valConfig });
         detail.isDriven = true;
     }
 

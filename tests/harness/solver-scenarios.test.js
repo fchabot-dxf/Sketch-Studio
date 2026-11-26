@@ -143,7 +143,7 @@ run('8. conflicting dimension ADD → kept as driven reference', 'PASS', () => {
   const measured = d ? s.edgeLen(d.joints[0], d.joints[1]) : -1;
   return {
     pass: !!d && s.constraintCount === before + 1 && s.isDriven(d) === true && s.converged === true &&
-          s.isRectangle(r.corners) && Math.abs(measured - 100) < 0.5 && s.lastError !== null,
+          s.isRectangle(r.corners) && Math.abs(measured - 100) < 0.5 && s.lastError === null,
     nums: { keptDelta: s.constraintCount - before, isRef: d && s.isDriven(d), measuredActual: measured, converged: s.converged, lastError: s.lastError || 'none' },
   };
 });

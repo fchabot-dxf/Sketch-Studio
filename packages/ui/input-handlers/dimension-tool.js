@@ -5,7 +5,7 @@ import { SolverConfig } from '#core/solver-config.js';
 // Shared UI (#ui/input-handlers/). Relocated VERBATIM from apps/sketchstudio in slice S4d.
 // TODO(shaper): parameterize the DOM reaches before Shaper adopts this — relocation only for now.
 
-import { dbg } from '#core/debug.js';
+import { dbg, logDiagnostic } from '#core/debug.js';
 import { TOOL_MODES, CONSTRAINT_TYPES, DRAG_TYPES, DEFAULTS } from '#core/constants.js';
 import { ConstraintManager, announceReference } from '#core/constraint-manager.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
@@ -287,10 +287,11 @@ export function anchorPlacingDimension(svg, state) {
                 pending.__placing = false;
                 if (state && state.placingConstraint === pending) state.placingConstraint = null;
                 dimensionState.placingConstraint = null;
-                showNotification(
-                    'Geometry already defined. Dimension added as Driven. [ERR-DIM-02]',
-                    'info'
-                );
+                logDiagnostic('constraints', 'ERR-DIM-02', 'Geometry already defined; dimension added as driven.', {
+                    joints: [j1, j2],
+                    value: pending.value,
+                    dist
+                });
                 return true;
             }
         }
@@ -461,11 +462,7 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
                         constrainedJoints: Array.from(status.constrainedJoints),
                         jointDOFs: Object.fromEntries(status.jointDOFs)
                     };
-                    showNotification(
-                        'Geometry already defined. Dimension added as Driven. [ERR-DIM-02] Reason: Geometry is already fully defined.\nArgs: ' +
-                        JSON.stringify({ pending, jointStatus }),
-                        'info'
-                    );
+                    logDiagnostic('constraints', 'ERR-DIM-02', 'Geometry is already fully defined; dimension added as driven.', { pending, jointStatus });
                     return true;
                 }
                 // Else it's safe to be driving and we continue to open the edit input

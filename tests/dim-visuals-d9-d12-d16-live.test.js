@@ -26,13 +26,16 @@ const ARROWS = (idx) => `(() => {
     return { radial: (d[0] * tip[0] + d[1] * tip[1]) / (l * r), tangent: (d[0] * -tip[1] + d[1] * tip[0]) / (l * r) };
   });
 })()`;
-// the radius leader's end point vs the label text's screen box
+// the radius leader's end point vs the value text's REAL (rotated) box: the box sits above the baseline point by the font ascent
 const LEADER = (idx) => `(() => {
   const svg = document.getElementById('svgCanvas');
   const line = svg.querySelector('line[data-constraint-idx="${idx}"]'), t = svg.querySelector('.dim-label[data-constraint-idx="${idx}"] text');
-  const m = svg.getScreenCTM(), end = new DOMPoint(+line.getAttribute('x2'), +line.getAttribute('y2')).matrixTransform(m);
+  const tr = t.getAttribute('transform') || '', rot = tr ? parseFloat(tr.slice(tr.indexOf('(') + 1)) * Math.PI / 180 : 0, fs = +t.getAttribute('font-size');
+  const hw = t.textContent.length * fs * 0.55 / 2, hh = fs * 0.8 / 2, nx = Math.sin(rot), ny = -Math.cos(rot);
+  const ex = +line.getAttribute('x2') - (+t.getAttribute('x') + nx * hh), ey = +line.getAttribute('y2') - (+t.getAttribute('y') + ny * hh);
+  const clear = Math.max(Math.abs(ex * Math.cos(rot) + ey * Math.sin(rot)) - hw, Math.abs(ex * nx + ey * ny) - hh);
   const b = t.getBoundingClientRect();
-  return { inside: end.x > b.left + 1 && end.x < b.right - 1 && end.y > b.top + 1 && end.y < b.bottom - 1, end: [end.x, end.y], box: [b.left, b.top, b.right, b.bottom] };
+  return { inside: clear <= 0, clear, box: [b.left, b.top, b.right, b.bottom] };
 })()`;
 const LABEL_BOX = (canvas, idx) => `(() => { const b = document.querySelector('#${canvas} .dim-label[data-constraint-idx="${idx}"] text').getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; })()`;
 
@@ -53,7 +56,7 @@ async function run(tag, width, height, touch) {
     // D-12
     const lead = await cdp.evalJs(LEADER(1));
     console.log(tag, 'D-12 leader', JSON.stringify(lead));
-    assert.ok(!lead.inside, `the radius leader ends outside the "R 18" text: ${JSON.stringify(lead)}`);
+    assert.ok(!lead.inside, `the radius leader ends outside the "R 18" text box (D-12: pinned, not a bug): ${JSON.stringify(lead)}`);
     const [bl, bt, br, bb] = lead.box;
     await shot(cdp, `${tag}-d12-radius-leader.png`, { x: (bl + br) / 2 - 55, y: (bt + bb) / 2 - 35, width: 110, height: 70 }, 5);
     // D-16 (Shaper: its page exposes the design state): the "5" is 6 px wide; a pointer / finger 9 px beside it still picks it

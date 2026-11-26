@@ -1403,18 +1403,18 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 ---
 
 ### BUG-131
-- **Date / turn:** 2026-11-26 (audit ID `D-12`; fixed in task `1010`)
+- **Date / turn:** 2026-11-26 (audit ID `D-12`; investigated in task `1010`)
 - **Reported by:** audit `1003` (`V2.6.radiusLeader`, `L1.visual.desktop`)
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
-- **Report:** `D-12`: the radius dimension's leader line runs into its own `R 18` text.
-- **What was wrong:** The leader was drawn from the rim to the label centre, straight through the text.
-- **Cause:** `packages/ui/svg-renderer.js` (radius dimension): the leader ended at `(labelX, labelY)`; it now goes through `radialLead` (`packages/ui/dimension-lead.js`, the helper angle and linear dimensions already use) to the edge of the text box, and is not drawn when that is shorter than the minimum lead.
+- **Report:** `D-12`: the radius dimension's leader line runs into / under its own `R 18` text (`leaderCrossesText: true`).
+- **What was wrong:** nothing found. The probe's `leaderCrossesText` compares the leader's bounding box with the bounding box of the ROTATED text, which overlap for any diagonal leader that ends next to the text. Against the text's real rotated box (it sits above its baseline point by the font ascent, `dim-placement.js placeDimText`) the leader ends `DIM_TEXT_GAP_PX` (3 px) clear of it: node run `leader end vs the text box: along=-0.000 across=-0.456 half box 0.746 x 0.271; clear by 0.185 world units`, phone and desktop live runs clear by 0.46 / 1.51 world units. Task 636's `tests/radius-diameter-label-beside-leader.test.js` already asserts that gap.
+- **Cause:** none (audit false positive). A first attempt that stopped the leader at the text box was reverted: it left the leader touching the box and broke the task 636 / 448 tests for no visible gain.
 - **Task id(s):** `1010`
-- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
-- **Guarding test file(s):** `tests/radius-leader-d12-node.test.js`, `tests/dim-visuals-d9-d12-d16-live.test.js` (desktop + phone)
-- **Status:** fixed
+- **Fix merge sha:** none (no code change)
+- **Guarding test file(s):** `tests/radius-leader-d12-node.test.js` and `tests/dim-visuals-d9-d12-d16-live.test.js` (pin: the leader ends outside the text's real box; they pass before and after)
+- **Status:** not reproduced
 - **Family:** `dimension-display`
-- **History:** found in `1003` (`D-12`) -> fixed in task `1010`
+- **History:** reported in `1003` (`D-12`) -> not reproduced in task `1010`
 
 ---
 
@@ -1431,6 +1431,54 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Status:** fixed
 - **Family:** `dimension-display`
 - **History:** found in `1003` (`D-16`) -> fixed in task `1010`
+
+---
+
+### BUG-133
+- **Date / turn:** 2026-11-26 (audit ID `UX-20`; fixed in task `1010`)
+- **Reported by:** audit `1000` (`DR3.0`, `L3.desktop`, `L3.phone`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-20`: an over-constrained triangle (sides 50 / 40 / 120) shows no conflict colour: L1 black, L2/L3 blue, no conflict class.
+- **What was wrong:** The renderer coloured geometry only by DOF (free blue / fully rigid black / locked); a constraint the solver could not satisfy changed nothing on the canvas.
+- **Cause:** `packages/ui/svg-renderer.js` shape colour rule had no conflict state. The app has no geometry conflict colour of its own; its conflict red is `--sk-error` (the over-constrained notice, the Design panel's failing-constraint rows), so geometry bound by an unsatisfied constraint is now drawn `var(--sk-error, #ef4444)` (`CONFLICT_COLOR`). The set comes from one new helper, `unsatisfiedConstraints` in `packages/core/constraint-verifier.js` (the solver's own `conflicts` rule: non-driven, residual above `VERIFIER_TOLERANCE`), mapped to shapes with `constraintTargets`. Hover and selection colours still win; the Clean display profile (no status colours) is unchanged.
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/conflict-colour-ux20-node.test.js`
+- **Status:** fixed
+- **Family:** `dimension-display`
+- **History:** found in `1000` (`UX-20`) -> fixed in task `1010`
+
+---
+
+### BUG-134
+- **Date / turn:** 2026-11-26 (audit ID `B-20b`; fixed in task `1010`)
+- **Reported by:** audit `1000B` (`1b FIXED-ENDPOINTS BEZIER`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-20b`: a Bezier with both end points fixed turns black ("fully constrained") although its two control points still move.
+- **What was wrong:** `analyzeConstraintStatus` decided a shape is fixed / constrained from its joints alone; a Bezier's joints are its two ends only, its control points `c1` / `c2` are plain shape data (shapes.js) that no constraint or lock holds.
+- **Cause:** `packages/core/constraint-status.js` shape loop: a bezier is now treated like a circle with a free radius (`radiusFree`), so it never enters `fixedShapes` / `constrainedShapes`. Nothing can fix a Bezier's control points today, so there is no case in which it is black.
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/bezier-fixed-ends-b20b-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000B` (`B-20b`) -> fixed in task `1010`. Behaviour change: a Bezier on a locked sketch (every end joint fixed) is drawn in the free blue instead of the locked colour.
+
+---
+
+### BUG-135
+- **Date / turn:** 2026-11-26 (audit IDs `UX-29`, `D-26`; fixed in task `1010`)
+- **Reported by:** audits `1000` (`D1.4`, `D1.6`), `1003` (`V2.3.bad.d2 * 2`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-29`: typing `d1 * 2` into `d1` shows the bare hint `d1 -> d1` (one item, nothing to cycle).
+- **What was wrong:** The cycle refusal's message was the raw path joined with `->`; for a name that reads itself the path is the same name twice.
+- **Cause:** `packages/core/parameters.js` `cycleError`: a one-item cycle now reads `d1 refers to itself`; a loop through several names still shows its path (`d1 -> d2 -> d1`).
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/cycle-hint-ux29-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000` (`UX-29`), `1003` (`D-26`) -> fixed in task `1010` (one-item case only; the multi-name path text is unchanged, existing tests assert it)
 
 ---
 

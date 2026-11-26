@@ -86,6 +86,7 @@ export { angleDimensionSector };
 export function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
 import { updateCursor } from './cursor-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
+import { unsatisfiedConstraints } from '#core/constraint-verifier.js';
 import { previewSnapConstraint } from '#core/snap-constraints.js';
 import { computeTrueVertexSet } from '#core/joints.js';
 import { resolveProfileViews } from '#core/profile-model.js';
@@ -141,6 +142,9 @@ const SK_VAR = {
 const GLYPH_HOVER_COLOR = 'var(--sk-glyph-hover, #eab308)';
 const GLYPH_SELECTED_COLOR = 'var(--sk-glyph-selected, #ca8a04)';
 const SELECTED_JOINT_FILL = 'var(--sk-joint-selected, #76A4E4)';
+// UX-20: geometry whose constraint the solver could not satisfy (a conflict) is drawn in the app's error red, the one the over-constrained notice and
+// the Design panel's failing-constraint rows use (--sk-error).
+const CONFLICT_COLOR = 'var(--sk-error, #ef4444)';
 export function skv(color) {
   if (typeof color !== 'string') return color;
   const v = SK_VAR[color];
@@ -481,6 +485,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Container for overlays that must be drawn last (ensures top-most stacking)
   let lateOverlay = '';
   const show = ctx.display || EDIT_DISPLAY; // TASK 725: the display profile (which layers of the drawing are drawn)
+  // UX-20: the shapes bound by a constraint the geometry does not satisfy now (hover / selection still win over this colour)
+  const conflictShapes = new Set();
+  if (show.statusColors) for (const c of unsatisfiedConstraints(activeConstraints, joints, shapes)) constraintTargets(c, shapes).shapes.forEach((id) => conflictShapes.add(id));
   // Calculate zoom factor to keep stroke widths constant in screen space
   const vb = svg.viewBox.baseVal;
   const rect = svg.getBoundingClientRect();
@@ -1267,6 +1274,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     } else {
         strokeColor = '#60A5FA'; // Blue (paler) — under-constrained, can still move
     }
+    if (conflictShapes.has(s.id)) strokeColor = CONFLICT_COLOR; // UX-20 (conflictShapes is empty without statusColors)
     if (!show.statusColors) strokeColor = '#202020'; // TASK 725: one ink for every curve (the fully-constrained black, --sk-geo-fixed)
 
     if(hoverBoundShapes.has(s.id)){
@@ -2665,6 +2673,7 @@ switch(c.type){
           const edgeX = center.x + Math.cos(angle) * radius;
           const edgeY = center.y + Math.sin(angle) * radius;
 
+          out.push(`<line x1="${edgeX}" y1="${edgeY}" x2="${labelX}" y2="${labelY}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}" data-constraint-idx="${cIdx}"/>`);
 
           // TASK 448: on an ARC, a leader outside the arc's sweep still meets the arc's CIRCLE at that angle; a thin dashed
           // EXTENSION of the circle runs from the nearest arc end to that point (inside the sweep: none; circle: none).
@@ -2699,15 +2708,11 @@ switch(c.type){
           const isSelected = selectedConstraints && selectedConstraints.has(c);
           const labelStrokeColor = isHovered ? HOVER_COLOR : isSelected ? '#1e40af' : '#2563eb';
           const labelStrokeWidth = (isHovered || isSelected) ? scale(2.5) : scale(1.5);
-          // The leader runs from the rim to the EDGE of the value's text (radialLead), never into it.
-          const placedRad = placeDimLabel(labelX, labelY, Math.cos(angle), Math.sin(angle), displayVal, scale(50), false, labelStrokeColor);
-          const leader = radialLead({ x: edgeX, y: edgeY }, placedRad.rect, scale(DIM_LEAD_MIN_PX));
-          if (leader) out.push(`<line x1="${leader.x1}" y1="${leader.y1}" x2="${leader.x2}" y2="${leader.y2}" style="stroke:${skv(strokeColor)}" stroke-width="${scale(1.5)}" stroke-opacity="${visualOpacity}" data-constraint-idx="${cIdx}"/>`);
           
           const canEdit = (currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) && !isDrivenFlag;
           const labelHtml = `<g class="dim-label" data-constraint-idx="${cIdx}" style="cursor:${canEdit ? 'pointer' : 'default'}">${dimensionNameTitle(c)}
             ${dimLabelRect(labelX, labelY, labelW, labelH, labelRx, labelStrokeColor, labelStrokeWidth)}
-            <text ${placedRad.attrs}>${displayVal}</text>
+            <text ${placeDimLabel(labelX, labelY, Math.cos(angle), Math.sin(angle), displayVal, scale(50), false, labelStrokeColor).attrs}>${displayVal}</text>
           </g>`;
           try{ c.glyphPos = { x: labelX, y: labelY }; }catch(_){ }
           if (!c.__editing) { out.push(labelHtml); }

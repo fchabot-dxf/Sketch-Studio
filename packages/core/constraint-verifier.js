@@ -5,6 +5,7 @@ import { angleSectorOf, angleSectorTarget, angleSectorUnderLabel, angleLabelAngl
 import { symmetricResidual } from './symmetric.js';
 import { offsetResidual } from './offset.js';
 import { patternResidual } from './pattern.js';
+import { SolverConfig } from './solver-config.js';
 
 // What a DISTANCE dimension measures in the geometry now (the same convention as its solver row): a radius / diameter, a point-to-line or a
 // line-to-line distance, a joint pair's aligned / horizontal / vertical distance. 0 when its geometry is missing.
@@ -424,4 +425,10 @@ export function findCollapsedShape(state, before, skip = null) {
 export function withIndefiniteArticle(noun) {
     const s = String(noun || '');
     return `${/^[aeiou]/i.test(s) ? 'an' : 'a'} ${s}`;
+}
+
+// The constraints the geometry does NOT satisfy now: every non-driven constraint whose residual is above the verifier tolerance (the solver's
+// own `conflicts`, constraint-solver.js solve, read from the geometry as it stands). A driven dimension is a measurement, never in conflict.
+export function unsatisfiedConstraints(constraints, joints, shapes, tolerance = SolverConfig.VERIFIER_TOLERANCE || 0.001) {
+    return (constraints || []).filter((c) => !(c.isDriven || c.driven) && measureResidual(c, joints, shapes) > tolerance);
 }

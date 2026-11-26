@@ -195,6 +195,7 @@ try {
     near(joint('b').x, 50, '70: the geometry did not move');
     assert.strictEqual(st.history.length, h0, '70: no undo step');
     assert.ok(toasts().length > 0, '70: the refusal is told: ' + JSON.stringify(toasts()));
+    console.log('     70 refused with: ' + JSON.stringify(toasts()));
   });
 
   await section('6. DIV-03 / DD-3: double-clicking a Reference dimension opens its box read-only', async () => {

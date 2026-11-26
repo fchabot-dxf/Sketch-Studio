@@ -243,14 +243,15 @@ export class ConstraintManager {
         // opposite edge of an already-dimensioned rect — fixed by the facing edge + the two verticals).
         // Bring it in as a REFERENCE, not a 2nd driver. Uses rank-INCREASE of the new row, NOT the global
         // rankDeficient flag (which is also true whenever a legit DOF like an undimensioned height is free).
-        if (type === CONSTRAINT_TYPES.DISTANCE && !normalized.isDriven && !normalized.driven &&
+        // TASK 1006 (B-9 / D-25): ONE rule for every dimension the rank test reads (isDimensionDetermined's types): an ANGLE too.
+        if ((type === CONSTRAINT_TYPES.DISTANCE || type === CONSTRAINT_TYPES.ANGLE) && !normalized.isDriven && !normalized.driven &&
             state.engine && typeof state.engine.isDistanceRedundant === 'function' &&
             state.engine.isDistanceRedundant({ ...normalized, type })) {
             normalized.isDriven = true;
             normalized.driven = true;
             normalized.drivenReason = REDUNDANT_REFERENCE;
             if (!opts.quietReference) announceReference(normalized);
-            dbg.log('constraints', `[ConstraintManager] rank-redundant distance -> reference`);
+            dbg.log('constraints', `[ConstraintManager] rank-redundant ${type} -> reference`);
         }
 
         // ── Conflict detection ─────────────────────────────────────────

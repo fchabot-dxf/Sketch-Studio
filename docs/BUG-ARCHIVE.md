@@ -1447,6 +1447,38 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `solver`
 - **History:** found in `1000` (`UX-08`), `1000B` (`B-4`), `1003` (`D-19`) -> fixed in task `1006`
 
+### BUG-124
+- **Date / turn:** 2026-11-26 (audit ID `UX-16`, part `a` of `D-25`; fixed in task `1006`)
+- **Reported by:** audits `1000` (`D5.1`, `L2.desktop`, `L2.phone`), `1000B` cross (`MAIN1001.UX16`), `1003` (`V2.4.autoRef.redundantAngleTri`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-16`: double-clicking an existing driving dimension the sketch already determines (a line with both ends locked) never opened its box and silently made it a Reference, with no undo step and (since task 1001) no message.
+- **What was wrong:** the birth rule "a dimension placed on a quantity the sketch already determines is born driven" ran on every open of the value box, a double-click on an existing dimension included.
+- **Cause:** `packages/ui/numeric-input-manager.js` `showEditInput`: the `isDimensionDetermined` demotion was not limited to a just-placed dimension.
+- **Fix:** the demotion runs only for a dimension being born (`__newlyPlaced`); an existing driving dimension opens its box like any other. A typed value the sketch cannot take is refused by the existing edit refusal ("Can't set to 70 — d1 is already determined by the other constraints. Reverted."), nothing changes, no undo step.
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 5)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-125, BUG-126
+- **History:** found in `1000` (`UX-16`); toast removed by task 1001, silent demotion left (`1000B` cross) -> fixed in task `1006`
+
+### BUG-126
+- **Date / turn:** 2026-11-26 (audit IDs `B-9`, part `a` of `D-25`; fixed in task `1006`)
+- **Reported by:** audits `1000B` (`B-9`, `XB-9`), `1003` (`V2.4.autoRef.redundantAngleTri`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-9` / `D-25`: a redundant Angle dimension (90 between an H and a V line, or an angle of a triangle whose three sides are dimensioned) was born Driving, while every redundant distance is born Reference.
+- **What was wrong:** the birth rank test (a dimension the existing driving constraints already determine comes in as a Reference) was asked for distances only.
+- **Cause:** `packages/core/constraint-manager.js` `createConstraint`: the `isDistanceRedundant` test was guarded by `type === DISTANCE`.
+- **Fix:** the same test for `DISTANCE` and `ANGLE` (the types `isDimensionDetermined` reads): one rule.
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 7)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-124
+- **History:** found in `1000B` (`B-9`) and `1003` (`D-25`) -> fixed in task `1006`
+
 ---
 
 ## Family index
@@ -1462,14 +1494,14 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
 | `storage-lifecycle` | BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-124 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---

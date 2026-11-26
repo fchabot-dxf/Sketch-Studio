@@ -471,8 +471,9 @@ export function showEditInput(svg, state, constraint, initialKey) {
 
     // If target is driven or fully fixed endpoints, skip opening the editor and force driven.
     if (constraint.isDriven || constraint.driven) return;
-    // A dimension on a quantity the sketch already determines is placed DRIVEN (a measurement) and is never typed.
-    if (isDimensionDetermined(state, constraint)) {
+    // A dimension PLACED on a quantity the sketch already determines is born DRIVEN (a measurement) and is never typed. TASK 1006 (UX-16): at its
+    // birth only: an existing driving dimension opens its box like any other (a value the sketch cannot take is refused when it is typed).
+    if (constraint.__newlyPlaced === true && isDimensionDetermined(state, constraint)) {
         constraint.isDriven = true;
         constraint.driven = true;
         logDiagnostic('constraints', 'ERR-DRIVEN-02', 'Already determined by existing constraints; dimension added as driven.', {

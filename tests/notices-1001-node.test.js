@@ -97,6 +97,7 @@ try {
   const cDet = ConstraintManager.createConstraint(st, CONSTRAINT_TYPES.DISTANCE, { joints: [fx1, fx2], value: 60, isDriven: false }, { skipVerify: true, quietReference: true });
   ok(!!cDet, 'created test distance');
   cDet.isDriven = false; cDet.driven = false;
+  cDet.__newlyPlaced = true; // TASK 1006 (UX-16): the demotion is the BIRTH rule (a just-placed dimension); an existing one opens its box
   showEditInput(app.svg, st, cDet);
   eq(cDet.isDriven, true, 'numeric-input-manager marks determined dim as driven');
   eq(notices(doc).length, 0, 'numeric-input-manager shows no toast for driven dim');

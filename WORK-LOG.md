@@ -18290,3 +18290,10 @@ advisor default Floor). Claude Opus subagent, branch agents/stockT2-898. apps/sh
   `number`; op-list.js shows it, its words name an unnumbered row by its text; prepare-stage.js card header "Stock · no shapes yet"; export-payload.js tickedNamePart /
   chunkFileName (leavable) and exportTickLine read it). File names are as before 898 (split-files-888-live's names unchanged). Website designs with a Stock op also
   lose the Stock's number: opbar-s3-node, op-ticks-798-node, visfix-825-node, shaperhub-keep-884-node updated (TASK 898 comments).
+## TURN 1002
+Created [docs/BUG-ARCHIVE.md](docs/BUG-ARCHIVE.md) from `.evidence/1002/advisor-log.txt`, `.evidence/1002/owner-report-3380.txt`, `WORK-LOG.md`, and `git log`:
+- 90 entries (`BUG-001`..`BUG-090`, oldest first, covering both owner-reported bugs and advisor-/worker-found bugs from live Fusion checks, merge gates, and reviews, with `Reported by`, date/turn, verbatim quotes/log summaries, cause, task ids, merge shas, guarding test files, status, and family tag).
+- 16-family index at the bottom + Audits section linking `docs/SNAP-CONSTRAINT-AUDIT-869.md`, `docs/STOCK-MODEL-890.md`, and `docs/SOLVER-UX-AUDIT-1000*.md`.
+- Verified: 100 Sketch-Studio task IDs checked (97 in `WORK-LOG.md`/`git log`, 3 open/parked in `advisor-log.txt`: `686`, `898`, `1001`, 0 missing), 92 Sketch-Studio SHAs verified via `git cat-file -e` (0 bad), 144 guarding test file paths verified on disk (0 missing).
+
+- Addition (turn 3732): added per-entry `Related`, `Regression of`, `Led to`, and `History` fields, date-ordered (`MM-DD`) family timelines in the Family index, the `## Fixing` rule in `AGENTS.md`, and verified `Bad BUG refs: []` across all 90 entries.

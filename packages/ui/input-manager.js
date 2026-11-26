@@ -5,7 +5,7 @@
 // TODO(shaper): parameterize the ~54 DOM-id reaches before Shaper adopts this input layer (relocation only).
 
 import { pickableShapes } from '#core/reference-lines.js';
-import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets, activeSketchScene, otherSketchScene, inActiveSketch } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
+import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets, activeSketchScene, otherSketchScene, inActiveSketch, recordUndo } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
 import { dbg, logDiagnostic } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS, ACTIVE_SKETCH_SNAP_TOOLS } from '#core/constants.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
@@ -1426,6 +1426,7 @@ export function selectionLockState(state, selectionOnly = true) {
 }
 
 // The one Lock / Unlock: the F key, the ribbon Lock button and the context menu all call this.
+// TASK 1006 (UX-08 / B-4): a Lock / Unlock that changes a point is ONE undo step (recordUndo before the change).
 export function toggleFixedSelection(state) {
     const ids = lockTargets(state, false);
     if (ids.length === 0) return false;
@@ -1437,11 +1438,9 @@ export function toggleFixedSelection(state) {
     });
 
     const nextFixed = !allFixed;
-    for (const id of ids) {
-        if (id === 'j_origin') continue;
-        const j = state.joints.get(id);
-        if (j) j.fixed = nextFixed;
-    }
+    const changed = ids.filter(id => { const j = id === 'j_origin' ? null : state.joints.get(id); return j && !!j.fixed !== nextFixed; });
+    if (changed.length) recordUndo(state, nextFixed ? 'lock' : 'unlock');
+    for (const id of changed) state.joints.get(id).fixed = nextFixed;
 
     try { dbg.log('debug', '[fixed] toggle', { ids, fixed: nextFixed }); } catch(_) {}
     try { if (state.engine) state.engine.solve(SolverConfig.ITERATIONS || 500); } catch(_) {}

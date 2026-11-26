@@ -1633,6 +1633,117 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Related:** BUG-111, BUG-113
 - **History:** found in audit 1000B (`B-6`) 2026-11-25 -> fixed in task 1005 2026-11-26
 
+### BUG-120
+- **Date / turn:** 2026-11-26 (audit IDs `UX-01`, `B-2`, `D-17`; fixed in task `1006`)
+- **Reported by:** audits `1000` (`D9.1`, `D9.2`), `1000B` (`2b`), `1003` (`V2.4.toggle.Href->Drv`, `Vref->Drv`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-01` / `B-2` / `D-17`: making a horizontal or vertical reference dimension on a diagonal Driving set its value to the slanted length (50 on a 30 x 40 diagonal), so the shape jumped (`b (30,40) -> (50,40)`).
+- **What was wrong:** the promotion re-measured every joint-pair distance as the aligned length, whatever its mode.
+- **Cause:** `packages/core/dimension-seams.js` `toggleDriving` hand-rolled its own measurement (`getDist` for any 2-joint distance), not the one the label and the Parameters table read (`#core/constraint-verifier.js` `measureDimension`).
+- **Fix:** `toggleDriving` takes the value `measureDimension` gives (H / V: `|dx|` / `|dy|`), then re-solves; the hand-rolled branches are gone.
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 1)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-121, BUG-122
+- **History:** found in `1000` (`UX-01`), `1000B` (`B-2`), `1003` (`D-17`) -> fixed in task `1006`
+
+### BUG-121
+- **Date / turn:** 2026-11-26 (audit ID `B-3`, part of `D-17`; fixed in task `1006`)
+- **Reported by:** audits `1000B` (`2c`, `2d`), `1003` (`V2.4.toggle.ParRef->Drv`, `PtAxisRef->Drv`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-3`: making a MOVED line-line or point-to-axis reference dimension Driving snapped the geometry back to the value it was born with (`55 -> 20`, `60 -> 25`).
+- **What was wrong:** the promotion had no line-line branch at all, and its point-to-line branch read `state.joints`, where the axis ends (`j_origin`, `j_ref_x`) are not: the stale value stayed and the solve moved the geometry to it.
+- **Cause:** `packages/core/dimension-seams.js` `toggleDriving` (same hand-rolled measurement as BUG-120).
+- **Fix:** the same one change as BUG-120: `measureDimension` (line-line perpendicular distance; an axis resolved in the scene).
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 2)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-120, BUG-122
+- **History:** found in `1000B` (`B-3`) and `1003` (`D-17`) -> fixed in task `1006`
+
+### BUG-122
+- **Date / turn:** 2026-11-26 (audit ID `D-4`; fixed in task `1006`)
+- **Reported by:** audit `1003` (`V2.4.toggle.AngAxisRef->Drv`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `D-4`: making an angle-to-axis reference dimension Driving collapsed the line to the origin (`b = (0, -0)`).
+- **What was wrong:** the promotion looked the axis (`ref_axis_x` / `ref_axis_y`) up in `state.shapes`, where it is not, so the stale value stayed and the solve folded the line.
+- **Cause:** `packages/core/dimension-seams.js` `toggleDriving` angle branch (same hand-rolled measurement as BUG-120).
+- **Fix:** new `#core/constraint-verifier.js` `measureAngleDimension` (`{ value, sector, parallel }`, axes resolved in the scene: the sector under the label, as before; parallel lines 0 / 180), the one angle measurement: `measureDimension` reads its value, `toggleDriving` its value and sector.
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 3)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-120, BUG-121
+- **History:** found in `1003` (`D-4`) -> fixed in task `1006`
+
+### BUG-123
+- **Date / turn:** 2026-11-26 (audit IDs `UX-08`, `B-4`, `D-19`; fixed in task `1006`)
+- **Reported by:** audits `1000` (`D9.3b`, `IR2.1`), `1000B` (`P8-A`, `2a`), `1003` (`V2.4.ctxToggle`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-08` / `B-4` / `D-19`: Driving <-> Reference (context menu) and Lock / Unlock (F, the ribbon Lock, the context menu) recorded no undo step: Ctrl+Z undid the edit before (it deleted a line drawn before the lock), and a switch to Reference lost the dimension's formula for good.
+- **What was wrong:** neither change took a snapshot before it.
+- **Cause:** `packages/core/dimension-seams.js` `toggleDriving` and `packages/ui/input-manager.js` `toggleFixedSelection` (the one Lock / Unlock every way calls) never called `saveState`.
+- **Fix:** each records ONE undo step (`#core/sketch-model.js` `recordUndo`, the shared undo path) before it changes anything; a refused switch, and a Lock that changes no point, record none.
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (sections 4a, 4b)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`UX-08`), `1000B` (`B-4`), `1003` (`D-19`) -> fixed in task `1006`
+
+### BUG-124
+- **Date / turn:** 2026-11-26 (audit ID `UX-16`, part `a` of `D-25`; fixed in task `1006`)
+- **Reported by:** audits `1000` (`D5.1`, `L2.desktop`, `L2.phone`), `1000B` cross (`MAIN1001.UX16`), `1003` (`V2.4.autoRef.redundantAngleTri`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-16`: double-clicking an existing driving dimension the sketch already determines (a line with both ends locked) never opened its box and silently made it a Reference, with no undo step and (since task 1001) no message.
+- **What was wrong:** the birth rule "a dimension placed on a quantity the sketch already determines is born driven" ran on every open of the value box, a double-click on an existing dimension included.
+- **Cause:** `packages/ui/numeric-input-manager.js` `showEditInput`: the `isDimensionDetermined` demotion was not limited to a just-placed dimension.
+- **Fix:** the demotion runs only for a dimension being born (`__newlyPlaced`); an existing driving dimension opens its box like any other. A typed value the sketch cannot take is refused by the existing edit refusal ("Can't set to 70 — d1 is already determined by the other constraints. Reverted."), nothing changes, no undo step.
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 5)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-125, BUG-126
+- **History:** found in `1000` (`UX-16`); toast removed by task 1001, silent demotion left (`1000B` cross) -> fixed in task `1006`
+
+### BUG-125
+- **Date / turn:** 2026-11-26 (audit IDs `DIV-03`, `DD-3`; fixed in task `1006`)
+- **Reported by:** audits `1000` (`D3.1`-`D3.3`), `1003` (`DD-3`, `V2.4.autoRef.redundantAngleTri`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `DIV-03` / `DD-3`: double-clicking a Reference dimension did nothing at all: no box, no message (owner rule: no result = bug).
+- **What was wrong:** the value box refused to open for a reference without a word.
+- **Cause:** `packages/ui/numeric-input-manager.js` `showEditInput` returned at once for a reference (`if (constraint.isDriven || constraint.driven) return;`).
+- **Fix:** a reference opens the same box READ-ONLY (mode `'view'`), on its label, showing what its label shows (`#core/constraint-verifier.js` `measureDimension`), with the hint "Reference dimension: measured, not typed. To type a value, make it Driving (right-click it, or touch and hold)." Enter, Esc or a press outside closes it; nothing changes, no undo step. Chosen over offering the Driving / Reference choice because it reuses the box, its placement and its hint line (the menu's actions live in input-manager, which the box cannot call).
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 6), `tests/reference-dim-box-1006-live.test.js` (desktop mouse 1280 x 800, phone touch 390 x 844), `tests/dimension-redundant-driven-node.test.js` (section 2 updated)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-124
+- **History:** found in `1000` (`DIV-03`) and `1003` (`DD-3`) -> fixed in task `1006`
+
+### BUG-126
+- **Date / turn:** 2026-11-26 (audit IDs `B-9`, part `a` of `D-25`; fixed in task `1006`)
+- **Reported by:** audits `1000B` (`B-9`, `XB-9`), `1003` (`V2.4.autoRef.redundantAngleTri`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-9` / `D-25`: a redundant Angle dimension (90 between an H and a V line, or an angle of a triangle whose three sides are dimensioned) was born Driving, while every redundant distance is born Reference.
+- **What was wrong:** the birth rank test (a dimension the existing driving constraints already determine comes in as a Reference) was asked for distances only.
+- **Cause:** `packages/core/constraint-manager.js` `createConstraint`: the `isDistanceRedundant` test was guarded by `type === DISTANCE`.
+- **Fix:** the same test for `DISTANCE` and `ANGLE` (the types `isDimensionDetermined` reads): one rule.
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 7)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-124
+- **History:** found in `1000B` (`B-9`) and `1003` (`D-25`) -> fixed in task `1006`
+
 ---
 
 ## Family index
@@ -1648,14 +1759,14 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
 | `storage-lifecycle` | BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---
@@ -1666,4 +1777,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`).

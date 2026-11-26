@@ -7,13 +7,12 @@
 
 import { SolverConfig } from '#core/solver-config.js';
 import { CONSTRAINT_TYPES } from '#core/constants.js';
-import { getDist, perpendicularDistance, isPointLineDistance, getLineIntersection } from '#core/geometry.js';
-import { measureShapeSizes, findCollapsedShape, withIndefiniteArticle } from '#core/constraint-verifier.js';
+import { measureShapeSizes, findCollapsedShape, withIndefiniteArticle, measureDimension, measureAngleDimension } from '#core/constraint-verifier.js';
 import { seedFilletForRadius, filletHasCollapsedLine, filletLines, isLiveFillet, equalFilletArcs } from '#core/fillet.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { solveGivingWay } from '#core/creation-placement.js';
-import { angleSectorUnderLabel, angleLabelAngle, angleSectorOf } from '#core/angle-sector.js';
+import { recordUndo } from '#core/sketch-model.js';
 import { projectDimLabel } from '#core/dim-label.js';
 import { replaceParameters, usersOf, planChange, entryName, entryValue, writeEntry, reconcileKeptDimensions } from '#core/parameters.js';
 import { editPatterns, patternValuesRefusal } from '#core/pattern.js';
@@ -327,9 +326,13 @@ export function isDimensionDetermined(state, c) {
 // cannot become driving (Fusion: over-constrained): the toggle is REFUSED and nothing changes, returned as { refused: true }.
 // Every mode goes through that one test, a radius too (a circle's radius is a solver unknown since task 515, so a second driving
 // radius on the same circle, or an equal to a dimensioned circle, determines it: there is no separate radius swap any more).
-// When promoting, recompute the value from geometry and re-solve.
+// When promoting, the value is what the dimension measures NOW (#core/constraint-verifier.js measureDimension / measureAngleDimension, what
+// its label shows as a reference: an H / V distance its |dx| / |dy|, a line-line or point-to-axis distance its perpendicular distance, an
+// angle to an axis read in the scene, its sector too), then a re-solve: nothing moves (TASK 1006: UX-01 / B-2 / D-17, B-3, D-4).
 // TASK 535 rule O11: making a DRIVING dimension a REFERENCE clears its formula (a reference has no formula; its value stays the number it had), and is
 // REFUSED while another formula reads its name (O9: a formula cannot read a reference): reason 'd4 is used by gap, d9', nothing changed.
+// TASK 1006 (UX-08 / B-4 / D-19): a switch that happens is ONE undo step (recordUndo before the change: undo brings the formula back); a refused
+// one records none.
 // Returns { nowDriving, refused, error, reason? } (error = 'ERR-DRIVE-02' when the solve doesn't converge after promoting; reason = why it was refused).
 // No DOM, no notifications here.
 export function toggleDriving(state, c) {
@@ -339,51 +342,20 @@ export function toggleDriving(state, c) {
     if (users.length) return { nowDriving: true, refused: true, error: null, reason: `${c.name} is used by ${users.join(', ')}` };
   }
 
+  recordUndo(state, c.isDriven ? 'make dimension driving' : 'make dimension reference');
   c.isDriven = !c.isDriven;
   c.driven = c.isDriven; // keep both flags in sync (solver/renderer read isDriven || driven)
   if (c.isDriven) delete c.expression; // O11
 
   let error = null;
   if (!c.isDriven) {
-    // Now DRIVING — sync the value to the current geometry so it doesn't snap to a stale value.
-    if (c.isRadius && c.shape) {
-      const s = state.shapes.find(x => x.id === c.shape);
-      let r = null;
-      if (s && typeof s.radius === 'number') r = s.radius;
-      else if (s && s.joints && s.joints.length >= 2) {
-        const jc = state.joints.get(s.joints[0]), jr = state.joints.get(s.joints[1]);
-        if (jc && jr) r = getDist(jc, jr);
-      }
-      if (r !== null) c.value = c.isDiameter ? r * 2 : r;
-    } else if (isPointLineDistance(c)) {
-      const pt = state.joints.get(c.joints[0]), la = state.joints.get(c.joints[1]), lb = state.joints.get(c.joints[2]);
-      if (pt && la && lb) c.value = Math.abs(perpendicularDistance(pt, la, lb));
-    } else if (c.joints && c.joints.length >= 2) {
-      const j1 = state.joints.get(c.joints[0]);
-      const j2 = state.joints.get(c.joints[1]);
-      if (j1 && j2) c.value = getDist(j1, j2);
-    } else if (c.type === CONSTRAINT_TYPES.ANGLE && c.shapes && c.shapes.length === 2) {
-      const s1 = state.shapes.find(s => s.id === c.shapes[0]);
-      const s2 = state.shapes.find(s => s.id === c.shapes[1]);
-      if (s1 && s2 && s1.joints && s2.joints) {
-        const j1a = state.joints.get(s1.joints[0]); const j1b = state.joints.get(s1.joints[1]);
-        const j2a = state.joints.get(s2.joints[0]); const j2b = state.joints.get(s2.joints[1]);
-        if (j1a && j1b && j2a && j2b) {
-          // the sector the label sits in is what a reference measured (task 543): it becomes the stored sector, its span the value (task 553)
-          const int = getLineIntersection(j1a, j1b, j2a, j2b);
-          if (int) {
-            const d1 = Math.atan2(j1b.y - j1a.y, j1b.x - j1a.x), d2 = Math.atan2(j2b.y - j2a.y, j2b.x - j2a.x);
-            const ch = angleSectorUnderLabel(d1, d2, angleLabelAngle(c, int, d1, d2));
-            c.value = ch.value;
-            c.sector = ch.sector;
-          } else {
-            // parallel lines have no sectors: the angle between the directions (0 or 180), the CCW sector from line 1's direction
-            let v = Math.abs((Math.atan2(j1b.y - j1a.y, j1b.x - j1a.x) - Math.atan2(j2b.y - j2a.y, j2b.x - j2a.x)) * 180 / Math.PI);
-            c.value = v > 180 ? 360 - v : v;
-            c.sector = angleSectorOf(null);
-          }
-        }
-      }
+    // Now DRIVING: take the value it measures now, so the geometry does not snap to a stale (or wrongly measured) value.
+    if (c.type === CONSTRAINT_TYPES.ANGLE) {
+      const m = measureAngleDimension(c, state.joints, state.shapes);
+      if (m) { c.value = m.value; c.sector = m.sector; }
+    } else {
+      const v = measureDimension(c, state.joints, state.shapes);
+      if (v !== null) c.value = v;
     }
     if (state.engine && typeof state.engine.solve === 'function') {
       const result = state.engine.solve(ITER());

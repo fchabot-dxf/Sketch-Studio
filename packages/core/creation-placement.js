@@ -284,7 +284,7 @@ export const PLACE = {
     },
   },
   'tangent-line-circle': {
-    operands: (s, c) => (c.line && c.circle ? [{ kind: 'shape', id: c.line }, { kind: 'shape', id: c.circle }] : shapesOp(c)),
+    operands: (s, c) => (Array.isArray(c.shapes) && c.shapes.length === 2 ? shapesOp(c) : (c.line && c.circle ? [{ kind: 'shape', id: c.line }, { kind: 'shape', id: c.circle }] : null)),
     place: (state, M, A) => {
       const ms = shapeOf(state, M.op.id), as = shapeOf(state, A.id);
       const line = isLine(ms) ? ms : as, circ = isLine(ms) ? as : ms;

@@ -210,6 +210,14 @@ export function curvePointsFrom(s, state, fromPos, n) {
  *  (#core/offset.js offsetChainOf). What each refused tool would take is in WORK-LOG TURN 762. */
 const NO_BEZIER = (what) => `${what}: not available on a Bezier curve`;
 export const CURVE_REFUSALS = Object.freeze({
+  arc: Object.freeze({
+    [TOOL_MODES.TRIM]: 'Trim: not available on an arc (Trim cuts lines only)',
+    [TOOL_MODES.BREAK]: 'Break: not available on an arc (Break splits lines only)',
+  }),
+  circle: Object.freeze({
+    [TOOL_MODES.TRIM]: 'Trim: not available on a circle (Trim cuts lines only)',
+    [TOOL_MODES.BREAK]: 'Break: not available on a circle (Break splits lines only)',
+  }),
   bezier: Object.freeze({
     [TOOL_MODES.TRIM]: NO_BEZIER('Trim') + ' (Trim cuts lines only)',
     [TOOL_MODES.BREAK]: NO_BEZIER('Break') + ' (Break splits lines only)',

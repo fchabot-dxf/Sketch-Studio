@@ -83,32 +83,56 @@ export function deleteConstraints(state, constraintsOrIds) {
 const SHAPE_FIELDS = ['shapes', 'shape', 'line', 'circle'], JOINT_FIELDS = ['joints', 'joint'];
 const asList = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
 const namesAny = (c, fields, ids) => fields.some((f) => asList(c[f]).some((x) => ids.has(x)));
+const pairKey = (a, b) => (a < b ? `${a}\0${b}` : `${b}\0${a}`);
 
 /**
  * TASK 709 - THE rule (Fusion: deleting a sketch curve or point deletes every dimension and constraint that names it, and the dimension's
  * parameter with it). The shapes `shapeIds` and the points `jointIds` go, with every shape that uses one of those points, and every constraint
- * or dimension that names a shape that goes or a point that goes (a point goes when it is one of `jointIds`, or when only the shapes that go
- * used it; a fillet's virtual sharp that a dimension holds stays, virtualSharpProtectedJoints). A dimension's row in the Parameters table goes
- * with it (the table lists the constraints). A constraint naming only surviving geometry stays. Unused points are then cleaned and sketch
- * patterns follow (patternsAfterDelete). A dimension that goes while a formula reads its name keeps that name as a value (#core/parameters.js
+ * or dimension that names a shape that goes, a point that goes, or a line's endpoint pair that no surviving line keeps (point-to-line distance
+ * [p,a,b], midpoint [a,b,m], H/V, and edge distance [a,b] on a deleted/trimmed rectangle edge). A fillet's virtual sharp that a dimension holds
+ * stays (virtualSharpProtectedJoints). A constraint naming only surviving geometry stays. Unused points are then cleaned and sketch patterns follow
+ * (patternsAfterDelete). A dimension that goes while a formula reads its name keeps that name as a value (#core/parameters.js
  * reconcileKeptDimensions, decision O10: Fusion's). The ONE place geometry is removed: deleteShapes / deleteJoints (Delete, Cut, Clear sketch, Delete
  * sketch) and the Trim tool (#core/trim.js) call it. No history, no solve: the callers own those.
  * -> { shapes: the shapes removed, joints: the points of `jointIds` removed }
  */
-export function removeGeometry(state, shapeIds = [], jointIds = []) {
+export function removeGeometry(state, shapeIds = [], jointIds = [], opts = {}) {
   const dimsBefore = dimensionValuesOf(state.constraints);
   const deleteJ = new Set(jointIds);
   const goneS = new Set(shapeIds);
   for (const s of state.shapes) if (s && asList(s.joints).some((j) => deleteJ.has(j))) goneS.add(s.id);
   const shapeJoints = new Set();
+  const removedLinePairs = new Set();
+  for (const p of (opts.trimmedPairs || [])) {
+    if (Array.isArray(p) && p.length === 2 && p[0] && p[1]) removedLinePairs.add(pairKey(p[0], p[1]));
+  }
   let shapes = 0;
   for (let i = state.shapes.length - 1; i >= 0; i--) {
     const s = state.shapes[i];
     if (!s || !goneS.has(s.id)) continue;
     asList(s.joints).forEach((j) => shapeJoints.add(j));
+    if (s.type === 'line' && Array.isArray(s.joints) && s.joints.length === 2) removedLinePairs.add(pairKey(s.joints[0], s.joints[1]));
     state.shapes.splice(i, 1);
     shapes++;
   }
+  const survivingLinePairs = new Set();
+  for (const s of state.shapes) {
+    if (s && s.type === 'line' && Array.isArray(s.joints) && s.joints.length === 2) survivingLinePairs.add(pairKey(s.joints[0], s.joints[1]));
+  }
+  const gonePairs = new Set([...removedLinePairs].filter((k) => !survivingLinePairs.has(k)));
+  const namesDeletedLinePair = (c) => {
+    if (!gonePairs.size || !Array.isArray(c.joints)) return false;
+    if (c.joints.length === 2 && (c.type === CONSTRAINT_TYPES.DISTANCE || c.type === CONSTRAINT_TYPES.HORIZONTAL || c.type === CONSTRAINT_TYPES.VERTICAL)) {
+      return gonePairs.has(pairKey(c.joints[0], c.joints[1]));
+    }
+    if (c.joints.length === 3 && c.type === CONSTRAINT_TYPES.DISTANCE) {
+      return gonePairs.has(pairKey(c.joints[1], c.joints[2]));
+    }
+    if (c.joints.length === 3 && c.type === CONSTRAINT_TYPES.MIDPOINT) {
+      return gonePairs.has(pairKey(c.joints[0], c.joints[1]));
+    }
+    return false;
+  };
   // A point goes only when NO surviving shape uses it: shapes that merely SHARE a point with a deleted shape (a fillet's rim points, chained
   // lines) survive with it.
   const usedBySurvivors = new Set(state.shapes.flatMap((s) => asList(s && s.joints)));
@@ -116,7 +140,7 @@ export function removeGeometry(state, shapeIds = [], jointIds = []) {
   const goneJ = new Set([...deleteJ, ...[...shapeJoints].filter((j) => !usedBySurvivors.has(j) && !kept.has(j))]);
   for (let i = state.constraints.length - 1; i >= 0; i--) {
     const c = state.constraints[i];
-    if (c && (namesAny(c, SHAPE_FIELDS, goneS) || namesAny(c, JOINT_FIELDS, goneJ))) state.constraints.splice(i, 1);
+    if (c && (namesAny(c, SHAPE_FIELDS, goneS) || namesAny(c, JOINT_FIELDS, goneJ) || namesDeletedLinePair(c))) state.constraints.splice(i, 1);
   }
   let joints = 0;
   for (const j of deleteJ) if (state.joints.delete(j)) joints++;
@@ -178,13 +202,6 @@ export function deleteSelection(state) {
   const constraintsToDelete = state.selectedConstraints ? Array.from(state.selectedConstraints).filter((c) => !isConstraintInert(inert, c)) : [];
   const explicitShapes = state.selectedShapes ? Array.from(state.selectedShapes).filter((id) => !isShapeInert(inert, id)) : [];
   const explicitJoints = state.selectedJoints ? Array.from(state.selectedJoints).filter((id) => !isJointInert(inert, id)) : [];
-
-  // Add explicitly selected constraints (dimensions, etc.) to the delete list
-  if (state.selectedConstraints && state.selectedConstraints.size > 0) {
-      for (const c of state.selectedConstraints) {
-          constraintsToDelete.push(c);
-      }
-  }
 
   // 2. Cascade Logic: Identify orphaned joints (joints that would be left without any shapes)
   // A joint is orphaned if ALL shapes connected to it are being deleted.

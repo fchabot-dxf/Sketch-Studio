@@ -1960,6 +1960,86 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 
 ---
 
+### BUG-170
+- **Date / turn:** 2026-11-26 (audit ID `UX-21`; fixed in task `1014`)
+- **Reported by:** audits `1000` (`C1.13`), `1000B` (`CROSS UX-21`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-21`: one conflicted triangle `(50, 40, 120)` blocks adding `Horizontal` (or driving dimensions) on unrelated free line `L4` with `"Sketch geometry over constrained"`.
+- **What was wrong:** `ConstraintManager._sandboxVerify` judged global `engine.solve().error` across every disconnected component, and `createConstraint` checked global `_solveRes.converged === false` / `mangled` against every constraint in the sketch.
+- **Cause:** `packages/core/constraint-manager.js`: added `_componentConstraints` (reusing `creation-placement.js` `constraintOperands`) so `_sandboxVerify` evaluates only the candidate constraint's connected component (and relative deltas against baseline), and `createConstraint` checks `unsatisfiedConstraints` restricted to `created` and newly-violated constraints (`!unsatisfiedBefore.has(oc)`).
+- **Task id(s):** `1014`
+- **Fix merge sha:** open (`agents/misc-1014`, awaiting merge)
+- **Guarding test file(s):** `tests/constraint-logic-1014-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`C1.13`), `1000B` -> fixed in task `1014`. Probe `CROSS UX-20 & UX-21` before: `l4HorizontalBlocked=true`, `[overconstrained]`; after: `l4HorizontalBlocked=false`, `l4Toasts=[]`.
+
+---
+
+### BUG-171
+- **Date / turn:** 2026-11-26 (audit ID `UX-02`; fixed in task `1014`)
+- **Reported by:** audits `1000` (`D7.1`, `L1`), `1003` (`V2.3.rect500to4`), `1000B` (`CROSS UX-02`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-02`: shrinking a `500 x 40` rectangle's width `d1` to `4 mm` is falsely refused with `"Can't set to 4 — 4.00 would collapse a line to a point. Reverted."`.
+- **What was wrong:** `findCollapsedShape` exempted the dimensioned side `L1` (`a-b`) but judged the opposite side `L3` (`c-d`) by `COLLAPSE_RATIO = 0.01` alone (`4 < 500 * 0.01 = 5`).
+- **Cause:** `packages/core/constraint-verifier.js` (`findCollapsedShape`): separated length/radius/chord check `fellSize` (`now[k] < Math.min(COLLAPSE_ABS_SIZE, was[k] * COLLAPSE_RATIO)` with `COLLAPSE_ABS_SIZE = 0.02` mm) from angular sweep ratio `fellAngle`, so only a genuine collapse toward zero (`< 0.02 mm`) is refused while valid large shrink edits like `500 -> 4 mm` succeed.
+- **Task id(s):** `1014`
+- **Fix merge sha:** open (`agents/misc-1014`, awaiting merge)
+- **Guarding test file(s):** `tests/constraint-logic-1014-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`UX-02`), `1003`, `1000B` -> fixed in task `1014`. Probe `CROSS UX-02` before: `valAfter4=500`, `would collapse a line to a point`; after: `valAfter4=4`, `t4=[]`.
+
+---
+
+### BUG-172
+- **Date / turn:** 2026-11-26 (audit ID `B-11`; fixed in task `1014`)
+- **Reported by:** audits `1000B` (`F2`), `CROSS-1000` (`XB-11`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-11`: Coincident on an arc and its own centre or endpoint silently adds a `pointOnLine` (`polCount: 1, toasts: []`), while a line refuses the same pick with `Sketch geometry over constrained`.
+- **What was wrong:** `applyPointOnShape` only checked `shape.type === 'line' && shape.joints.some(j => cluster.has(j))`.
+- **Cause:** `packages/ui/input-handlers/constraint-tools.js` (`applyPointOnShape`): removed the `shape.type === 'line' &&` filter so own-joint picks on arcs, circles, and lines alike hit the same `announceOverConstrained()` refusal.
+- **Task id(s):** `1014`
+- **Fix merge sha:** open (`agents/misc-1014`, awaiting merge)
+- **Guarding test file(s):** `tests/constraint-logic-1014-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000B` (`B-11`), `CROSS-1000` (`XB-11`) -> fixed in task `1014`. Probe `XB-11` before: `arcOwn={"pol":1,"toasts":[]}`; after: `arcOwn={"pol":0,"toasts":["[overconstrained] Sketch geometry over constrained"]}`.
+
+---
+
+### BUG-173
+- **Date / turn:** 2026-11-26 (audit ID `B-17`; fixed in task `1014`)
+- **Reported by:** audits `1000B` (`P6`), `CROSS-1000` (`XB-17`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-17`: Tangent between same-tier `line:free` and `circle:sized` always moves the circle regardless of pick order (`WHO_MOVES['tangent-line-circle'].tie` is `"second"`).
+- **What was wrong:** `handleTangentPointerDown` passed only `{ line: line.id, circle: circle.id }` (discarding `[s1.id, s2.id]` pick order), `constraints.js` dropped `shapes` when `{ line, circle }` were present, and `creation-placement.js` always read `[c.line, c.circle]` first.
+- **Cause:** `packages/ui/input-handlers/constraint-tools.js` (`handleTangentPointerDown`) now passes `{ line, circle, shapes: [s1.id, s2.id] }`, `packages/core/constraints.js` preserves `shapes` on `TANGENT` `{ line, circle }` records, and `packages/core/creation-placement.js` (`tangent-line-circle`) reads `c.shapes` when present so same-tier ties move the second-picked shape per `WHO_MOVES`.
+- **Task id(s):** `1014`
+- **Fix merge sha:** open (`agents/misc-1014`, awaiting merge)
+- **Guarding test file(s):** `tests/constraint-logic-1014-node.test.js`
+- **Status:** fixed
+- **Family:** `fusion-frame`
+- **History:** recast by `CROSS-1000` (`B-17`: `free+free` always moves line like Fusion 200/200; same-tier `line:free + circle:sized` tie failed) -> fixed in task `1014`. Probe `XB-17.tie-lineFree-circleSized.C-then-L` before: `lineMoved=0, circleMoved=25`; after: `lineMoved=25, circleMoved=0`.
+
+---
+
+### BUG-174
+- **Date / turn:** 2026-11-26 (audit ID `B-16`; fixed in task `1014`)
+- **Reported by:** audits `1000B` (`P5`), `CROSS-1000` (`XB-16`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-16`: double-clicking a pattern's label in the Dimension tool opens `#dimInput` instead of the pattern values dialog (Select tool's behavior).
+- **What was wrong:** `dimensionPointerDown` omitted the `isPatternConstraint(constraint)` check that `selection-tools.js` has on `.dim-label` double-click.
+- **Cause:** `packages/ui/input-handlers/dimension-tool.js` (`dimensionPointerDown`) now dispatches `isPatternConstraint(constraint)` double-clicks to `editPatternFromLabel(svg, state, constraint)` (same as Select) and consumes non-placing pattern-label presses; `packages/ui/svg-renderer.js` (`patternLabels`) also uses `pointer` cursor in Dimension tool.
+- **Task id(s):** `1014`
+- **Fix merge sha:** open (`agents/misc-1014`, awaiting merge)
+- **Guarding test file(s):** `tests/constraint-logic-1014-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000B` (`B-16`), `CROSS-1000` (`XB-16`) -> fixed in task `1014`. Probe `XB-16` before: `dimInputOpened=true`; after: `dimInputOpened=false` (opens pattern values dialog).
+
+---
+
 ## Family index
 
 Entries in each family are listed in chronological date order (`MM-DD`, oldest first) so recurring patterns read as a timeline.
@@ -1969,11 +2049,11 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `build-deploy` | BUG-062 (11-21) |
 | `export-svg` | BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19) |
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
-| `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25) |
+| `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-152 (11-26), BUG-154 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-170 (11-26), BUG-171 (11-26) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -1981,7 +2061,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-172 (11-26), BUG-174 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---
@@ -1992,4 +2072,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-150..BUG-154 fixed in task `1011`; BUG-170..BUG-174 fixed in task `1014`).

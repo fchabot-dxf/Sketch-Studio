@@ -142,7 +142,7 @@ function bodyDrag(S, shapeId, from, to) {
   const [c, s, e] = A.joints;
   const pick = (ang) => findSnap(S.state.joints, S.state.shapes, svgStub, { x: 300 + 100 * Math.cos(ang * Math.PI / 180), y: 300 + 100 * Math.sin(ang * Math.PI / 180) }, [], false, false, 1);
   const on = pick(30), opposite = pick(210), past = pick(90);
-  assert.ok(on && on.type === 'shape' && on.targetId === A.shape, `the mouse on the arc (30 degrees, 52 px from both ends) picks the arc (${on && on.type} ${on && on.targetId})`);
+  assert.ok(on && on.type === 'midpoint' && on.targetId === A.shape, `the mouse on the arc (30 degrees, 52 px from both ends: its sweep midpoint, task 1010 UX-27) picks the arc as its midpoint (${on && on.type} ${on && on.targetId})`);
   assert.ok(!opposite || opposite.targetId !== A.shape, `the mouse on the CIRCLE opposite the arc (210 degrees) does not pick the arc (${opposite && opposite.type} ${opposite && opposite.targetId})`);
   assert.ok(!past || past.targetId !== A.shape || (Math.hypot(past.x - P(S, e).x, past.y - P(S, e).y) < 1e-9), `past the end (90 degrees, 52 px from the end) the arc is not hit on its circle (${JSON.stringify(past && { type: past.type, id: past.targetId, x: past.x, y: past.y })})`);
   const near = findSnap(S.state.joints, S.state.shapes, svgStub, { x: 300 + 100 * Math.cos(62 * Math.PI / 180), y: 300 + 100 * Math.sin(62 * Math.PI / 180) }, [], false, false, 1);

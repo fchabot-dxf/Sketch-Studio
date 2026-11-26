@@ -35,12 +35,18 @@ export function glyphAt(svg, state, screenX, screenY, touch = false) {
 // A dimension's canvas label (the `.dim-label` element svg-renderer draws, data-constraint-idx) is its own hit: the pointer inside the label's
 // drawn box picks the dimension. Dimensions have no sheet glyph, so glyphAt never picks them (task 603 removed the 20 px glyphPos circle that
 // used to catch a label by accident).
+// Every label has at least this hit size (screen px, either way): a narrow value like "5" is 6 px wide and would otherwise be
+// almost impossible to hit, most of all with a finger. The ONE minimum for every dimension label.
+export const DIM_LABEL_MIN_HIT_PX = 24;
+const spanAround = (lo, hi) => { const grow = Math.max(0, (DIM_LABEL_MIN_HIT_PX - (hi - lo)) / 2); return [lo - grow, hi + grow]; };
+
 export function dimLabelAt(svg, state, screenX, screenY) {
     const labels = svg.querySelectorAll ? svg.querySelectorAll('.dim-label') : [];
     const pickable = pickableConstraints(state) || [];
     for (const el of labels) {
         const b = el.getBoundingClientRect();
-        if (screenX < b.left || screenX > b.right || screenY < b.top || screenY > b.bottom) continue;
+        const [left, right] = spanAround(b.left, b.right), [top, bottom] = spanAround(b.top, b.bottom);
+        if (screenX < left || screenX > right || screenY < top || screenY > bottom) continue;
         const c = state.constraints[parseInt(el.dataset.constraintIdx, 10)];
         if (c && pickable.includes(c)) return c;
     }

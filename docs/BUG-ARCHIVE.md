@@ -1,4 +1,4 @@
-# Bug Archive
+# Bug Archive, BUG-134 (11-26), BUG-135 (11-26)
 
 An archive of bugs reported by the owner and bugs found by the advisor or worker seats during live Fusion checks, merge-gate checks, and code reviews (Sketch-Studio and its paired `shaper-addin`).
 
@@ -1864,6 +1864,336 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 
 ---
 
+### BUG-130
+- **Date / turn:** 2026-11-26 (audit ID `D-9`; fixed in task `1010`)
+- **Reported by:** audit `1003` (`V2.6.angleArrows`, `L1.visual.desktop`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `D-9`: both arrowheads of an angle dimension point 90 degrees off (radial instead of along the arc).
+- **What was wrong:** The two arrow polygons of every angle dimension were built with their base spread along the tangent and set back along the radial, so each arrowhead pointed along the radius (`dotRadial=+-1, dotTangent=0`).
+- **Cause:** `packages/ui/svg-renderer.js` (angle dimension, 'Draw Arrows'): the tangent and radial vectors were swapped in the two `<polygon>` strings; now one `arcArrow` helper builds both (tip on the arc end, base one arrow length back along the arc).
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/angle-arrows-d9-node.test.js`, `tests/dim-visuals-d9-d12-d16-live.test.js` (desktop + phone)
+- **Status:** fixed
+- **Family:** `dimension-display`
+- **History:** found in `1003` (`D-9`) -> fixed in task `1010`
+
+---
+
+### BUG-131
+- **Date / turn:** 2026-11-26 (audit ID `D-12`; investigated in task `1010`)
+- **Reported by:** audit `1003` (`V2.6.radiusLeader`, `L1.visual.desktop`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `D-12`: the radius dimension's leader line runs into / under its own `R 18` text (`leaderCrossesText: true`).
+- **What was wrong:** nothing found. The probe's `leaderCrossesText` compares the leader's bounding box with the bounding box of the ROTATED text, which overlap for any diagonal leader that ends next to the text. Against the text's real rotated box (it sits above its baseline point by the font ascent, `dim-placement.js placeDimText`) the leader ends `DIM_TEXT_GAP_PX` (3 px) clear of it: node run `leader end vs the text box: along=-0.000 across=-0.456 half box 0.746 x 0.271; clear by 0.185 world units`, phone and desktop live runs clear by 0.46 / 1.51 world units. Task 636's `tests/radius-diameter-label-beside-leader.test.js` already asserts that gap.
+- **Cause:** none (audit false positive). A first attempt that stopped the leader at the text box was reverted: it left the leader touching the box and broke the task 636 / 448 tests for no visible gain.
+- **Task id(s):** `1010`
+- **Fix merge sha:** none (no code change)
+- **Guarding test file(s):** `tests/radius-leader-d12-node.test.js` and `tests/dim-visuals-d9-d12-d16-live.test.js` (pin: the leader ends outside the text's real box; they pass before and after)
+- **Status:** not reproduced
+- **Family:** `dimension-display`
+- **History:** reported in `1003` (`D-12`) -> not reproduced in task `1010`
+
+---
+
+### BUG-132
+- **Date / turn:** 2026-11-26 (audit ID `D-16`; fixed in task `1010`)
+- **Reported by:** audit `1003` (`L1.visual.desktop`, `svg-renderer.js:2701,2751,2813`, `hover-manager.js:38-48`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `D-16`: a narrow dimension label such as `5` (6 x 15 px) has a tiny hover / click area.
+- **What was wrong:** `dimLabelAt` tested the pointer against the label's exact drawn box only, so a 6 px wide value was almost impossible to hit, most of all with a finger.
+- **Cause:** `packages/ui/hover-manager.js` `dimLabelAt`: no minimum hit size. It now grows every label's box to at least `DIM_LABEL_MIN_HIT_PX` (24 px) either way; hover, click, double-click edit and touch all go through this one function.
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/dim-label-hit-d16-node.test.js`, `tests/dim-visuals-d9-d12-d16-live.test.js` (desktop hover + phone tap, Shaper)
+- **Status:** fixed
+- **Family:** `dimension-display`
+- **History:** found in `1003` (`D-16`) -> fixed in task `1010`
+
+---
+
+### BUG-133
+- **Date / turn:** 2026-11-26 (audit ID `UX-20`; fixed in task `1010`)
+- **Reported by:** audit `1000` (`DR3.0`, `L3.desktop`, `L3.phone`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-20`: an over-constrained triangle (sides 50 / 40 / 120) shows no conflict colour: L1 black, L2/L3 blue, no conflict class.
+- **What was wrong:** The renderer coloured geometry only by DOF (free blue / fully rigid black / locked); a constraint the solver could not satisfy changed nothing on the canvas.
+- **Cause:** `packages/ui/svg-renderer.js` shape colour rule had no conflict state. The app has no geometry conflict colour of its own; its conflict red is `--sk-error` (the over-constrained notice, the Design panel's failing-constraint rows), so geometry bound by an unsatisfied constraint is now drawn `var(--sk-error, #ef4444)` (`CONFLICT_COLOR`). The set comes from one new helper, `unsatisfiedConstraints` in `packages/core/constraint-verifier.js` (the solver's own `conflicts` rule: non-driven, residual above `VERIFIER_TOLERANCE`), mapped to shapes with `constraintTargets`. Hover and selection colours still win; the Clean display profile (no status colours) is unchanged.
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/conflict-colour-ux20-node.test.js`
+- **Status:** fixed
+- **Family:** `dimension-display`
+- **History:** found in `1000` (`UX-20`) -> fixed in task `1010`
+
+---
+
+### BUG-134
+- **Date / turn:** 2026-11-26 (audit ID `B-20b`; fixed in task `1010`)
+- **Reported by:** audit `1000B` (`1b FIXED-ENDPOINTS BEZIER`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-20b`: a Bezier with both end points fixed turns black ("fully constrained") although its two control points still move.
+- **What was wrong:** `analyzeConstraintStatus` decided a shape is fixed / constrained from its joints alone; a Bezier's joints are its two ends only, its control points `c1` / `c2` are plain shape data (shapes.js) that no constraint or lock holds.
+- **Cause:** `packages/core/constraint-status.js` shape loop: a bezier is now treated like a circle with a free radius (`radiusFree`), so it never enters `fixedShapes` / `constrainedShapes`. Nothing can fix a Bezier's control points today, so there is no case in which it is black.
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/bezier-fixed-ends-b20b-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000B` (`B-20b`) -> fixed in task `1010`. Behaviour change: a Bezier on a locked sketch (every end joint fixed) is drawn in the free blue instead of the locked colour.
+
+---
+
+### BUG-135
+- **Date / turn:** 2026-11-26 (audit IDs `UX-29`, `D-26`; fixed in task `1010`)
+- **Reported by:** audits `1000` (`D1.4`, `D1.6`), `1003` (`V2.3.bad.d2 * 2`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-29`: typing `d1 * 2` into `d1` shows the bare hint `d1 -> d1` (one item, nothing to cycle).
+- **What was wrong:** The cycle refusal's message was the raw path joined with `->`; for a name that reads itself the path is the same name twice.
+- **Cause:** `packages/core/parameters.js` `cycleError`: a one-item cycle now reads `d1 refers to itself`; a loop through several names still shows its path (`d1 -> d2 -> d1`).
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/cycle-hint-ux29-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000` (`UX-29`), `1003` (`D-26`) -> fixed in task `1010` (one-item case only; the multi-name path text is unchanged, existing tests assert it)
+
+---
+
+### BUG-136
+- **Date / turn:** 2026-11-26 (audit ID `B-20c`; fixed in task `1010`)
+- **Reported by:** audit `1000B` (F7, `snap-detection.js:187`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-20c`: `JOINT_PRIORITY_RADIUS = 15` is not scaled by the touch boost, so on a phone a line under the finger beats a point 15-30 px away.
+- **What was wrong:** Every other snap reach of `findSnap` grows by `snapBoostFor(isTouch)` (task 562); the joint-over-line priority radius stayed 15 px.
+- **Cause:** `packages/ui/snap-detection.js` `findSnap`: `JOINT_PRIORITY_RADIUS = 15` -> `15 * boost` (30 px for a touch); the header comment lists it with the other scaled reaches.
+- **Task id(s):** `1010`
+- **Fix merge sha:** none (B-20c reverted in task `1010`)
+- **Guarding test file(s):** none yet
+- **Status:** open
+- **Family:** `snap-not-applied`
+- **History:** found in `1000B` (`B-20c`); a fix (`15 * boost`) was tried in task `1010` and REVERTED by the advisor: needs a touch design, a flat 30 px point priority breaks line picks near endpoints (coincident-868-live, offset-fusion-match-667-live, pattern-params-694-live, toast-done-689-live fail with it).
+
+---
+
+### BUG-137
+- **Date / turn:** 2026-11-26 (audit IDs `UX-27`, `B-18b`; fixed in task `1010`)
+- **Reported by:** audits `1000` (`IR4.3`), `1000B` (`P5-B`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-27` / `B-18b`: an arc has no midpoint snap (a line has one); hovering the middle of an arc gives a plain `shape` snap.
+- **What was wrong:** `findSnap` offered a midpoint candidate for lines only; and `applySnapConstraint` / `previewSnapConstraint` would have built a line-style Midpoint on an arc's first two joints (centre, start).
+- **Cause:** `packages/ui/snap-detection.js` `findSnap`: the line's midpoint-or-shape rule is now one closure (`offerMidpointOrShape`) used by lines and arcs; an arc offers `arcSweepMidpoint` (the middle of its drawn sweep). `packages/core/snap-constraints.js` midpoint apply / preview: an arc target gives the arc form `{ joint, shape }` (task 875's Midpoint on an arc).
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/arc-midpoint-snap-ux27-node.test.js`, `tests/snap-display-1010-live.test.js` (desktop + phone: hover the arc's midpoint with the Line tool)
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **History:** found in `1000` (`UX-27`), `1000B` (`B-18b`) -> fixed in task `1010`. Behaviour change: every tool that uses `findSnap` now offers the midpoint of an arc, as of a line (hover marker, and the point gets a Midpoint constraint on a click / drop).
+
+---
+
+### BUG-138
+- **Date / turn:** 2026-11-26 (audit ID `B-18a`; fixed in task `1010`)
+- **Reported by:** audit `1000B` (`P5-A`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-18a`: the snap preview shows the midpoint of a line but a rectangle corner dragged to it ends elsewhere.
+- **What was wrong:** The drag loop pulled the dragged point to a locked snap only for `joint`, `line`, `shape`, `grid` and axis snaps; a `midpoint` snap was previewed (and its constraint added on release) but never used as the point's position while dragging. Measured before the fix: the corner sat at (0.0568, 3.9470) instead of the previewed midpoint (0, 4).
+- **Cause:** `packages/ui/input-handlers/selection-tools.js` (drag step, the snap-point whitelist): `midpoint` was missing for a CLUSTER drag (a corner of coincident joints), which infers nothing (task 584) so has no other way to reach the midpoint; added for that drag type only (a single-joint drag gets the midpoint from findInference, unchanged (tests/drag-attached-inference-node.test.js)). The cluster now sits exactly on the previewed point, and the release applies that same snap.
+- **Task id(s):** `1010`
+- **Fix merge sha:** open (`agents/display-1010`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-midpoint-snap-b18a-node.test.js`, `tests/snap-display-1010-live.test.js` (desktop: a joint dragged to a line midpoint is at (0, 8) during the drag and after release)
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **History:** found in `1000B` (`B-18a`) -> fixed in task `1010`
+
+---
+
+### BUG-150
+- **Date / turn:** 2026-11-26 (audit ID `UX-12`; fixed in task `1011`)
+- **Reported by:** audit `1000` (`DR2.3`) and `1000B` cross-review
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-12`: dragging a fully-constrained (0-DOF) item moves nothing and records no undo step, but wipes `state.redoStack` (`1 -> 0`).
+- **What was wrong:** `ensureDragUndo` called `state.saveState` on the first pointer move (which clears `redoStack` and evicts the oldest history entry at `maxHistory`), and `settleDragUndo` discarded the no-op snapshot on pointer-up without restoring `redoStack` or any evicted entry.
+- **Cause:** `packages/ui/input-handlers/selection-tools.js` (`ensureDragUndo` / `settleDragUndo`): now saves `undoEvicted` and `undoRedo` before `saveState` and restores both plus `_notifyHistory()` when `settleDragUndo` discards a no-op snapshot (same pattern as `packages/core/dimension-seams.js`).
+- **Task id(s):** `1011`
+- **Fix merge sha:** open (`agents/drag-1011`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-noop-redo-ux12-1011-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000` (`UX-12`), confirmed in `1000B` -> fixed in task `1011`
+
+### BUG-151
+- **Date / turn:** 2026-11-26 (audit ID `UX-22`; fixed in task `1011`)
+- **Reported by:** audit `1000` (`DR6.3a`) and `1000B` cross-review
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-22`: selecting a fixed/locked item together with a free item and dragging freezes the free item (`max move 0`).
+- **What was wrong:** `getDragDOF` returned `{ lockX: true, lockY: true }` for the entire group drag whenever ANY single selected joint was fixed or 0-DOF.
+- **Cause:** `packages/ui/input-handlers/selection-tools.js` (`getDragDOF` / `pullDrag`): for a multi-selection group drag (`drag.group`), held/0-DOF members are excluded into `movable`; the drag locks only when every member is held (e.g. a full-locked user group or an all-fixed selection), axis locks apply only when every movable member is locked on that axis, and `pullDrag` pulls only `movable` joints.
+- **Task id(s):** `1011`
+- **Fix merge sha:** open (`agents/drag-1011`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-mixed-selection-ux22-1011-node.test.js`, `tests/chain-select-move-node.test.js` (section 2b updated from old all-locked rule)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000` (`UX-22`), confirmed in `1000B` -> fixed in task `1011`. Behaviour change: multi-selecting fixed and free geometry now moves the free items while fixed/0-DOF items stay put (previously the whole selection was locked).
+
+### BUG-152
+- **Date / turn:** 2026-11-26 (audit ID `UX-23`; fixed in task `1011`)
+- **Reported by:** audit `1000` (`DR6.2a/b`) and `1000B` cross-review
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-23`: a fast 1-step flick on a line's body skips sub-moves and stalls far behind an equivalent flick on its joint (`(56.89, 19.07)` vs `(-12.73, 58.63)`).
+- **What was wrong:** Two causes: (1) `handleSelectionPointerMove` gated `MAX_DRAG_STEP` sub-moves on `state.joints.has(state.drag.id)`, which is always false for a body drag (`state.drag.id` is a shape ID); (2) `NewtonSolver.bodyDragTarget` projected `rank === 1` body drags onto the instantaneous linear tangent `f.dir`, discarding the off-tangent pull on curved 1-DOF motion (such as a rotating distance-constrained line).
+- **Cause:** `packages/ui/input-handlers/selection-tools.js` (`handleSelectionPointerMove`): include `state.drag.body` in the `MAX_DRAG_STEP` sub-move check; `packages/core/solver/definitions.js` (`BODY_POINTS` / `RIM_POINT.projectRank1: true`) and `packages/core/solver/engine.js` (`bodyDragTarget`): restrict the `rank === 1` instantaneous tangent projection to rim drags (`kind.projectRank1`), so line body drags do not stall on curved 1-DOF motion while fixed-end arc tangential flings stay bounded.
+- **Task id(s):** `1011`
+- **Fix merge sha:** open (`agents/drag-1011`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-body-flick-ux23-1011-node.test.js`, `tests/drag-step-cap.test.js` (case 5 updated)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`UX-23`), confirmed in `1000B` -> fixed in task `1011`. Behaviour change: body drags now step through `MAX_DRAG_STEP` sub-moves like joint drags and do not project curved 1-DOF body targets onto the instantaneous tangent.
+
+### BUG-153
+- **Date / turn:** 2026-11-26 (audit ID `UX-09`; fixed in task `1011`)
+- **Reported by:** audit `1000` (`DR6.4a/b`) and `1000B` cross-review
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-09`: when an arc centre `c` is coincident with a line endpoint `p`, dragging the point translates the arc rigidly (`r 30 -> 30`) or shrinks its radius (`r 30 -> 22.374`) depending on joint Map / z-order.
+- **What was wrong:** `handleJointSelection` checked `s.joints[0] === hitJoint.id` instead of checking the coincident cluster, so hitting `p` omitted the arc's rim joints from `arcRims` / `carried`.
+- **Cause:** `packages/ui/input-handlers/selection-tools.js` (`handleJointSelection`): changed `s.joints[0] === hitJoint.id` to `cluster.has(s.joints[0])` so dragging any joint coincident with an arc centre translates the arc rigidly (and pivots cleanly when one rim is held), consistent with Fusion (task 584).
+- **Task id(s):** `1011`
+- **Fix merge sha:** open (`agents/drag-1011`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-arc-centre-coincident-ux09-1011-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000` (`UX-09`), confirmed in `1000B` -> fixed in task `1011`
+
+### BUG-154
+- **Date / turn:** 2026-11-26 (audit IDs `UX-10`, `B-12d`; fixed in task `1011`)
+- **Reported by:** audit `1000` (`DR4.3b`) and `1000B` (`6c`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-10` / `B-12d`: dragging mirrored geometry rotates and translates a FREE mirror line (`ML m1 (0,-50) -> (8.135,-49.643)`).
+- **What was wrong:** Dimension edits held free mirror lines via `solveGivingWay` (task 611), but interactive drags left free mirror-line endpoints as free solver unknowns, so least-change solves tilted/shifted the mirror line instead of moving only the mirrored pair.
+- **Cause:** `packages/core/solver/engine.js` (`NewtonSolver.solve` / `_mirrorLineDragHolds`): during any active drag (`dragOpt` or `j.dragTarget`), temporarily holds every free driving `symmetric` constraint's mirror-line endpoints (restored in `finally`) unless the mirror line itself is being dragged (by its body, an endpoint, or a joint coincident with an endpoint).
+- **Task id(s):** `1011`
+- **Fix merge sha:** open (`agents/drag-1011`, awaiting merge)
+- **Guarding test file(s):** `tests/drag-mirror-line-stay-ux10-1011-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`UX-10`) and `1000B` (`B-12d`) -> fixed in task `1011`. Behaviour change: dragging mirrored geometry keeps a free mirror line stationary; dragging the mirror line itself still moves it freely.
+
+---
+
+### BUG-160
+- **Date / turn:** 2026-11-26 (audit IDs `UX-06`, `B-1`; fixed in task `1012`)
+- **Reported by:** audits `1000` (`IR2.1.C1`) & `1000B` (`1a`, `LIVE-1`, `LIVE-P2-1`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab, desktop & phone)
+- **Report:** `UX-06` / `B-1`: Lock (`F` / ribbon / context menu) on a circle reported `locked: true` and switched the menu to `"Unlock"`, yet the circle stayed blue (1 DOF) and its rim dragged freely (`r: 20 -> 40.026`).
+- **What was wrong:** `toggleFixedSelection` only set `j.fixed = true` on `s.joints` (a circle's centre joint), leaving its scalar `radius` unknown free in the solver, while `selectionLockState` checked only joints and falsely reported `locked: true` (including on origin-centred circles with free radii).
+- **Cause:** No unified lock declaration for scalar-radius circles (`packages/core/lock-state.js`), `hasRadiusUnknown` in `packages/core/solver/engine.js` did not exclude `s.fixed`, `cachedFreedom` in `packages/core/constraint-status.js` did not include `s.fixed` in its cache key, and `input-manager.js` / `svg-renderer.js` only checked `s.joints`.
+- **Fix:** Added single source of truth `packages/core/lock-state.js` (`isJointLocked`, `isScalarRadiusCircle`, `shapeLockJoints`, `isShapeLocked`, `lockTargets`); `toggleFixedSelection` / `selectionLockState` (`packages/ui/input-manager.js`) lock/unlock both centre and `circle.fixed` in one undo step; `packages/core/solver/engine.js` (`hasRadiusUnknown`, `_sizeTerm`, constant-radius `distance`/`equal`) and `packages/core/solver/definitions.js` treat locked circle radii as constants; `packages/core/constraint-status.js` includes `s.fixed` in `cachedFreedom`; `packages/ui/svg-renderer.js` renders locked circles in `LOCKED_LINE_COLOR` via `isShapeLocked`. Also verified Arc lock keeps centre, radius, and endpoints fixed.
+- **Task id(s):** `1012`
+- **Fix merge sha:** pending (`agents/lock-1012`)
+- **Guarding test file(s):** `tests/lock-1012-node.test.js`, `tests/lock-1012-live.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-123, BUG-161
+- **History:** found in `1000` (`UX-06`) & `1000B` (`B-1`) -> undo step added in `1006` (`BUG-123`) -> circle radius lock + single source of truth fixed in `1012`
+
+### BUG-161
+- **Date / turn:** 2026-11-26 (audit ID `UX-26`; fixed in task `1012`)
+- **Reported by:** audit `1000` (`S1.1`) & `1000B` cross-exam (`UX-26`); originally noted in task `524`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab, desktop & phone)
+- **Report:** `UX-26`: after filleting two locked lines `L1`, `L2`, `L1` stayed in `fixedShapes` (0 DOF), yet `selectionLockState(L1)` returned `{ has: true, locked: false }` and the context menu falsely offered `"Lock"` instead of `"Unlock"`.
+- **What was wrong:** `applyFillet` replaced each locked line's corner joint with an unlocked tangent joint (`jTA`, `jTB`, kept unlocked so the fillet radius stays editable) while keeping the locked corner as `arc.filletSharp` held on each line via `pointOnLine`; both `selectionLockState` and `svg-renderer.js` checked only `s.joints.every(j => j.fixed)` and missed the locked virtual sharp.
+- **Cause:** `packages/ui/input-manager.js` (`selectionLockState`, `toggleFixedSelection`) and `packages/ui/svg-renderer.js` each checked raw `s.joints` separately instead of sharing one lock predicate.
+- **Fix:** Unified lock state in `packages/core/lock-state.js` (`shapeLockJoints` resolves an unlocked fillet tangent end to its fillet's locked virtual sharp `arc.filletSharp` when held on the shape by `pointOnLine`), shared by `selectionLockState`, `toggleFixedSelection`, and `svg-renderer.js`. Filleted locked lines stay locked & green (`LOCKED_LINE_COLOR`), the fillet arc stays unlocked & constrained-black, fillet radius edits continue to work, and Unlock/Undo operate cleanly in one step.
+- **Task id(s):** `1012`
+- **Fix merge sha:** pending (`agents/lock-1012`)
+- **Guarding test file(s):** `tests/lock-1012-node.test.js`, `tests/lock-1012-live.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-123, BUG-160
+- **History:** noted in task `524` -> logged in `1000` (`UX-26`) & confirmed in `1000B` cross-exam -> fixed in `1012`
+
+---
+
+### BUG-170
+- **Date / turn:** 2026-11-26 (audit ID `UX-21`; fixed in task `1014`)
+- **Reported by:** audits `1000` (`C1.13`), `1000B` (`CROSS UX-21`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-21`: one conflicted triangle `(50, 40, 120)` blocks adding `Horizontal` (or driving dimensions) on unrelated free line `L4` with `"Sketch geometry over constrained"`.
+- **What was wrong:** `ConstraintManager._sandboxVerify` judged global `engine.solve().error` across every disconnected component, and `createConstraint` checked global `_solveRes.converged === false` / `mangled` against every constraint in the sketch.
+- **Cause:** `packages/core/constraint-manager.js`: added `_componentConstraints` (reusing `creation-placement.js` `constraintOperands`) so `_sandboxVerify` evaluates only the candidate constraint's connected component (and relative deltas against baseline), and `createConstraint` checks `unsatisfiedConstraints` restricted to `created` and newly-violated constraints (`!unsatisfiedBefore.has(oc)`).
+- **Task id(s):** `1014`
+- **Fix merge sha:** open (`agents/misc-1014`, awaiting merge)
+- **Guarding test file(s):** `tests/constraint-logic-1014-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`C1.13`), `1000B` -> fixed in task `1014`. Probe `CROSS UX-20 & UX-21` before: `l4HorizontalBlocked=true`, `[overconstrained]`; after: `l4HorizontalBlocked=false`, `l4Toasts=[]`.
+
+---
+
+### BUG-171
+- **Date / turn:** 2026-11-26 (audit ID `UX-02`; fixed in task `1014`)
+- **Reported by:** audits `1000` (`D7.1`, `L1`), `1003` (`V2.3.rect500to4`), `1000B` (`CROSS UX-02`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-02`: shrinking a `500 x 40` rectangle's width `d1` to `4 mm` is falsely refused with `"Can't set to 4 — 4.00 would collapse a line to a point. Reverted."`.
+- **What was wrong:** `findCollapsedShape` exempted the dimensioned side `L1` (`a-b`) but judged the opposite side `L3` (`c-d`) by `COLLAPSE_RATIO = 0.01` alone (`4 < 500 * 0.01 = 5`).
+- **Cause:** `packages/core/constraint-verifier.js` (`findCollapsedShape`): separated length/radius/chord check `fellSize` (`now[k] < Math.min(COLLAPSE_ABS_SIZE, was[k] * COLLAPSE_RATIO)` with `COLLAPSE_ABS_SIZE = 0.02` mm) from angular sweep ratio `fellAngle`, so only a genuine collapse toward zero (`< 0.02 mm`) is refused while valid large shrink edits like `500 -> 4 mm` succeed.
+- **Task id(s):** `1014`
+- **Fix merge sha:** open (`agents/misc-1014`, awaiting merge)
+- **Guarding test file(s):** `tests/constraint-logic-1014-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`UX-02`), `1003`, `1000B` -> fixed in task `1014`. Probe `CROSS UX-02` before: `valAfter4=500`, `would collapse a line to a point`; after: `valAfter4=4`, `t4=[]`.
+
+---
+
+### BUG-172
+- **Date / turn:** 2026-11-26 (audit ID `B-11`; fixed in task `1014`)
+- **Reported by:** audits `1000B` (`F2`), `CROSS-1000` (`XB-11`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-11`: Coincident on an arc and its own centre or endpoint silently adds a `pointOnLine` (`polCount: 1, toasts: []`), while a line refuses the same pick with `Sketch geometry over constrained`.
+- **What was wrong:** `applyPointOnShape` only checked `shape.type === 'line' && shape.joints.some(j => cluster.has(j))`.
+- **Cause:** `packages/ui/input-handlers/constraint-tools.js` (`applyPointOnShape`): removed the `shape.type === 'line' &&` filter so own-joint picks on arcs, circles, and lines alike hit the same `announceOverConstrained()` refusal.
+- **Task id(s):** `1014`
+- **Fix merge sha:** open (`agents/misc-1014`, awaiting merge)
+- **Guarding test file(s):** `tests/constraint-logic-1014-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000B` (`B-11`), `CROSS-1000` (`XB-11`) -> fixed in task `1014`. Probe `XB-11` before: `arcOwn={"pol":1,"toasts":[]}`; after: `arcOwn={"pol":0,"toasts":["[overconstrained] Sketch geometry over constrained"]}`.
+
+---
+
+### BUG-173
+- **Date / turn:** 2026-11-26 (audit ID `B-17`; fixed in task `1014`)
+- **Reported by:** audits `1000B` (`P6`), `CROSS-1000` (`XB-17`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-17`: Tangent between same-tier `line:free` and `circle:sized` always moves the circle regardless of pick order (`WHO_MOVES['tangent-line-circle'].tie` is `"second"`).
+- **What was wrong:** `handleTangentPointerDown` passed only `{ line: line.id, circle: circle.id }` (discarding `[s1.id, s2.id]` pick order), `constraints.js` dropped `shapes` when `{ line, circle }` were present, and `creation-placement.js` always read `[c.line, c.circle]` first.
+- **Cause:** `packages/ui/input-handlers/constraint-tools.js` (`handleTangentPointerDown`) now passes `{ line, circle, shapes: [s1.id, s2.id] }`, `packages/core/constraints.js` preserves `shapes` on `TANGENT` `{ line, circle }` records, and `packages/core/creation-placement.js` (`tangent-line-circle`) reads `c.shapes` when present so same-tier ties move the second-picked shape per `WHO_MOVES`.
+- **Task id(s):** `1014`
+- **Fix merge sha:** open (`agents/misc-1014`, awaiting merge)
+- **Guarding test file(s):** `tests/constraint-logic-1014-node.test.js`
+- **Status:** fixed
+- **Family:** `fusion-frame`
+- **History:** recast by `CROSS-1000` (`B-17`: `free+free` always moves line like Fusion 200/200; same-tier `line:free + circle:sized` tie failed) -> fixed in task `1014`. Probe `XB-17.tie-lineFree-circleSized.C-then-L` before: `lineMoved=0, circleMoved=25`; after: `lineMoved=25, circleMoved=0`.
+
+---
+
+### BUG-174
+- **Date / turn:** 2026-11-26 (audit ID `B-16`; fixed in task `1014`)
+- **Reported by:** audits `1000B` (`P5`), `CROSS-1000` (`XB-16`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-16`: double-clicking a pattern's label in the Dimension tool opens `#dimInput` instead of the pattern values dialog (Select tool's behavior).
+- **What was wrong:** `dimensionPointerDown` omitted the `isPatternConstraint(constraint)` check that `selection-tools.js` has on `.dim-label` double-click.
+- **Cause:** `packages/ui/input-handlers/dimension-tool.js` (`dimensionPointerDown`) now dispatches `isPatternConstraint(constraint)` double-clicks to `editPatternFromLabel(svg, state, constraint)` (same as Select) and consumes non-placing pattern-label presses; `packages/ui/svg-renderer.js` (`patternLabels`) also uses `pointer` cursor in Dimension tool.
+- **Task id(s):** `1014`
+- **Fix merge sha:** open (`agents/misc-1014`, awaiting merge)
+- **Guarding test file(s):** `tests/constraint-logic-1014-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `1000B` (`B-16`), `CROSS-1000` (`XB-16`) -> fixed in task `1014`. Probe `XB-16` before: `dimInputOpened=true`; after: `dimInputOpened=false` (opens pattern values dialog).
+
+---
+
 ## Family index
 
 Entries in each family are listed in chronological date order (`MM-DD`, oldest first) so recurring patterns read as a timeline.
@@ -1873,18 +2203,19 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `build-deploy` | BUG-062 (11-21) |
 | `export-svg` | BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19) |
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
-| `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25) |
+| `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
-| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-146 (11-26) |
+| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-146 (11-26) |
+| `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
 | `storage-lifecycle` | BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---
@@ -1895,4 +2226,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-140..BUG-146 fixed in task `1008`).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-150..BUG-154 fixed in task `1011`; BUG-160..BUG-161 fixed in task `1012`; BUG-170..BUG-174 fixed in task `1014`; BUG-140..BUG-147 fixed in task `1008`).

@@ -39,13 +39,15 @@ const addRadiusDerivative = (outRow, positions, coef, at, rim, centre) => {
   }
 };
 
-// THE size of a shape in a row (equal with a circle operand, the symmetric circle form): a term { at } is a circle's radius unknown, a term
-// { a, b } the length |a - b| (a line, or an arc's centre-rim pair = its live radius). engine.js _sizeTerm builds the term.
+// THE size of a shape in a row (equal with a circle operand, the symmetric circle form): a term { at } is a circle's radius unknown,
+// { radius } is a constant (locked or rigid-block) circle radius, { a, b } the length |a - b| (a line, or an arc's centre-rim pair).
 const sizeValue = (t, positions) => (typeof t.at === 'number' ? positions[t.at]
+  : typeof t.radius === 'number' ? t.radius
   : Math.hypot(positions[t.a*2] - positions[t.b*2], positions[t.a*2+1] - positions[t.b*2+1]));
 // ACCUMULATE sg * d(size)/d(variables) into outRow (the two terms of a row may share a joint).
 const addSizeGrad = (outRow, t, sg, positions) => {
   if (typeof t.at === 'number') { outRow[t.at] += sg; return; }
+  if (typeof t.radius === 'number') return; // constant radius (locked or rigid-block circle)
   const dx = positions[t.a*2] - positions[t.b*2], dy = positions[t.a*2+1] - positions[t.b*2+1];
   const l = Math.hypot(dx, dy) || 1e-12;
   addGrad(outRow, t.a, sg * dx / l, sg * dy / l);
@@ -229,6 +231,7 @@ export const Definitions = {
     computeError: (params, positions) => {
       const targetVal = (params.value || 0) * (params.isDiameter ? 0.5 : 1);
       if (typeof params.radiusAt === 'number') return positions[params.radiusAt] - targetVal;   // a circle's radius (or diameter / 2)
+      if (typeof params.radius === 'number') return params.radius - targetVal;                  // constant (locked or rigid-block) circle radius
       if (params.__lineLine) {
         const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
         const px = positions[pi*2], py = positions[pi*2+1];
@@ -254,6 +257,7 @@ export const Definitions = {
     },
     computeJacobian: (params, positions, outRow) => {
       if (typeof params.radiusAt === 'number') { outRow[params.radiusAt] += 1; return; }
+      if (typeof params.radius === 'number') return; // constant radius (locked or rigid-block circle)
       if (params.__lineLine) {
         const pi = params.joints[0], ai = params.joints[1], bi = params.joints[2];
         const px = positions[pi*2], py = positions[pi*2+1];
@@ -909,6 +913,8 @@ const rimDir = (op, positions) => {
 const RIM_POINT = {
   // A rim drag changes the RADIUS and keeps the CENTRE (joints[0]) whenever the constraints allow it (owner 2026-11-12, like Fusion).
   prefersHold: [0],
+  // A rim point depends on the cursor's ray (rimDir): projecting rank-1 pulls onto f.dir keeps tangential flings on fixed-end arcs bounded.
+  projectRank1: true,
   param: (P, hit) => Math.atan2(hit.y - P[0].y, hit.x - P[0].x),
   point: (op, positions) => {
     const c = op.joints[0], r = radiusValue(positions, op.radiusAt, op.radius, op.rimJoint, c), { ux, uy } = rimDir(op, positions);

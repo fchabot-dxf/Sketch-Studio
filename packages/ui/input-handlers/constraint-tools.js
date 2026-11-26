@@ -248,7 +248,7 @@ function applyPointOnShape(state, jointId, shape) {
     const why = curveRefusal(shape, TOOL_MODES.COINCIDENT);
     if (why) { showNotification(why, 'warning'); return; }
     const cluster = findCoincidentCluster(jointId, state.constraints);
-    if (shape.type === 'line' && Array.isArray(shape.joints) && shape.joints.some(j => cluster.has(j))) {
+    if (Array.isArray(shape.joints) && shape.joints.some(j => cluster.has(j))) {
         announceOverConstrained();
         return;
     }
@@ -378,7 +378,7 @@ function handleTangentPointerDown(e, svg, state, hitShape) {
         if ((s1.type === 'line' && circleLike(s2)) || (s2.type === 'line' && circleLike(s1))) {
             const line = s1.type === 'line' ? s1 : s2;
             const circle = s1.type === 'line' ? s2 : s1;
-            ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.TANGENT, { line: line.id, circle: circle.id }, { source: 'toolbar' });
+            ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.TANGENT, { line: line.id, circle: circle.id, shapes: [s1.id, s2.id] }, { source: 'toolbar' });
         }
         // Circle/Arc + Circle/Arc
         else if (circleLike(s1) && circleLike(s2)) {

@@ -13,7 +13,7 @@ import { rigidBlocks } from '../group-model.js';
 // and that radius is a solver unknown. `shape.radius` stays the ONE store: _pack reads it as the start value, _unpack writes the solved
 // value back. An arc is not one of these: its radius is live through its rim joints (|rim - centre|).
 export function hasRadiusUnknown(s) {
-  return !!s && s.type === 'circle' && Array.isArray(s.joints) && s.joints.length === 1 && typeof s.radius === 'number' && Number.isFinite(s.radius);
+  return !!s && s.type === 'circle' && Array.isArray(s.joints) && s.joints.length === 1 && typeof s.radius === 'number' && Number.isFinite(s.radius) && !s.fixed;
 }
 
 // The solver state is joint x/y, circle radii AND any free constraint scalar unknowns (Definition.scalarUnknown):
@@ -472,6 +472,7 @@ export class NewtonSolver {
   _sizeTerm(s, jointIndexMap) {
     const at = this._radiusAt(s);
     if (at !== undefined) return { at };
+    if (s && s.type === 'circle' && typeof s.radius === 'number' && Number.isFinite(s.radius)) return { radius: s.radius };
     const a = s && s.joints && s.joints.length >= 2 ? jointIndexMap.get(s.joints[0]) : undefined;
     const b = s && s.joints && s.joints.length >= 2 ? jointIndexMap.get(s.joints[1]) : undefined;
     return typeof a === 'number' && typeof b === 'number' ? { a, b } : null;
@@ -847,11 +848,13 @@ export class NewtonSolver {
             }
           }
         }
-        // Distance "radius" — {shape, isRadius, value}: a circle's radius unknown (radiusAt), an arc's center→rim distance.
+        // Distance "radius" — {shape, isRadius, value}: a circle's radius unknown (radiusAt), a locked/block circle's constant radius, or an arc's center→rim distance.
         else if (c.type === 'distance' && c.isRadius && c.shape) {
           const shape = shapeOf(c.shape);
           if (this._radiusAt(shape) !== undefined) params.radiusAt = this._radiusAt(shape);
-          else if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 2) {
+          else if (shape && shape.type === 'circle' && typeof shape.radius === 'number' && Number.isFinite(shape.radius)) {
+            params.radius = shape.radius;
+          } else if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 2) {
             params.joints = [jointIndexMap.get(shape.joints[0]), jointIndexMap.get(shape.joints[1])];
           }
           if (c.isDiameter) params.isDiameter = true;
@@ -876,9 +879,12 @@ export class NewtonSolver {
             }
           }
         }
-        // Equal with a CIRCLE operand: one size term per shape, a circle's radius unknown or the length of a line / an arc's
+        // Equal with a CIRCLE operand: one size term per shape, a circle's radius (unknown or locked constant) or the length of a line / an arc's
         // centre-rim pair (its first two joints), so equal(circle, circle) is r1 - r2 and equal(circle, arc) r - |rim - centre|.
-        else if (c.type === 'equal' && c.shapes && c.shapes.length === 2 && c.shapes.some(sid => this._radiusAt(shapeOf(sid)) !== undefined)) {
+        else if (c.type === 'equal' && c.shapes && c.shapes.length === 2 && c.shapes.some(sid => {
+          const sh = shapeOf(sid);
+          return this._radiusAt(sh) !== undefined || (sh && sh.type === 'circle' && typeof sh.radius === 'number' && Number.isFinite(sh.radius));
+        })) {
           const terms = c.shapes.map(sid => this._sizeTerm(shapeOf(sid), jointIndexMap));
           if (terms.every(Boolean)) params.terms = terms;
         }
@@ -900,7 +906,7 @@ export class NewtonSolver {
       // A radius distance whose shape gives neither a radius unknown nor a centre-rim pair (the shape is missing or has no
       // radius) has nothing to measure: an EXPLICIT zero row. Definitions.distance would index params.joints[0]/[1] of an empty
       // array -> positions[NaN] -> NaN, and that NaN poisons the gradient (Algebra.atx) of every column it shares.
-      if (c.type === 'distance' && c.isRadius && params.radiusAt === undefined && (!params.joints || params.joints.length < 2)) {
+      if (c.type === 'distance' && c.isRadius && params.radiusAt === undefined && typeof params.radius !== 'number' && (!params.joints || params.joints.length < 2)) {
         r[row] = 0;
         endRow();
         continue;
@@ -1137,6 +1143,41 @@ export class NewtonSolver {
     return { x, converged: false, residual: Math.sqrt(2 * cost) };
   }
 
+  // UX-10 / B-12d: during a drag, hold every FREE symmetry line's endpoints unless the mirror line itself is being dragged
+  // (by its body, an endpoint, or a joint coincident with an endpoint). Matches task 611's solveGivingWay rule for dimension edits.
+  _mirrorLineDragHolds(dragOpt) {
+    const syms = this.constraints.filter(c => c && c.type === 'symmetric' && !c.isDriven && !c.driven);
+    if (!syms.length) return null;
+    const dragged = new Set();
+    let bodyShape = null;
+    if (dragOpt && dragOpt.body) {
+      bodyShape = dragOpt.body.shape;
+      const sh = this.shapes.find(s => s && s.id === bodyShape);
+      if (sh && sh.joints) for (const id of sh.joints) dragged.add(id);
+    } else {
+      const list = Array.isArray(dragOpt) ? dragOpt : (dragOpt ? [dragOpt] : []);
+      for (const d of list) if (d && d.jointId) dragged.add(d.jointId);
+      for (const [id, j] of this.joints.entries()) if (j && j.dragTarget && !j.fixed) dragged.add(id);
+    }
+    if (!dragged.size && !bodyShape) return null;
+    const draggedCluster = new Set();
+    for (const id of dragged) for (const m of getCoincidentJoints(id, this.constraints)) draggedCluster.add(m);
+    const held = [];
+    const seen = new Set();
+    for (const c of syms) {
+      if (bodyShape && c.line === bodyShape) continue;
+      const o = symmetricOperands(c, this.shapes);
+      if (!o || !o.line) continue;
+      if (o.line.some(id => draggedCluster.has(id))) continue;
+      for (const id of o.line) {
+        if (seen.has(id)) continue;
+        const j = this.joints.get(id);
+        if (j && !j.fixed) { seen.add(id); held.push(j); }
+      }
+    }
+    return held.length ? held : null;
+  }
+
   // Public solve entry point. If dragTarget provided, interaction module will add temporary spring.
   solve(iter = this.config.maxIter, options = {}) {
     let dragOpt = options && options.dragTarget ? options.dragTarget : null;
@@ -1149,6 +1190,16 @@ export class NewtonSolver {
         }
       }
     }
+    const mirrorHolds = this._mirrorLineDragHolds(dragOpt);
+    if (mirrorHolds) for (const j of mirrorHolds) j.fixed = true;
+    try {
+      return this._solve(iter, dragOpt);
+    } finally {
+      if (mirrorHolds) for (const j of mirrorHolds) j.fixed = false;
+    }
+  }
+
+  _solve(iter, dragOpt) {
     const x0 = this._pack();
     // a JOINT drag: the springs of every joint carrying a dragTarget (set by the UI input handlers; a body drag never sets one, task 538)
     if (!dragOpt || !dragOpt.body) dragOpt = this._jointDragSprings(dragOpt);
@@ -1475,8 +1526,10 @@ export class NewtonSolver {
     if (!f || f.rank === 0) { hold = []; f = this.bodyPointFreedom(b, hold, at); }
     const p = f.point;
     let x = cursor.x, y = cursor.y;
+    // UX-23: only project rank === 1 when the body-point kind declares projectRank1 (RIM_POINT); a line's rank-1 motion can be a curved
+    // circle (rotating distance-constrained line) where projecting onto the instantaneous tangent f.dir stalls fast body flicks.
     if (f.rank === 0) { x = p[0]; y = p[1]; }
-    else if (f.rank === 1) { const s = (cursor.x - p[0]) * f.dir[0] + (cursor.y - p[1]) * f.dir[1]; x = p[0] + s * f.dir[0]; y = p[1] + s * f.dir[1]; }
+    else if (f.rank === 1 && kind.projectRank1) { const s = (cursor.x - p[0]) * f.dir[0] + (cursor.y - p[1]) * f.dir[1]; x = p[0] + s * f.dir[0]; y = p[1] + s * f.dir[1]; }
     return { body: { shape: body.shape, param, hold: hold.map(id => { const j = this.joints.get(id); return { joint: id, x: j.x, y: j.y }; }) }, x, y };
   }
 

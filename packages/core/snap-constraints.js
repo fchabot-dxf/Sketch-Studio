@@ -122,6 +122,11 @@ export function applySnapConstraint(state, jointId, snapTarget, options = {}) {
             let anchorJoints = null;
             const midShapeId = (snapTarget.shape && snapTarget.shape.id) ? snapTarget.shape.id : (snapTarget.targetId || snapTarget.id || null);
             if (!midShapeId) return false;
+            // an ARC's midpoint (task 875, UX-27): the arc form { joint, shape }, not its first two joints (centre, start)
+            if (snapTarget.shape && snapTarget.shape.type === 'arc') {
+                if (snapTarget.shape.joints.includes(jointId)) return false;
+                try{ return addViaManager(CONSTRAINT_TYPES.MIDPOINT, { joint: jointId, shape: midShapeId }); }catch(e){ return false; }
+            }
             if (snapTarget.shape && Array.isArray(snapTarget.shape.joints)) anchorJoints = snapTarget.shape.joints.slice(0,2);
             else if (state && state.shapes) {
                 const s = state.shapes.find(xx => xx.id === midShapeId);
@@ -197,7 +202,11 @@ export function previewSnapConstraint(snapTarget, jointId, options = {}) {
                 __isPreview: true
             };
         case 'midpoint':
-            // Preview for midpoint constraint
+            // Preview for midpoint constraint (an arc's: the arc form { joint, shape })
+            if (snapTarget.shape && snapTarget.shape.type === 'arc') {
+                if (snapTarget.shape.joints.includes(jointId)) return null;
+                return { type: CONSTRAINT_TYPES.MIDPOINT, joint: jointId, shape: snapTarget.shape.id, __isPreview: true };
+            }
             const midLineJoints = Array.isArray(snapTarget.joints) && snapTarget.joints.length >= 2 ? snapTarget.joints : (snapTarget.shape?.joints || []);
             if (!midLineJoints || midLineJoints.length < 2) return null;
             if (midLineJoints.includes(jointId)) return null;

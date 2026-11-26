@@ -86,6 +86,22 @@ function getDragDOF(state, jointIds, drag = null) {
     const rims = (drag && drag.arcRims) || [];
     const members = jointIds.filter(id => !rims.includes(id));
 
+    // UX-22: in a multi-selection group drag (drag.group), fixed/0-DOF members stay put while free members still move;
+    // lock the drag only when EVERY member is held (e.g. a full-locked user group or an all-fixed selection), and mask
+    // an axis only when EVERY movable member is locked on that axis.
+    if (drag && drag.group) {
+        const movable = members.filter(id => !isHeld(id) && !clusterHeld(id));
+        if (!movable.length) return { lockX: true, lockY: true, guideLine: null };
+        const lockedAxisX = (status && status.lockedAxisX) ? status.lockedAxisX : new Set();
+        const lockedAxisY = (status && status.lockedAxisY) ? status.lockedAxisY : new Set();
+        return {
+            lockX: movable.every(jid => lockedAxisX.has(jid)),
+            lockY: movable.every(jid => lockedAxisY.has(jid)),
+            guideLine: null,
+            movable
+        };
+    }
+
     // 0 DOF protocol — immediate full lock if any dragged joint is fixed/0DOF/j_origin
     for (const id of members) {
         if (isHeld(id)) return { lockX: true, lockY: true, guideLine: null };
@@ -407,8 +423,9 @@ export function handleJointSelection(e, svg, state, hitJoint) {
         if(state.shapes && state.shapes.length){
             for(const s of state.shapes){
                 if(s && s.type === 'arc' && s.joints && s.joints.length >= 3){
-                    // If the clicked joint is the center of an arc, include the arc's rim joints so drag translates the arc
-                    if(s.joints[0] === hitJoint.id){ jointIdSet.add(s.joints[1]); jointIdSet.add(s.joints[2]); arcRims.push(s.joints[1], s.joints[2]); }
+                    // UX-09: if the clicked joint (or any joint in its coincident cluster) is the center of an arc,
+                    // include the arc's rim joints so drag translates the arc rigidly regardless of Map/z-order.
+                    if(cluster.has(s.joints[0])){ jointIdSet.add(s.joints[1]); jointIdSet.add(s.joints[2]); arcRims.push(s.joints[1], s.joints[2]); }
                     // A rim joint drags ITSELF only (task 578, like Fusion): the solver moves whatever its constraints require.
                 }
             }
@@ -496,6 +513,9 @@ function dragUndoLabel(state) {
 }
 function ensureDragUndo(state) {
     if (!state.drag || state.drag.undoLen !== undefined) return;
+    // UX-12: saveState drops the oldest entry at maxHistory and clears redoStack; a no-op drag must lose neither (same pattern as dimension-seams.js)
+    state.drag.undoEvicted = state.history && state.maxHistory && state.history.length >= state.maxHistory ? state.history[0] : null;
+    state.drag.undoRedo = state.redoStack ? [...state.redoStack] : null;
     state.saveState(dragUndoLabel(state));
     state.drag.undoLen = state.history.length;
 }
@@ -508,7 +528,11 @@ function settleDragUndo(state) {
         && snap.joints.size === state.joints.size
         && [...snap.joints].every(([id, p]) => { const j = state.joints.get(id); return j && j.x === p.x && j.y === p.y; })
         && JSON.stringify(snap.shapes) === JSON.stringify(state.shapes);
-    if (same) state.discardSnapshotAt(len);
+    if (same && state.discardSnapshotAt(len)) {
+        if (state.drag.undoEvicted) state.history.unshift(state.drag.undoEvicted);
+        if (state.drag.undoRedo && state.drag.undoRedo.length) state.redoStack.push(...state.drag.undoRedo);
+        if ((state.drag.undoEvicted || (state.drag.undoRedo && state.drag.undoRedo.length)) && typeof state._notifyHistory === 'function') state._notifyHistory();
+    }
 }
 
 /**
@@ -682,7 +706,8 @@ export function handleSelectionPointerMove(e, svg, state) {
     const maxStep = SolverConfig.MAX_DRAG_STEP;
     const from = state.drag.lastPointer || state.drag.startWorld;
     const jump = Math.hypot(wpt.x - from.x, wpt.y - from.y);
-    const n = (maxStep > 0 && state.drag.id && state.joints.has(state.drag.id)) ? Math.max(1, Math.ceil(jump / maxStep)) : 1;
+    // UX-23: body drags (state.drag.body) walk the same MAX_DRAG_STEP sub-moves as joint drags so fast flicks converge consistently
+    const n = (maxStep > 0 && (state.drag.body || (state.drag.id && state.joints.has(state.drag.id)))) ? Math.max(1, Math.ceil(jump / maxStep)) : 1;
     for (let k = 1; k < n; k++) dragToward(e, svg, state, { x: from.x + (wpt.x - from.x) * k / n, y: from.y + (wpt.y - from.y) * k / n }, false);
     dragToward(e, svg, state, wpt, true);
     carryControlPoints(state, state.drag); // TASK 751 (a group drag); TASK 762 (a bezier's body drag)
@@ -707,6 +732,7 @@ function dragToward(e, svg, state, wpt, atPointer) {
     // Default target: raw mouse position
     let target = wpt;
     let pivot = null;
+    let movable = null;
 
     // 3. Constraint-Aware Input Masking (Rigid Drag)
     // Apply masking when dragging joints, clusters, or whole shapes/lines. Not for a BODY point drag (task 538): the mask reads the
@@ -721,6 +747,7 @@ function dragToward(e, svg, state, wpt, atPointer) {
         const dof = getDragDOF(state, state.drag.jointIds, state.drag);
         const { lockX, lockY, guideLine } = dof;
         pivot = dof.pivot || null;
+        movable = dof.movable || null;
 
         // Apply Guide Line Projection (if valid and not fully locked)
         if (guideLine && !lockX && !lockY) {
@@ -756,7 +783,7 @@ function dragToward(e, svg, state, wpt, atPointer) {
     // TASK 582: the pre-solve of a point drag, and where it put the dragged joint
     let reached = target;
     if (pointDrag) {
-        pullDrag(state, target, iters, pivot);
+        pullDrag(state, target, iters, pivot, movable);
         const j = state.joints.get(state.drag.id);
         if (j) reached = { x: j.x, y: j.y };
     }
@@ -789,9 +816,10 @@ function dragToward(e, svg, state, wpt, atPointer) {
         }
     }
 
-    // Normalize the candidate's snap point (some snap objects use .pt, others use x/y or id/targetId)
+    // Normalize the candidate's snap point (some snap objects use .pt, others use x/y or id/targetId). A MIDPOINT snap is pulled to only by a CLUSTER drag (B-18a):
+    // it infers nothing (below), so the previewed midpoint must come through the snap; a single-joint drag gets the midpoint from findInference.
     let snapPt = null;
-    if (state.activeSnap && activeIsLocked && (state.activeSnap.type === 'joint' || state.activeSnap.type === 'line' || state.activeSnap.type === 'shape' || state.activeSnap.type === 'grid' || AXIS_SNAP_TARGETS[state.activeSnap.type])) {
+    if (state.activeSnap && activeIsLocked && (state.activeSnap.type === 'joint' || state.activeSnap.type === 'line' || state.activeSnap.type === 'shape' || (state.activeSnap.type === 'midpoint' && state.drag.type === DRAG_TYPES.CLUSTER) || state.activeSnap.type === 'grid' || AXIS_SNAP_TARGETS[state.activeSnap.type])) {
         try{
             if (state.activeSnap.pt) snapPt = state.activeSnap.pt;
             else if (typeof state.activeSnap.x === 'number' && typeof state.activeSnap.y === 'number') snapPt = { x: state.activeSnap.x, y: state.activeSnap.y };
@@ -887,7 +915,7 @@ function dragToward(e, svg, state, wpt, atPointer) {
         return;
     }
     // a point drag already pulled toward `target` (the pre-solve): only a pin pulls again
-    if (!pointDrag || smoothed !== target) pullDrag(state, smoothed, iters, pivot);
+    if (!pointDrag || smoothed !== target) pullDrag(state, smoothed, iters, pivot, movable);
 }
 
 // The id a snap target locks to (state.drag.lockedTo): its joint / target id, or the snapped line or shape.
@@ -898,7 +926,7 @@ function snapIdOf(snap) {
 // Pull the drag toward the world point `to`: the drag targets of the joints it carries and a solver pass of `iters` iterations.
 // pivot (TASK 582, getDragDOF: an arc grabbed by its centre with one held rim): the rims are not carried, the arc turns about the held one
 // as its constraints require (radius kept).
-function pullDrag(state, to, iters, pivot) {
+function pullDrag(state, to, iters, pivot, movable = null) {
     // NATIVE SOLVER DRAG: Set drag targets on joints instead of forcing positions
     // This tells the solver "try to be here", but allows constraints to override.
     // TASK 584: every joint the drag CARRIES (state.drag.carried; a shape drag with no body point carries all its members) gets the grab's
@@ -908,8 +936,9 @@ function pullDrag(state, to, iters, pivot) {
     const start = state.drag.startWorld;
     const dx = to.x - start.x, dy = to.y - start.y;
     const rims = pivot ? (state.drag.arcRims || []) : [];
+    const targets = movable || state.drag.carried || state.drag.jointIds;
     console.log('[DRAG] smoothed:', to, 'startWorld:', start, 'dx/dy:', dx, dy);
-    for (const id of (state.drag.carried || state.drag.jointIds)) {
+    for (const id of targets) {
         if (rims.includes(id)) continue;
         const init = state.drag.initial.get(id), j = state.joints.get(id);
         if (j && init) {
@@ -922,7 +951,8 @@ function pullDrag(state, to, iters, pivot) {
     // engine treats the mouse as a "weak target" (mouse_spring) and enforces
     // structural constraints deterministically in the same frame.
     try {
-        const primary = state.drag && state.drag.id ? state.drag.id : (state.drag && state.drag.jointIds && state.drag.jointIds[0]);
+        const rawPrimary = state.drag && state.drag.id ? state.drag.id : (state.drag && state.drag.jointIds && state.drag.jointIds[0]);
+        const primary = movable ? (movable.includes(rawPrimary) ? rawPrimary : movable[0]) : rawPrimary;
         if (state.engine && primary) {
             // the grabbed joint's own target: its start + the grab's displacement. That is `to` for every drag that starts ON its joint
             // (startWorld = the joint); a GROUP drag (task 588) starts at the cursor, so its first member's target is not the cursor itself.

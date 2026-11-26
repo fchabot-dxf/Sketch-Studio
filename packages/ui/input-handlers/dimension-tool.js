@@ -16,6 +16,8 @@ import { showEditInput, showSingleInput } from '#ui/numeric-input-manager.js';
 import { dragDimensionLabel } from '#core/dimension-seams.js';
 import { placeRadiusLabel, updateConstraintOffset } from '#core/dim-label.js'; // TASK 680: the placement rule lives in core (tool-ops places with it too)
 import { findUndimensionedOffsetPair, restoreOffsetDimension } from '#core/offset.js';
+import { isPatternConstraint } from '#core/pattern.js';
+import { editPatternFromLabel } from '#ui/input-handlers/pattern-tool.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { showNotification } from '#ui/notification-manager.js';
@@ -405,10 +407,15 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
         dimensionState.lastClickTime = now;
         dimensionState.lastClickedIndex = cIdx;
         if (isDoubleClick) {
+            if (isPatternConstraint(constraint)) {
+                editPatternFromLabel(svg, state, constraint);
+                return true;
+            }
             dimensionState.editingConstraint = constraint; // Track for event listener
             showEditInput(svg, state, constraint);
             return true;
         }
+        if (isPatternConstraint(constraint) && !dimensionState.placingConstraint && !dimensionState.pendingDimension) return true;
         // A single press on a label drags it, as in the Select tool (task 1008, D-10), unless a dimension is being placed: its own label is
         // under the pointer and the press drops it (section 2)
         const placingNow = dimensionState.placingConstraint && dimensionState.placingConstraint.__placing;

@@ -15,7 +15,7 @@ function cachedFreedom(joints, shapes, constraints, groupState) {
   for (const [id, j] of joints) parts.push(id, j.x, j.y, j.fixed ? 1 : 0);
   const blocks = groupState ? rigidBlocks({ shapes, groups: groupState.groups, enteredGroupId: groupState.enteredGroupId }) : [];
   const key = JSON.stringify([parts, constraints.filter(c => !c.isDriven && !c.driven),
-    shapes.map(s => [s.id, s.type, s.joints, s.radius]), blocks.map(b => [b.id, b.shapes.map(s => s.id)])]);
+    shapes.map(s => [s.id, s.type, s.joints, s.radius, s.fixed ? 1 : 0]), blocks.map(b => [b.id, b.shapes.map(s => s.id)])]);
   if (lastFreedom.key !== key) {
     lastFreedom = { key, value: new NewtonSolver(joints, constraints, shapes, { groupState }).jointFreedom() };
   }
@@ -909,7 +909,9 @@ export function analyzeConstraintStatus({ joints, shapes, constraints, groups = 
     // fully constrained only when its centre is AND its radius is not free (truth.radiusFree).
     for (const s of shapes) {
         if (!s.joints || s.joints.length === 0) continue;
-        const radiusFree = truth.radiusFree.has(s.id);
+        // A bezier's two control points are plain shape data (shapes.js): no constraint holds them and the solver does not move them, so
+        // they are free however its two ends are held. A bezier is therefore never fixed / fully constrained (B-20b).
+        const radiusFree = truth.radiusFree.has(s.id) || s.type === 'bezier';
 
         const allFixed = !radiusFree && s.joints.every(jid => fixedJoints.has(jid));
         if (allFixed) fixedShapes.add(s.id);

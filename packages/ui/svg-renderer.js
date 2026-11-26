@@ -21,6 +21,7 @@ import { isPatternConstraint, patternHandles, patternSpacing } from '#core/patte
 import { axisRect, linearLead, radialLead, isNarrowDim, DIM_ARROW_PX, DIM_NARROW_STUB_PX, DIM_LEAD_MIN_PX } from '#ui/dimension-lead.js';
 import { quantityText, dimensionUnit } from '#core/parameters.js';
 import { isAutoDimName } from '#core/expression.js';
+import { isShapeLocked } from '#core/lock-state.js';
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
@@ -86,6 +87,7 @@ export { angleDimensionSector };
 export function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
 import { updateCursor } from './cursor-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
+import { unsatisfiedConstraints } from '#core/constraint-verifier.js';
 import { previewSnapConstraint } from '#core/snap-constraints.js';
 import { computeTrueVertexSet } from '#core/joints.js';
 import { resolveProfileViews } from '#core/profile-model.js';
@@ -141,6 +143,9 @@ const SK_VAR = {
 const GLYPH_HOVER_COLOR = 'var(--sk-glyph-hover, #eab308)';
 const GLYPH_SELECTED_COLOR = 'var(--sk-glyph-selected, #ca8a04)';
 const SELECTED_JOINT_FILL = 'var(--sk-joint-selected, #76A4E4)';
+// UX-20: geometry whose constraint the solver could not satisfy (a conflict) is drawn in the app's error red, the one the over-constrained notice and
+// the Design panel's failing-constraint rows use (--sk-error).
+const CONFLICT_COLOR = 'var(--sk-error, #ef4444)';
 export function skv(color) {
   if (typeof color !== 'string') return color;
   const v = SK_VAR[color];
@@ -481,6 +486,9 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   // Container for overlays that must be drawn last (ensures top-most stacking)
   let lateOverlay = '';
   const show = ctx.display || EDIT_DISPLAY; // TASK 725: the display profile (which layers of the drawing are drawn)
+  // UX-20: the shapes bound by a constraint the geometry does not satisfy now (hover / selection still win over this colour)
+  const conflictShapes = new Set();
+  if (show.statusColors) for (const c of unsatisfiedConstraints(activeConstraints, joints, shapes)) constraintTargets(c, shapes).shapes.forEach((id) => conflictShapes.add(id));
   // Calculate zoom factor to keep stroke widths constant in screen space
   const vb = svg.viewBox.baseVal;
   const rect = svg.getBoundingClientRect();
@@ -1261,12 +1269,13 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     // can still move and should stay blue, otherwise the user has no visual
     // signal that the sketch isn't done.
     if (fixedShapes.has(s.id)) {
-        // LOCKED (every joint fixed:true, the Lock action) vs merely fully constrained (DOF 0): both sit in fixedShapes.
-        const locked = LOCKED_LINE_COLOR && s.joints && s.joints.length > 0 && s.joints.every(jid => { const jj = joints.get(jid); return jj && jj.fixed === true; });
+        // LOCKED (one source of truth in #core/lock-state.js) vs merely fully constrained (DOF 0): both sit in fixedShapes.
+        const locked = LOCKED_LINE_COLOR && isShapeLocked({ joints, shapes, constraints: activeConstraints }, s);
         strokeColor = locked ? LOCKED_LINE_COLOR : '#202020'; // Black — fully rigid
     } else {
         strokeColor = '#60A5FA'; // Blue (paler) — under-constrained, can still move
     }
+    if (conflictShapes.has(s.id)) strokeColor = CONFLICT_COLOR; // UX-20 (conflictShapes is empty without statusColors)
     if (!show.statusColors) strokeColor = '#202020'; // TASK 725: one ink for every curve (the fully-constrained black, --sk-geo-fixed)
 
     if(hoverBoundShapes.has(s.id)){
@@ -2584,7 +2593,7 @@ switch(c.type){
     const sc = { joints: opJoints, shapes: opShapes, constraints };
     const items = patternDimItemsFor(sc, c, scale);
     items.forEach((it, i) => {
-      out.push(`<g class="dim-label pattern-label" data-constraint-idx="${cIdx}" data-part="${i}" style="cursor:${currentTool === 'select' ? 'pointer' : 'default'}">
+      out.push(`<g class="dim-label pattern-label" data-constraint-idx="${cIdx}" data-part="${i}" style="cursor:${(currentTool === 'select' || currentTool === TOOL_MODES.DIMENSION) ? 'pointer' : 'default'}">
         ${dimLabelRect(it.x, it.y, it.w, scale(18), scale(2), color, strokeW)}
         <text ${placeDimLabel(it.x, it.y, null, null, it.text, it.w, false, color).attrs}>${it.text}</text>
       </g>`);
@@ -2799,10 +2808,14 @@ switch(c.type){
             
             // Draw Arrows
             const arrowSize = scale(6);
-            // Start Arrow
-            out.push(`<polygon points="${sx},${sy} ${sx - Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy + Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize} ${sx + Math.sin(startAngle)*arrowSize/2 + Math.cos(startAngle)*arrowSize},${sy - Math.cos(startAngle)*arrowSize/2 + Math.sin(startAngle)*arrowSize}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}" data-constraint-idx="${cIdx}"/>`);
-            // End Arrow
-            out.push(`<polygon points="${ex},${ey} ${ex - Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey + Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize} ${ex + Math.sin(endAngle)*arrowSize/2 - Math.cos(endAngle)*arrowSize},${ey - Math.cos(endAngle)*arrowSize/2 - Math.sin(endAngle)*arrowSize}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}" data-constraint-idx="${cIdx}"/>`);
+            // The arc runs from startAngle to endAngle in the +angle direction, so each arrow points ALONG the arc, out of its
+            // end (tangent t = (-sin a, cos a); the base sits one arrow length back along the arc, spread across the radial r).
+            const arcArrow = (px, py, a, back) => {
+              const rx = Math.cos(a), ry = Math.sin(a), bx = px - Math.sin(a) * back * arrowSize, by = py + Math.cos(a) * back * arrowSize;
+              return `<polygon points="${px},${py} ${bx + rx*arrowSize/2},${by + ry*arrowSize/2} ${bx - rx*arrowSize/2},${by - ry*arrowSize/2}" style="fill:${skv(strokeColor)}" opacity="${visualOpacity}" data-constraint-idx="${cIdx}"/>`;
+            };
+            out.push(arcArrow(sx, sy, startAngle, 1));
+            out.push(arcArrow(ex, ey, endAngle, -1));
             
             const labelW = scale(40);
             const labelH = scale(18);

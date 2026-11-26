@@ -1888,6 +1888,38 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `snap-not-applied`
 - **History:** found in `1000B` (`B-18a`) -> fixed in task `1010`
 
+### BUG-160
+- **Date / turn:** 2026-11-26 (audit IDs `UX-06`, `B-1`; fixed in task `1012`)
+- **Reported by:** audits `1000` (`IR2.1.C1`) & `1000B` (`1a`, `LIVE-1`, `LIVE-P2-1`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab, desktop & phone)
+- **Report:** `UX-06` / `B-1`: Lock (`F` / ribbon / context menu) on a circle reported `locked: true` and switched the menu to `"Unlock"`, yet the circle stayed blue (1 DOF) and its rim dragged freely (`r: 20 -> 40.026`).
+- **What was wrong:** `toggleFixedSelection` only set `j.fixed = true` on `s.joints` (a circle's centre joint), leaving its scalar `radius` unknown free in the solver, while `selectionLockState` checked only joints and falsely reported `locked: true` (including on origin-centred circles with free radii).
+- **Cause:** No unified lock declaration for scalar-radius circles (`packages/core/lock-state.js`), `hasRadiusUnknown` in `packages/core/solver/engine.js` did not exclude `s.fixed`, `cachedFreedom` in `packages/core/constraint-status.js` did not include `s.fixed` in its cache key, and `input-manager.js` / `svg-renderer.js` only checked `s.joints`.
+- **Fix:** Added single source of truth `packages/core/lock-state.js` (`isJointLocked`, `isScalarRadiusCircle`, `shapeLockJoints`, `isShapeLocked`, `lockTargets`); `toggleFixedSelection` / `selectionLockState` (`packages/ui/input-manager.js`) lock/unlock both centre and `circle.fixed` in one undo step; `packages/core/solver/engine.js` (`hasRadiusUnknown`, `_sizeTerm`, constant-radius `distance`/`equal`) and `packages/core/solver/definitions.js` treat locked circle radii as constants; `packages/core/constraint-status.js` includes `s.fixed` in `cachedFreedom`; `packages/ui/svg-renderer.js` renders locked circles in `LOCKED_LINE_COLOR` via `isShapeLocked`. Also verified Arc lock keeps centre, radius, and endpoints fixed.
+- **Task id(s):** `1012`
+- **Fix merge sha:** pending (`agents/lock-1012`)
+- **Guarding test file(s):** `tests/lock-1012-node.test.js`, `tests/lock-1012-live.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-123, BUG-161
+- **History:** found in `1000` (`UX-06`) & `1000B` (`B-1`) -> undo step added in `1006` (`BUG-123`) -> circle radius lock + single source of truth fixed in `1012`
+
+### BUG-161
+- **Date / turn:** 2026-11-26 (audit ID `UX-26`; fixed in task `1012`)
+- **Reported by:** audit `1000` (`S1.1`) & `1000B` cross-exam (`UX-26`); originally noted in task `524`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab, desktop & phone)
+- **Report:** `UX-26`: after filleting two locked lines `L1`, `L2`, `L1` stayed in `fixedShapes` (0 DOF), yet `selectionLockState(L1)` returned `{ has: true, locked: false }` and the context menu falsely offered `"Lock"` instead of `"Unlock"`.
+- **What was wrong:** `applyFillet` replaced each locked line's corner joint with an unlocked tangent joint (`jTA`, `jTB`, kept unlocked so the fillet radius stays editable) while keeping the locked corner as `arc.filletSharp` held on each line via `pointOnLine`; both `selectionLockState` and `svg-renderer.js` checked only `s.joints.every(j => j.fixed)` and missed the locked virtual sharp.
+- **Cause:** `packages/ui/input-manager.js` (`selectionLockState`, `toggleFixedSelection`) and `packages/ui/svg-renderer.js` each checked raw `s.joints` separately instead of sharing one lock predicate.
+- **Fix:** Unified lock state in `packages/core/lock-state.js` (`shapeLockJoints` resolves an unlocked fillet tangent end to its fillet's locked virtual sharp `arc.filletSharp` when held on the shape by `pointOnLine`), shared by `selectionLockState`, `toggleFixedSelection`, and `svg-renderer.js`. Filleted locked lines stay locked & green (`LOCKED_LINE_COLOR`), the fillet arc stays unlocked & constrained-black, fillet radius edits continue to work, and Unlock/Undo operate cleanly in one step.
+- **Task id(s):** `1012`
+- **Fix merge sha:** pending (`agents/lock-1012`)
+- **Guarding test file(s):** `tests/lock-1012-node.test.js`, `tests/lock-1012-live.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-123, BUG-160
+- **History:** noted in task `524` -> logged in `1000` (`UX-26`) & confirmed in `1000B` cross-exam -> fixed in `1012`
+
 ---
 
 ## Family index
@@ -1903,7 +1935,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-160 (11-26) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -1911,7 +1943,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-161 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---
@@ -1922,4 +1954,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-160..BUG-161 fixed in task `1012`).

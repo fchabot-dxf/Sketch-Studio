@@ -13,7 +13,7 @@ import { rigidBlocks } from '../group-model.js';
 // and that radius is a solver unknown. `shape.radius` stays the ONE store: _pack reads it as the start value, _unpack writes the solved
 // value back. An arc is not one of these: its radius is live through its rim joints (|rim - centre|).
 export function hasRadiusUnknown(s) {
-  return !!s && s.type === 'circle' && Array.isArray(s.joints) && s.joints.length === 1 && typeof s.radius === 'number' && Number.isFinite(s.radius);
+  return !!s && s.type === 'circle' && Array.isArray(s.joints) && s.joints.length === 1 && typeof s.radius === 'number' && Number.isFinite(s.radius) && !s.fixed;
 }
 
 // The solver state is joint x/y, circle radii AND any free constraint scalar unknowns (Definition.scalarUnknown):
@@ -472,6 +472,7 @@ export class NewtonSolver {
   _sizeTerm(s, jointIndexMap) {
     const at = this._radiusAt(s);
     if (at !== undefined) return { at };
+    if (s && s.type === 'circle' && typeof s.radius === 'number' && Number.isFinite(s.radius)) return { radius: s.radius };
     const a = s && s.joints && s.joints.length >= 2 ? jointIndexMap.get(s.joints[0]) : undefined;
     const b = s && s.joints && s.joints.length >= 2 ? jointIndexMap.get(s.joints[1]) : undefined;
     return typeof a === 'number' && typeof b === 'number' ? { a, b } : null;
@@ -847,11 +848,13 @@ export class NewtonSolver {
             }
           }
         }
-        // Distance "radius" — {shape, isRadius, value}: a circle's radius unknown (radiusAt), an arc's center→rim distance.
+        // Distance "radius" — {shape, isRadius, value}: a circle's radius unknown (radiusAt), a locked/block circle's constant radius, or an arc's center→rim distance.
         else if (c.type === 'distance' && c.isRadius && c.shape) {
           const shape = shapeOf(c.shape);
           if (this._radiusAt(shape) !== undefined) params.radiusAt = this._radiusAt(shape);
-          else if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 2) {
+          else if (shape && shape.type === 'circle' && typeof shape.radius === 'number' && Number.isFinite(shape.radius)) {
+            params.radius = shape.radius;
+          } else if (shape && (shape.type === 'circle' || shape.type === 'arc') && shape.joints && shape.joints.length >= 2) {
             params.joints = [jointIndexMap.get(shape.joints[0]), jointIndexMap.get(shape.joints[1])];
           }
           if (c.isDiameter) params.isDiameter = true;
@@ -876,9 +879,12 @@ export class NewtonSolver {
             }
           }
         }
-        // Equal with a CIRCLE operand: one size term per shape, a circle's radius unknown or the length of a line / an arc's
+        // Equal with a CIRCLE operand: one size term per shape, a circle's radius (unknown or locked constant) or the length of a line / an arc's
         // centre-rim pair (its first two joints), so equal(circle, circle) is r1 - r2 and equal(circle, arc) r - |rim - centre|.
-        else if (c.type === 'equal' && c.shapes && c.shapes.length === 2 && c.shapes.some(sid => this._radiusAt(shapeOf(sid)) !== undefined)) {
+        else if (c.type === 'equal' && c.shapes && c.shapes.length === 2 && c.shapes.some(sid => {
+          const sh = shapeOf(sid);
+          return this._radiusAt(sh) !== undefined || (sh && sh.type === 'circle' && typeof sh.radius === 'number' && Number.isFinite(sh.radius));
+        })) {
           const terms = c.shapes.map(sid => this._sizeTerm(shapeOf(sid), jointIndexMap));
           if (terms.every(Boolean)) params.terms = terms;
         }
@@ -900,7 +906,7 @@ export class NewtonSolver {
       // A radius distance whose shape gives neither a radius unknown nor a centre-rim pair (the shape is missing or has no
       // radius) has nothing to measure: an EXPLICIT zero row. Definitions.distance would index params.joints[0]/[1] of an empty
       // array -> positions[NaN] -> NaN, and that NaN poisons the gradient (Algebra.atx) of every column it shares.
-      if (c.type === 'distance' && c.isRadius && params.radiusAt === undefined && (!params.joints || params.joints.length < 2)) {
+      if (c.type === 'distance' && c.isRadius && params.radiusAt === undefined && typeof params.radius !== 'number' && (!params.joints || params.joints.length < 2)) {
         r[row] = 0;
         endRow();
         continue;

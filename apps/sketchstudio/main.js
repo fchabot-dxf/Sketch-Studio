@@ -18,7 +18,7 @@ import { getGoogleAccount } from '#ui/cloud/google-account.js'; // TASK 488: pro
 getGoogleAccount().init();
 import { applyAppIdentity } from '#ui/app-registry.js'; // TASK 473: tab title + favicon from the registry
 applyAppIdentity('sketchstudio');
-import { exportToFile } from './ui/export-manager.js';
+import { runExport } from './ui/export-manager.js';
 import { createStylePanel } from '#ui/style-panel.js';
 import { bindTemplateTokens } from '#ui/style-templates.js';
 import { createDocumentBuffer } from '#ui/document-buffer.js'; // PERSIST-2: autosave + cross-app carry
@@ -71,8 +71,7 @@ const state = createSketchState(engine, view);
 // TASK 566: Import SVG / DXF -> a new sketch, through the shared importer (the file menu's entry; a drop on the canvas is the second way in).
 // SketchStudio declares no options: its sketch state is what the importer works on, and the result is shown as a notification.
 function sidebarExport(type) {
-  const res = exportToFile(state, 'sketch', type, { precision: 6, arcApprox: false, arcSeg: 32, scale: 1, invertY: false, dxfVersion: 'r12' });
-  try { showNotification(res && res.ok ? 'Export started' : 'Export failed: ' + (res && res.reason ? res.reason : 'unknown'), res && res.ok ? 'success' : 'error'); } catch (_) {}
+  runExport(state, 'sketch', type, { precision: 6, arcApprox: false, arcSeg: 32, scale: 1, invertY: false, dxfVersion: 'r12' }, showNotification);
 }
 
 // initialize

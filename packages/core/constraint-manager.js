@@ -30,7 +30,7 @@ const REFERENCE_NOTICES = {
 // another dimension; the tool shows it when that preview is placed (Fusion asks about a driven dimension on placement, not on the pick).
 export function announceReference(c) {
     const msg = c && REFERENCE_NOTICES[c.drivenReason];
-    if (msg) notify(msg, 'info', 2500);
+    if (msg) dbg.log('constraints', `[ConstraintManager] ${msg}`, { id: c && c.id, drivenReason: c && c.drivenReason });
 }
 
 // The ONE over-constrained notice (owner turns 3418-3420, Fusion's own wording and look): shown whenever a constraint the user asked for
@@ -265,14 +265,13 @@ export class ConstraintManager {
                 if (isStructural) {
                     // a symmetric that is an invalid pick (the same point twice ...) says so; every other refusal is a conflict with the sketch
                     if (type !== CONSTRAINT_TYPES.SYMMETRIC || mathConflict === SYMMETRIC_FIXED_REASON) announceOverConstrained();
-                    else notify(`${this._friendlyName(type)} rejected — ${mathConflict} [ERR-CMATH-01]`, 'error', 3000);
+                    else notify(`${this._friendlyName(type)} rejected — ${mathConflict}`, 'error', 3000);
                     dbg.warn('constraints', `[ConstraintManager] ${type} math-rejected: ${mathConflict} [ERR-CMATH-01]`);
                     return null;
                 } else {
                     normalized.isDriven = true;
                     normalized.driven = true;
                     normalized.drivenReason = `math-precheck: ${mathConflict} [ERR-CMATH-02]`;
-                    notify(`Dimension set to reference — ${mathConflict} [ERR-CMATH-02]`, 'warning', 3000);
                     dbg.log('constraints', `[ConstraintManager] ${type} auto-driven: ${mathConflict} [ERR-CMATH-02]`);
                 }
             }
@@ -305,7 +304,6 @@ export class ConstraintManager {
                         normalized.isDriven = true;
                         normalized.driven = true;
                         normalized.drivenReason = `sandbox-conflict [ERR-CSOLVE-02]`;
-                        notify(`Dimension set to reference (conflict)${diagMsg} [ERR-CSOLVE-02]`, 'warning', 3000);
                         dbg.log('constraints', `[ConstraintManager] ${type} auto-driven (sandbox) [ERR-CSOLVE-02]`, diag || 'no-diag');
                     }
                 }

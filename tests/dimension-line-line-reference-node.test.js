@@ -72,7 +72,7 @@ try {
   app.move(EMPTY.x, EMPTY.y); app.click(EMPTY.x, EMPTY.y);
   assert(st.constraints.includes(ref) && !ref.__placing && driven(ref), '4: the reference length is placed');
   assert(!boxOpen(), '4: a reference has no value box');
-  assert.strictEqual(referenceNotices().length, 1, '4: the reference notice shows once, on placement: ' + JSON.stringify(referenceNotices()));
-  console.log('4. placed reference length: one notice: ok');
+  assert.strictEqual(referenceNotices().length, 0, '4: task 1001: placed reference length shows no toast (Fusion parity)');
+  console.log('4. placed reference length: silent: ok');
 } catch (e) { failed = e; } finally { setConstraintNotifier(() => {}); await app.close(); }
 if (failed) { console.error(failed.stack || failed.message || failed); process.exitCode = 1; }

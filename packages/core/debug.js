@@ -57,6 +57,13 @@ export const dbg = {
     error(category, ...args) { emit(category, 'error', args); },
 };
 
+/** Record a structured diagnostic code, reason, and args in the Log without showing raw debug text to the user. */
+export function logDiagnostic(category, code, reason, args, level = 'log') {
+    const fn = dbg[level] || dbg.log;
+    if (args !== undefined) fn(category, `[${code}] ${reason}`, args);
+    else fn(category, `[${code}] ${reason}`);
+}
+
 // NOTE: the window.ug.debug console API + the spring overlay (which need window/
 // requestAnimationFrame/SettingsManager) were split out to the shell's debug-overlay module
 // (#4) — the shell entry side-effect-imports it. _state + LEVEL_ORDER are exported so that

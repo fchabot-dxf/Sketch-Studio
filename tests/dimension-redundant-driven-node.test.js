@@ -47,13 +47,18 @@ try {
   assert(L.some((t) => /^\(4\.243\)$/.test(t)), 'the diagonal is bracketed at its measured value 4.243: ' + JSON.stringify(L));
 
   // ---------------------------------------------------------------- 2. a driven dimension cannot be typed: double click in the Dimension tool and in the Select tool
+  // TASK 1006 (DIV-03): the double click opens its box READ-ONLY, showing its measured value; Esc closes it and nothing changes
+  const box = () => app.document.getElementById('dimInput');
   let c = bracketed(); assert(c, 'the bracketed diagonal label is on screen');
   dblClickLabel(c);
-  assert.strictEqual(boxOpen(app), false, 'double click on the driven diagonal (Dimension tool): no value box');
+  assert.strictEqual(boxOpen(app) && box().readOnly && box().value, '4.243', 'double click on the driven diagonal (Dimension tool): its box read-only, the measured 4.243');
+  app.esc();
   clickBtn('tool-select');
   c = bracketed(); assert(c, 'the bracketed diagonal label is on screen');
   dblClickLabel(c);
-  assert.strictEqual(boxOpen(app), false, 'double click on the driven diagonal (Select tool): no value box');
+  assert.strictEqual(boxOpen(app) && box().readOnly && box().value, '4.243', 'double click on the driven diagonal (Select tool): its box read-only, the measured 4.243');
+  app.esc();
+  assert.strictEqual(boxOpen(app), false, 'Esc closed it');
   assert.deepStrictEqual(labels(app), L, 'nothing changed');
 
   // ---------------------------------------------------------------- 3. right-click Driving on it is refused while the square determines it

@@ -1463,6 +1463,22 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Related:** BUG-125, BUG-126
 - **History:** found in `1000` (`UX-16`); toast removed by task 1001, silent demotion left (`1000B` cross) -> fixed in task `1006`
 
+### BUG-125
+- **Date / turn:** 2026-11-26 (audit IDs `DIV-03`, `DD-3`; fixed in task `1006`)
+- **Reported by:** audits `1000` (`D3.1`-`D3.3`), `1003` (`DD-3`, `V2.4.autoRef.redundantAngleTri`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `DIV-03` / `DD-3`: double-clicking a Reference dimension did nothing at all: no box, no message (owner rule: no result = bug).
+- **What was wrong:** the value box refused to open for a reference without a word.
+- **Cause:** `packages/ui/numeric-input-manager.js` `showEditInput` returned at once for a reference (`if (constraint.isDriven || constraint.driven) return;`).
+- **Fix:** a reference opens the same box READ-ONLY (mode `'view'`), on its label, showing what its label shows (`#core/constraint-verifier.js` `measureDimension`), with the hint "Reference dimension: measured, not typed. To type a value, make it Driving (right-click it, or touch and hold)." Enter, Esc or a press outside closes it; nothing changes, no undo step. Chosen over offering the Driving / Reference choice because it reuses the box, its placement and its hint line (the menu's actions live in input-manager, which the box cannot call).
+- **Task id(s):** `1006`
+- **Fix merge sha:** open (`agents/driving-1006`, awaiting merge)
+- **Guarding test file(s):** `tests/driving-reference-1006-node.test.js` (section 6), `tests/reference-dim-box-1006-live.test.js` (desktop mouse 1280 x 800, phone touch 390 x 844), `tests/dimension-redundant-driven-node.test.js` (section 2 updated)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-124
+- **History:** found in `1000` (`DIV-03`) and `1003` (`DD-3`) -> fixed in task `1006`
+
 ### BUG-126
 - **Date / turn:** 2026-11-26 (audit IDs `B-9`, part `a` of `D-25`; fixed in task `1006`)
 - **Reported by:** audits `1000B` (`B-9`, `XB-9`), `1003` (`V2.4.autoRef.redundantAngleTri`)
@@ -1501,7 +1517,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-124 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-124 (11-26), BUG-125 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---
@@ -1512,4 +1528,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`, BUG-120..BUG-126 fixed in task `1006`).

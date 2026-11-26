@@ -18331,3 +18331,21 @@ Arc sweep, fillet cusp drag, and arc endpoint self-weld fixes (branch `agents/ar
 - **UX-05 Part 2 (`packages/core/solver/engine.js` `_keepsFillets`)**: enforced smooth tangent travel (`filletTravel > minT`, where `minT = tMin > 1e-2 ? 1e-2 : tMin * 0.5`) during `hasSpring` (`dragTarget`) solves in `_preRelax` handoff, LM steps/convergence check, and polish. Keeps fillet arcs on their smooth original side (including opening > 180 deg as verified live in Fusion: `358.85 deg`, `r=3.079`) with zero regressions on `fusion-oracle`, `fusion-drag`, `drag-fling-safety`, `coverage-matrix`, or `extreme-arcs`. Added `tests/fillet-no-cusp-drag-1009.test.js`.
 - **UX-03 (`packages/ui/input-manager.js:451-462`)**: `updateSnapTarget` expands `excludeIds` with `findCoincidentCluster(oppositeEnd, state.constraints)` whenever an arc endpoint (not both) is being dragged, stopping self-weld `coincident:e,s` snaps (including via coincident `j_origin`) in one place for both `toolSnap`/`findSnap` and the explicit `j_origin` fallback. Added fail-first test `tests/arc-no-self-weld-1009-node.test.js`.
 - **B-12b / EA-4 (deferred per ruling)**: documented Fusion live behaviour `(a)` and `(b)` and the `f179r10` smooth past-180 vs `arcs-rows.js:129` finding in `docs/BUG-ARCHIVE.md` (`BUG-091..094`); left `EA-4` and `EA-5` in `KNOWN` and `tests/harness/coverage/arcs-rows.js` untouched.
+## TURN 1007 (Trim, Break, Delete constraints & locked sketch delete: UX-04, UX-11, UX-25, D-7, UX-07/B-5/D-21)
+- **UX-04 (`packages/core/break.js:17-68`, shared with `trim.js`)**:
+  - `breakShape` now transfers `HORIZONTAL`/`VERTICAL` constraints on `[aId, bId]` to both `[aId, midJointId]` and `[midJointId, bId]` via shared `transferOrientationConstraints`, retargets `POINT_ON_LINE` constraints past `t` onto `newShapeId`, and adds `{ type: 'collinear', shapes: [shape.id, newShapeId] }`.
+  - Whole-line `DISTANCE` dimensions on `[aId, bId]` are kept on `[aId, bId]` because breaking preserves both endpoints and total span while letting `M` slide along the line.
+  - Guarded by `tests/break-constraints-ux04-node.test.js` (`M1.5` probe fixed: `mid=(40, 0)`, no V bend); `docs/BUG-ARCHIVE.md` `BUG-091`.
+- **UX-11 (`packages/core/trim.js:41-165`)**:
+  - `trimShape` tracks intersecting cutter line IDs per boundary, binds newly created cut endpoints to their cutter(s) via `applySnapConstraint(state, mId, onShapeSnap(cutterId, pt))` (`POINT_ON_LINE` mid-span, `COINCIDENT` at cutter endpoints), and reuses `transferOrientationConstraints` + `lineParamAtPoint` from `break.js`.
+  - `keepLineConstraints` now passes `{ trimmedPairs: [pair] }` to `removeGeometry`, deleting length/point-to-line/midpoint constraints tied to the trimmed span even when adjacent shapes keep both old corner endpoints alive (reversing `789`'s kept-dim assertion on rect edges in `tests/trim-constraints-789-node.test.js:95`).
+  - Guarded by `tests/trim-constraints-ux11-node.test.js` (`M1.6`, `M1.7` probes fixed); `docs/BUG-ARCHIVE.md` `BUG-092`.
+- **UX-25 (`packages/core/curve-kinds.js:211-221`)**:
+  - Because `trim.js` and `break.js` only implement line math (`type !== 'line'`), added `arc` and `circle` entries to `CURVE_REFUSALS` for `TOOL_MODES.TRIM` and `TOOL_MODES.BREAK` so `input-manager.js:703-704` emits the same plain warning toast as Bezier.
+  - Guarded by `tests/trim-break-curve-refusal-ux25-node.test.js` (`IR2.3` probe fixed); `docs/BUG-ARCHIVE.md` `BUG-093`.
+- **D-7 (`packages/core/delete-manager.js:98-145`)**:
+  - `removeGeometry` collects deleted/trimmed 2-joint line endpoint pairs not retained by any surviving line and removes constraints referencing those deleted pairs (`distance [p,a,b]`, `distance [a,b]`, `midpoint [a,b,m]`, `horizontal/vertical [a,b]`).
+  - Guarded by `tests/delete-shared-edge-d7-node.test.js` (`V2.6.deleteSharedEdge` probe fixed: `dimsLeft=[] labels=[]`); `docs/BUG-ARCHIVE.md` `BUG-094`.
+- **UX-07 = B-5 = D-21 (`packages/core/delete-manager.js:201-205`)**:
+  - Removed the duplicate loop (lines `182-187` orig) in `deleteSelection` that unconditionally re-pushed locked/inert `selectedConstraints` after `!isConstraintInert(inert, c)`.
+  - Guarded by `tests/delete-locked-ux07-node.test.js` (`C2.1`, `5b` probes fixed); `docs/BUG-ARCHIVE.md` `BUG-095`.

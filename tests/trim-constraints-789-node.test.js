@@ -92,7 +92,7 @@ try {
   const mb = shape('bottom').joints[1];
   ok(shape('bottom').joints[0] === 'p1' && mb !== 'p2' && !!J('p2'), `bottom = p1 -> the new end, the corner p2 stays (${shape('bottom').joints})`);
   ok(has('horizontal', ['p1', mb]), 'the trimmed bottom stays horizontal');
-  ok(S().constraints.some((c) => c.name === 'd1' && sameSet(c.joints, ['p1', 'p2'])), 'd1 between the two corners (both stay) is kept');
+  ok(!S().constraints.some((c) => c.name === 'd1'), 'UX-11: d1 across the trimmed span is deleted even though corners p1/p2 stay');
   noGhosts('rectangle');
   dragPoint(J(mb), { x: 30, y: 20 });
   near(J(mb).y, J('p1').y, 'dragging the trimmed bottom\'s new end: it stays horizontal');

@@ -17,9 +17,10 @@
 // No DOM. Pure function on state.joints / state.shapes.
 
 import { getLineIntersection } from './geometry.js';
-import { removeOrphanJoints } from './joints.js';
 import { inActiveSketch } from './sketch-model.js';
 import { removeGeometry } from './delete-manager.js';
+import { applySnapConstraint, onShapeSnap } from './snap-constraints.js';
+import { transferOrientationConstraints, lineParamAtPoint } from './break.js';
 import { CONSTRAINT_TYPES, ORIGIN_JOINT_ID } from './constants.js';
 
 const EPS = 1e-6; // parameter epsilon (avoid exact endpoints)
@@ -49,8 +50,8 @@ export function trimShape(state, shapeId, clickPt) {
   const jB = state.joints.get(bId);
   if (!jA || !jB) return null;
 
-  // ── 1. Collect intersection parameters on the target ──────────────────────
-  const tVals = [0, 1]; // always include endpoints as interval boundaries
+  // ── 1. Collect intersection boundaries on the target ─────────────────────
+  const bounds = [{ t: 0, cutters: [] }, { t: 1, cutters: [] }]; // always include endpoints as interval boundaries
 
   for (const other of shapes) {
     if (other.id === shapeId || other.type !== 'line' || !inActiveSketch(state, other)) continue; // cutting boundaries: the active sketch's curves only (task 659)
@@ -61,27 +62,34 @@ export function trimShape(state, shapeId, clickPt) {
 
     const t = segSegParam(jA, jB, jC, jD);
     if (t !== null && t > EPS && t < 1 - EPS) {
-      tVals.push(t);
+      const existing = bounds.find((b) => Math.abs(b.t - t) <= EPS);
+      if (existing) existing.cutters.push(other.id);
+      else bounds.push({ t, cutters: [other.id] });
     }
   }
 
-  tVals.sort((a, b) => a - b);
+  bounds.sort((a, b) => a.t - b.t);
 
   // ── 2. Find which interval was clicked ────────────────────────────────────
   const tClick = lineParamAtPoint(jA, jB, clickPt);
   let intervalIdx = -1;
-  for (let i = 0; i < tVals.length - 1; i++) {
-    if (tClick >= tVals[i] && tClick <= tVals[i + 1]) {
+  for (let i = 0; i < bounds.length - 1; i++) {
+    if (tClick >= bounds[i].t && tClick <= bounds[i + 1].t) {
       intervalIdx = i;
       break;
     }
   }
   if (intervalIdx < 0) return null;
 
-  const t0 = tVals[intervalIdx];
-  const t1 = tVals[intervalIdx + 1];
+  const b0 = bounds[intervalIdx];
+  const b1 = bounds[intervalIdx + 1];
+  const t0 = b0.t;
+  const t1 = b1.t;
   const removed = [];
   const added   = [];
+  const bindCutters = (jointId, cutters, pt) => {
+    for (const cutterId of cutters) applySnapConstraint(state, jointId, onShapeSnap(cutterId, pt));
+  };
 
   // ── 3. Remove the clicked interval ────────────────────────────────────────
   if (t0 <= EPS && t1 >= 1 - EPS) {
@@ -96,6 +104,7 @@ export function trimShape(state, shapeId, clickPt) {
     state.joints.set(mId, { x: newPt.x, y: newPt.y });
     target.joints = [mId, bId];
     keepLineConstraints(state, [aId, bId], [target.joints]);
+    bindCutters(mId, b1.cutters, newPt);
     added.push(shapeId);
 
   } else if (t1 >= 1 - EPS) {
@@ -105,6 +114,7 @@ export function trimShape(state, shapeId, clickPt) {
     state.joints.set(mId, { x: newPt.x, y: newPt.y });
     target.joints = [aId, mId];
     keepLineConstraints(state, [aId, bId], [target.joints]);
+    bindCutters(mId, b0.cutters, newPt);
     added.push(shapeId);
 
   } else {
@@ -127,7 +137,9 @@ export function trimShape(state, shapeId, clickPt) {
 
     // Truncate original to A→M0
     target.joints = [aId, m0Id];
-    keepLineConstraints(state, [aId, bId], [target.joints, [m1Id, bId]]);
+    keepLineConstraints(state, [aId, bId], [target.joints, [m1Id, bId]], { targetId: shapeId, rightId, jA, jB, t1 });
+    bindCutters(m0Id, b0.cutters, pt0);
+    bindCutters(m1Id, b1.cutters, pt1);
     added.push(shapeId);
 
     // The interval [M0→M1] is implicitly gone (we never create it)
@@ -140,22 +152,24 @@ export function trimShape(state, shapeId, clickPt) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * TASK 789: what the trimmed line's constraints become. `pair` = the line's end pair before the trim, `pieces` = the end pairs of the pieces
- * that stay (the first one is the line itself). The line's ORIENTATION (a horizontal / vertical on exactly its end pair) holds every piece that
- * stays. An end that no piece and no other curve uses any more goes through THE delete rule (removeGeometry): every constraint and dimension
- * naming it goes with it (the length dimension that measured the removed part, a coincident on it), so none is left on a deleted point; a
- * constraint between points that stay (a dimension on the kept part, a corner the next side still uses) is kept. The origin never goes.
+ * TASK 789 / UX-11: what the trimmed line's constraints become. `pair` = the line's end pair before the trim, `pieces` = the end pairs of the
+ * pieces that stay. The line's ORIENTATION (horizontal / vertical) transfers to every kept piece via transferOrientationConstraints. Both an end
+ * that no surviving curve uses (`gone`) AND any constraints / dimensions on the trimmed span `pair` itself (e.g. a shared-corner edge's width dim)
+ * go through THE delete rule (`removeGeometry`), so no dimension across a removed span is left behind.
  */
-function keepLineConstraints(state, pair, pieces) {
-  const onPair = (c) => Array.isArray(c.joints) && c.joints.length === 2 && pair.every((j) => c.joints.includes(j));
-  for (const c of state.constraints.filter((x) => x && (x.type === CONSTRAINT_TYPES.HORIZONTAL || x.type === CONSTRAINT_TYPES.VERTICAL) && onPair(x))) {
-    c.joints = pieces[0].slice();
-    for (const piece of pieces.slice(1)) state.constraints.push({ ...c, joints: piece.slice() });
+function keepLineConstraints(state, pair, pieces, rightMeta = null) {
+  transferOrientationConstraints(state, pair, pieces);
+  if (rightMeta && Array.isArray(state.constraints)) {
+    for (const c of state.constraints) {
+      if (c && c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.shape === rightMeta.targetId && c.joint) {
+        const pj = state.joints.get(c.joint);
+        if (pj && lineParamAtPoint(rightMeta.jA, rightMeta.jB, pj) >= rightMeta.t1 - EPS) c.shape = rightMeta.rightId;
+      }
+    }
   }
   const used = new Set(state.shapes.flatMap((sh) => sh.joints || []));
   const gone = pair.filter((j) => !used.has(j) && j !== ORIGIN_JOINT_ID);
-  if (gone.length) removeGeometry(state, [], gone);
-  else removeOrphanJoints(state);
+  removeGeometry(state, [], gone, { trimmedPairs: [pair] });
 }
 
 /**
@@ -178,12 +192,5 @@ function segSegParam(jA, jB, jC, jD) {
 
 function lerpPt(a, b, t) {
   return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
-}
-
-function lineParamAtPoint(jA, jB, p) {
-  const dx = jB.x - jA.x, dy = jB.y - jA.y;
-  const L2 = dx * dx + dy * dy;
-  if (L2 < 1e-12) return 0;
-  return Math.max(0, Math.min(1, ((p.x - jA.x) * dx + (p.y - jA.y) * dy) / L2));
 }
 

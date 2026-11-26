@@ -11,10 +11,26 @@
 // (they remain attached to A and B respectively).
 
 import { inActiveSketch } from './sketch-model.js';
+import { CONSTRAINT_TYPES } from './constants.js';
+
+/**
+ * Rebind any Horizontal / Vertical constraints on `pair = [aId, bId]` onto each surviving segment
+ * in `pieces` (updating the existing constraint in place for `pieces[0]`, copying onto any rest).
+ * Shared by breakShape (#core/break.js) and trimShape (#core/trim.js).
+ */
+export function transferOrientationConstraints(state, pair, pieces) {
+  if (!state || !Array.isArray(state.constraints) || !pieces.length) return;
+  const onPair = (c) => Array.isArray(c.joints) && c.joints.length === 2 && pair.every((j) => c.joints.includes(j));
+  for (const c of state.constraints.filter((x) => x && (x.type === CONSTRAINT_TYPES.HORIZONTAL || x.type === CONSTRAINT_TYPES.VERTICAL) && onPair(x))) {
+    c.joints = pieces[0].slice();
+    for (const piece of pieces.slice(1)) state.constraints.push({ ...c, joints: piece.slice() });
+  }
+}
 
 /**
  * Split the line shape `shapeId` at fractional parameter `t` (0..1).
- * Mutates state.joints and state.shapes in place.
+ * Mutates state.joints and state.shapes in place, transferring orientation constraints to both pieces,
+ * linking the two pieces with a collinear constraint, and keeping whole-line length dimensions on [A, B].
  *
  * @param {object} state    - #core sketch state (joints Map, shapes Array, genJ fn)
  * @param {string} shapeId  - ID of the target line shape
@@ -53,6 +69,20 @@ export function breakShape(state, shapeId, t) {
 
   // Mutate the original shape: A→M
   shape.joints = [aId, midJointId];
+
+  // UX-04: preserve line orientation constraints on both pieces, bind them collinear, and retarget
+  // pointOnLine constraints past the split onto the new piece. Overall [aId, bId] length dimensions
+  // stay between aId and bId because no geometry was removed, keeping total length intact while M slides along the line.
+  if (Array.isArray(state.constraints)) {
+    transferOrientationConstraints(state, [aId, bId], [[aId, midJointId], [midJointId, bId]]);
+    for (const c of state.constraints) {
+      if (c && c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.shape === shape.id && c.joint) {
+        const pj = state.joints.get(c.joint);
+        if (pj && lineParamAtPoint(jA, jB, pj) > t) c.shape = newShapeId;
+      }
+    }
+    state.constraints.push({ type: CONSTRAINT_TYPES.COLLINEAR, shapes: [shape.id, newShapeId] });
+  }
 
   return { midJointId, newShapeId };
 }

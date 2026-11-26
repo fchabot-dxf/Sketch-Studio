@@ -18245,3 +18245,5 @@ Created [docs/BUG-ARCHIVE.md](docs/BUG-ARCHIVE.md) from `.evidence/1002/advisor-
 - 90 entries (`BUG-001`..`BUG-090`, oldest first, covering both owner-reported bugs and advisor-/worker-found bugs from live Fusion checks, merge gates, and reviews, with `Reported by`, date/turn, verbatim quotes/log summaries, cause, task ids, merge shas, guarding test files, status, and family tag).
 - 16-family index at the bottom + Audits section linking `docs/SNAP-CONSTRAINT-AUDIT-869.md`, `docs/STOCK-MODEL-890.md`, and `docs/SOLVER-UX-AUDIT-1000*.md`.
 - Verified: 100 Sketch-Studio task IDs checked (97 in `WORK-LOG.md`/`git log`, 3 open/parked in `advisor-log.txt`: `686`, `898`, `1001`, 0 missing), 92 Sketch-Studio SHAs verified via `git cat-file -e` (0 bad), 144 guarding test file paths verified on disk (0 missing).
+
+- Addition (turn 3732): added per-entry `Related`, `Regression of`, `Led to`, and `History` fields, date-ordered (`MM-DD`) family timelines in the Family index, the `## Fixing` rule in `AGENTS.md`, and verified `Bad BUG refs: []` across all 90 entries.

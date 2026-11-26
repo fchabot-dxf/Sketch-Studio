@@ -9,7 +9,7 @@ import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntitie
 import { dbg, logDiagnostic } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS, ACTIVE_SKETCH_SNAP_TOOLS } from '#core/constants.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
-import { findSnap, snapBoostFor } from '#ui/snap-detection.js';
+import { findSnap, snapBoostFor, findCoincidentCluster } from '#ui/snap-detection.js';
 import { gridSpacing } from '#ui/canvas-grid.js';
 import { deleteSelection } from '#core/delete-manager.js';
 import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
@@ -448,7 +448,19 @@ function updateSnapTarget(e, svg, state) {
     
     if (needsSnap) {
         // ACTIVE OPERATION: Compute snap targets for magnetic attraction
-        const excludeIds = (state.drag && state.drag.jointIds) ? state.drag.jointIds : [];
+        const baseExclude = (state.drag && state.drag.jointIds) ? state.drag.jointIds : [];
+        const excludeSet = new Set(baseExclude);
+        if (baseExclude.length) {
+            // UX-03: an arc's dragged endpoint must never snap-weld onto its own opposite endpoint (nor anything coincident with it).
+            const baseSet = new Set(baseExclude);
+            for (const s of (state.shapes || [])) {
+                if (!s || s.type !== 'arc' || !Array.isArray(s.joints) || s.joints.length < 3) continue;
+                const d1 = baseSet.has(s.joints[1]), d2 = baseSet.has(s.joints[2]);
+                if (d1 === d2) continue;
+                for (const jid of findCoincidentCluster(d1 ? s.joints[2] : s.joints[1], state.constraints)) excludeSet.add(jid);
+            }
+        }
+        const excludeIds = Array.from(excludeSet);
         let snapResult = toolSnap(state, svg, { x: e.clientX, y: e.clientY }, excludeIds, snapBoost);
         
         // Explicitly check for origin snap if findSnap didn't return a joint.

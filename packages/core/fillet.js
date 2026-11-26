@@ -519,6 +519,7 @@ export function applyFillet(state, cornerInfo, radius = 5, options = {}) {
   // Create the arc shape
   const { shapes: arcShapes, constraints: arcConstraints } = makeArc(joints, jCenter, jTA, jTB, 'CENTER');
   const arcShape = arcShapes[0];
+  arcShape.sweep = arcSweepInfo(centerPt, tA, tB).dir > 0; // NEW-11 / UX-05: carry explicit sweep direction like every other arc
   if (lineA.shape.isConstruction && lineB.shape.isConstruction) arcShape.isConstruction = true; // construction + construction: a construction arc; with a solid curve: solid (Fusion, task 655)
   arcShape.filletSharp = jV; // data on the arc (survives undo/save): which joint is its virtual sharp corner
   // NOTE: no arcShape.radius -- the radius dimension below is the source of truth; a frozen scalar would go stale on edit.

@@ -1310,6 +1310,80 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Related:** BUG-074, BUG-079
 - **History:** noticed turn 3504 (2026-11-24) -> task 1001 dispatched 2026-11-25
 
+### BUG-091
+- **Date / turn:** 2026-11-26 (audit ID `UX-04`; fixed in task `1007`)
+- **Reported by:** audit `1000` (`solver-ux-audit-1000-constraints-status-undo.mjs` `M1.5`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-04`: breaking a horizontal, dimensioned line left constraints behind on `[a, b]` so dragging the break point bent it into a V.
+- **What was wrong:** `breakShape` split `[a, b]` into `[a, M]` + `[M, b]` without updating `state.constraints`, leaving `horizontal(a, b)` on `[a, b]` and leaving the two pieces unconstrained relative to each other.
+- **Cause:** `packages/core/break.js` (`breakShape`, lines 24-58 orig) ignored `state.constraints`.
+- **Task id(s):** `1007`
+- **Fix merge sha:** open (`agents/trimbreak-1007`, awaiting merge)
+- **Guarding test file(s):** `tests/break-constraints-ux04-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-046
+- **History:** found in `SOLVER-UX-AUDIT-1000` (`UX-04`) -> fixed in task `1007` (shared `transferOrientationConstraints`, `collinear` between `[shape.id, newShapeId]`, retargeted `pointOnLine` past `t`, kept whole-line distance on `[a, b]`)
+
+### BUG-092
+- **Date / turn:** 2026-11-26 (audit ID `UX-11`; fixed in task `1007`)
+- **Reported by:** audit `1000` (`solver-ux-audit-1000-constraints-status-undo.mjs` `M1.6`, `M1.7`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-11`: after Trim the cut end is not held to the cutting line, and a dimension across the removed span survives when shared corners keep the old endpoints alive.
+- **What was wrong:** Trimming a line against a crossing or T-junction cutter left the newly created endpoint unconstrained (`dragging cutter` detached from the cut end), and trimming a shared-corner rectangle edge left the old edge width dimension (`d1=[a,b]`) alive across the removed span.
+- **Cause:** `packages/core/trim.js` (`trimShape`, `keepLineConstraints`) did not track cutter IDs at intersection parameters to call `applySnapConstraint(state, mId, onShapeSnap(cutterId, pt))`, and `keepLineConstraints` only ran `removeGeometry` when endpoints became unused (`gone.length`).
+- **Task id(s):** `1007`
+- **Fix merge sha:** open (`agents/trimbreak-1007`, awaiting merge)
+- **Guarding test file(s):** `tests/trim-constraints-ux11-node.test.js`, `tests/trim-constraints-789-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-046, BUG-091, BUG-094
+- **History:** `789` kept shared-corner dimensions (`BUG-046`) -> overturned by `SOLVER-UX-AUDIT-1000` (`UX-11`) -> fixed in task `1007`
+
+### BUG-093
+- **Date / turn:** 2026-11-26 (audit ID `UX-25`; fixed in task `1007`)
+- **Reported by:** audit `1000` (`solver-ux-audit-1000-irregularities.mjs` `IR2.3`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-25`: clicking an arc or circle with Trim or Break did nothing and showed no notice (unlike Bezier).
+- **What was wrong:** Neither `trim.js` nor `break.js` supports arcs or circles, yet clicking an arc or circle with Trim/Break returned silently instead of showing a plain refusal notice.
+- **Cause:** `CURVE_REFUSALS` in `packages/core/curve-kinds.js` only declared `[TOOL_MODES.TRIM]` and `[TOOL_MODES.BREAK]` entries under `bezier`, omitting `arc` and `circle`.
+- **Task id(s):** `1007`
+- **Fix merge sha:** open (`agents/trimbreak-1007`, awaiting merge)
+- **Guarding test file(s):** `tests/trim-break-curve-refusal-ux25-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-079, BUG-090
+- **History:** found in `SOLVER-UX-AUDIT-1000` (`UX-25`) -> fixed in task `1007` (`CURVE_REFUSALS.arc` and `CURVE_REFUSALS.circle`)
+
+### BUG-094
+- **Date / turn:** 2026-11-26 (audit ID `D-7`; fixed in task `1007`)
+- **Reported by:** audit `1003` (`dimension-audit-1003-values-driven.mjs` `V2.6.deleteSharedEdge`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `D-7`: deleting one edge `L1(a,b)` of a shared-corner rectangle left point-to-line dimension `d2=[p,a,b]` and edge dimension `d1=[a,b]` hanging on the deleted line.
+- **What was wrong:** Because corners `a` and `b` stayed used by surviving adjacent edges `L4` and `L2`, `removeGeometry` saw `goneJ` empty and left `H(a,b)`, `d1=[a,b]`, and point-to-line `d2=[p,a,b]` behind.
+- **Cause:** `packages/core/delete-manager.js` (`removeGeometry`) only matched deleted shape IDs (`SHAPE_FIELDS`) and orphaned/deleted joint IDs (`JOINT_FIELDS`), without matching constraints/dimensions keyed by a removed line's `[a,b]` endpoint pair.
+- **Task id(s):** `1007`
+- **Fix merge sha:** open (`agents/trimbreak-1007`, awaiting merge)
+- **Guarding test file(s):** `tests/delete-shared-edge-d7-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-092
+- **History:** found in `DIMENSION-AUDIT-1003` (`D-7`) -> fixed in task `1007`
+
+### BUG-095
+- **Date / turn:** 2026-11-26 (audit IDs `UX-07`, `B-5`, `D-21`; fixed in task `1007`)
+- **Reported by:** audits `1000`, `1000B`, `1003` (`C2.1`, `5b`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `UX-07` / `B-5` / `D-21`: in a locked sketch, `deleteSelection(state)` still deleted selected constraints/dimensions (`delete-manager.js:182-187`).
+- **What was wrong:** Even after filtering out inert entities on line 178 (`!isConstraintInert(inert, c)`), a second unconditional loop in `deleteSelection` re-pushed every constraint from `state.selectedConstraints` (deleting locked-sketch dimensions/constraints).
+- **Cause:** `packages/core/delete-manager.js` lines 182-187 (orig) re-pushed all `state.selectedConstraints` without the inert/locked guard.
+- **Task id(s):** `1007`
+- **Fix merge sha:** open (`agents/trimbreak-1007`, awaiting merge)
+- **Guarding test file(s):** `tests/delete-locked-ux07-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in `1000` (`UX-07`), `1000B` (`B-5`), `1003` (`D-21`) -> fixed in task `1007` (removed duplicate loop)
+
 ---
 
 ## Family index
@@ -1325,14 +1399,14 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
 | `storage-lifecycle` | BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---
@@ -1343,4 +1417,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- `docs/SOLVER-UX-AUDIT-1000*.md` — Solver UI/UX audits (tasks `1000` and `1000B`, in progress; link when landed).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`).

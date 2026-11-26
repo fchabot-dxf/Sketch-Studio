@@ -4,10 +4,11 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 
 ## Rule for adding to this archive
 
-1. **Report day:** Every owner-reported bug — and every bug found by the advisor or a worker during live checks, merge gates, or reviews — gets one `BUG-NNN` entry the day it is reported, with `status: open` (and `unknown` for any uninvestigated field).
-2. **Fix day:** The fixing task appends `Cause`, `Task id(s)`, `Fix merge sha`, `Guarding test file(s)`, and updates `Status` (`fixed`, `parked`, or `not reproduced`).
-3. **Re-reports:** A repeat report of the same bug links back to the original `BUG-NNN` entry instead of creating a duplicate.
-4. **Audit-only findings:** Systematic audit findings belong in their audit documents (linked under [Audits](#audits)), not copied here unless independently reported by the owner or hit in live/gate use.
+1. **Report day:** Every owner-reported bug — and every bug found by the advisor or a worker during live checks, merge gates, or reviews — gets one `BUG-NNN` entry the day it is reported, with `Status: open` (and `unknown` for any uninvestigated field).
+2. **Fix day:** The fixing task updates its entry in the same commit: `Cause`, `Task id(s)`, `Fix merge sha`, `Guarding test file(s)`, and `Status` (`fixed`, `parked`, or `not reproduced`), and appends a `History` step if status changed over time.
+3. **Evolution & links:** Keep `Related`, `Regression of`, and `Led to` updated so recurring patterns and fix chains stay visible; never rewrite old entries' facts — append corrections as `History` (git history tracks every revision).
+4. **Re-reports:** A repeat report of the same bug links back to the original `BUG-NNN` entry (`Regression of` / `History`) instead of creating a duplicate.
+5. **Audit-only findings:** Systematic audit findings belong in their audit documents (linked under [Audits](#audits)), not copied here unless independently reported by the owner or hit in live/gate use.
 
 ---
 
@@ -25,6 +26,9 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/drive-rename.test.js`, `tests/drive-rename-live.test.js`
 - **Status:** fixed
 - **Family:** `sync`
+- **Related:** BUG-002, BUG-036
+- **Led to:** BUG-002 (task 639 moveDesign lock)
+- **History:** reported pre-1521 (pre-624 build symptom) -> 635 fixed autosave lock 2026-11-14 -> test flaked until 899 (BUG-087) 2026-11-25
 
 ### BUG-002
 - **Date / turn:** 2026-11-14 (advisor log line 3; turn ~1515-1521)
@@ -38,6 +42,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/drive-move-autosave.test.js`
 - **Status:** fixed
 - **Family:** `sync`
+- **Related:** BUG-001, BUG-036
 
 ### BUG-003
 - **Date / turn:** 2026-11-14 (advisor log line 5; turn ~1515-1521)
@@ -51,6 +56,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/outside-press-live.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
+- **Related:** BUG-027, BUG-042
 
 ### BUG-004
 - **Date / turn:** 2026-11-15 (turn 1679, turn 1684)
@@ -64,6 +70,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/cdp-launch-cleanup-live.test.js`, `tests/gate-profile-sweep.test.js`
 - **Status:** fixed
 - **Family:** `flaky-test`
+- **Related:** BUG-011, BUG-068, BUG-087
+- **Led to:** BUG-068 (task 860 teardown retry timeout)
 
 ### BUG-005
 - **Date / turn:** 2026-11-15 (turns 1688-1689; follow-up in 680)
@@ -77,6 +85,9 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/template-params-670.test.js`, `tests/template-recipes-680.test.js`
 - **Status:** fixed
 - **Family:** `solver`
+- **Related:** BUG-018, BUG-046
+- **Regression of:** BUG-005 (re-exposed in 680 tool-ops rebuild after 670 fix)
+- **History:** reported 2026-11-15 -> fixed 670 2026-11-15 -> folded again in 680 tool-ops -> fixed 680 2026-11-15
 
 ### BUG-006
 - **Date / turn:** 2026-11-15 (turn 1703)
@@ -90,6 +101,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/phone-landscape-sketchstudio-live.test.js` (via `tests/helpers/phone-landscape.js`)
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-020, BUG-055
 
 ### BUG-007
 - **Date / turn:** 2026-11-15 (turn 1732)
@@ -103,6 +115,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/templates-672.test.js`, `tests/templates-672-live.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-026, BUG-070
 
 ### BUG-008
 - **Date / turn:** 2026-11-15 (turn ~1749, during 679)
@@ -116,6 +129,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/engine-store-isolated.test.js`, `tests/engine-store-isolated-live.test.js`
 - **Status:** fixed
 - **Family:** `solver`
+- **Related:** BUG-005, BUG-059
 
 ### BUG-009
 - **Date / turn:** 2026-11-15 (turn 1752, during 675)
@@ -129,6 +143,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/active-sketch-pick-675-node.test.js`, `tests/active-sketch-pick-675-live.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
+- **Related:** BUG-010, BUG-053
 
 ### BUG-010
 - **Date / turn:** 2026-11-15 (turn 1752)
@@ -142,6 +157,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/line-start-snap-click-682-node.test.js`, `tests/line-start-snap-click-682-live.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
+- **Related:** BUG-009, BUG-073, BUG-075
 
 ### BUG-011
 - **Date / turn:** 2026-11-15 to 2026-11-17 (turns 1765, 1810, 2120, 2180, 2323)
@@ -155,6 +171,9 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/penplotter-cosmetics.test.js`, `tests/first-click-771-live.test.js`
 - **Status:** fixed
 - **Family:** `flaky-test`
+- **Related:** BUG-004, BUG-016, BUG-023, BUG-087
+- **Led to:** BUG-087 (893 settledCentre toast wait)
+- **History:** flaked 2026-11-15 -> waitFor in 683 2026-11-15 -> mousemove wait in 744 2026-11-16 -> step waits in 744b 2026-11-17 -> app click replay + click-through toasts in 771 2026-11-17 -> toast settle wait in 893 2026-11-25
 
 ### BUG-012
 - **Date / turn:** 2026-11-15 (turn 1776)
@@ -168,6 +187,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/shared-tabs-684-live.test.js`
 - **Status:** fixed
 - **Family:** `sync`
+- **Related:** BUG-014, BUG-015
+- **History:** found in 681 2026-11-15 -> fixed in 684 2026-11-15
 
 ### BUG-013
 - **Date / turn:** 2026-11-15 (turn 1791)
@@ -181,6 +202,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/fusion-adsk-wait-685-node.test.js`, `tests/fusion-adsk-wait-685-live.test.js`
 - **Status:** fixed
 - **Family:** `sync`
+- **Related:** BUG-065
 
 ### BUG-014
 - **Date / turn:** 2026-11-15 (turn ~1793, during 684)
@@ -194,6 +216,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/shared-tabs-684.test.js`, `tests/shared-tabs-684-live.test.js`
 - **Status:** fixed
 - **Family:** `storage-lifecycle`
+- **Related:** BUG-012, BUG-015
+- **Led to:** BUG-012 (empty-tab dot), BUG-015 (task 687 sidecar-on-show)
 
 ### BUG-015
 - **Date / turn:** 2026-11-15 (turn 1811)
@@ -207,6 +231,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/sidecar-on-show-687-live.test.js`
 - **Status:** fixed
 - **Family:** `storage-lifecycle`
+- **Related:** BUG-012, BUG-014
 
 ### BUG-016
 - **Date / turn:** 2026-11-15 (turn 1811)
@@ -220,6 +245,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/penplotter-cosmetics.test.js`
 - **Status:** not reproduced
 - **Family:** `flaky-test`
+- **Related:** BUG-011, BUG-087
+- **History:** flaked in 680 gate 2026-11-15 -> not reproduced in 78 loaded runs (686) -> parked 2026-11-15
 
 ### BUG-017
 - **Date / turn:** 2026-11-15 (turn 1833)
@@ -233,6 +260,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/dbltap-done-701-live.test.js`, `tests/done-press-701-node.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-006, BUG-057
 
 ### BUG-018
 - **Date / turn:** 2026-11-15 (turn ~1835, during 693)
@@ -246,6 +274,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/template-polish-693-node.test.js`, `tests/template-polish-693-live.test.js`
 - **Status:** fixed
 - **Family:** `solver`
+- **Related:** BUG-005, BUG-060
 
 ### BUG-019
 - **Date / turn:** 2026-11-16 (turn ~1840, during 694)
@@ -259,6 +288,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/parameters-fx-badge-699-live.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-031
 
 ### BUG-020
 - **Date / turn:** 2026-11-16 (turn 1863)
@@ -272,6 +302,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/shaper-phone-705-live.test.js`, `tests/short-viewport-node.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-006, BUG-021, BUG-040, BUG-070, BUG-078
 
 ### BUG-021
 - **Date / turn:** 2026-11-16 (turn 1867)
@@ -285,6 +316,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/shaper-phone-import-705-live.test.js`, `tests/shaper-stage-open-705-node.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
+- **Related:** BUG-020, BUG-040
 
 ### BUG-022
 - **Date / turn:** 2026-11-16 (turn 1901)
@@ -298,6 +330,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/export-own-hole-711-node.test.js`, `tests/export-own-hole-711-live.test.js`
 - **Status:** fixed
 - **Family:** `export-svg`
+- **Related:** BUG-043, BUG-051
+- **Led to:** BUG-051 (task 814 Guide-on-hole skipped hole in Outside)
 
 ### BUG-023
 - **Date / turn:** 2026-11-16 (turn ~1910) and 2026-11-21 (turn 3210)
@@ -311,6 +345,9 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/store-open-left-713-live.test.js`
 - **Status:** fixed
 - **Family:** `storage-lifecycle`
+- **Related:** BUG-011, BUG-087
+- **Regression of:** BUG-023 (Edge 158 update re-broke 713 unload workaround)
+- **History:** found 2026-11-16 -> fixed 713 (unload) 2026-11-16 -> regressed in Edge 158 2026-11-21 -> fixed 801e (Web Lock) 2026-11-21
 
 ### BUG-024
 - **Date / turn:** 2026-11-16 (turn 1911)
@@ -324,6 +361,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** unknown (`shaper-addin` repo; not inspected from Sketch-Studio worktree)
 - **Status:** fixed
 - **Family:** `fusion-frame`
+- **Related:** BUG-048, BUG-064, BUG-071
+- **History:** found 2026-11-16 -> fixed SA-6 2026-11-16 -> conservative rule reversed SA-6 in SA-8 2026-11-16
 
 ### BUG-025
 - **Date / turn:** 2026-11-16 (turn 1993)
@@ -337,6 +376,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/export-preview-720-node.test.js`, `tests/export-preview-720-live.test.js`
 - **Status:** fixed
 - **Family:** `export-svg`
+- **Related:** BUG-033, BUG-034
 
 ### BUG-026
 - **Date / turn:** 2026-11-16 (turn 2002)
@@ -350,6 +390,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/template-units-722-node.test.js`, `tests/template-units-722-live.test.js`
 - **Status:** fixed
 - **Family:** `units`
+- **Related:** BUG-029, BUG-037, BUG-039
 
 ### BUG-027
 - **Date / turn:** 2026-11-16 (turn 2008)
@@ -363,6 +404,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/dim-box-outside-press-723-live.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
+- **Related:** BUG-003, BUG-028, BUG-042
 
 ### BUG-028
 - **Date / turn:** 2026-11-16 (turn ~2015, during 723)
@@ -376,6 +418,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/dim-box-place-723-live.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-027
 
 ### BUG-029
 - **Date / turn:** 2026-11-16 (turn ~2020, during 724)
@@ -389,6 +432,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/display-precision-724-node.test.js`, `tests/display-precision-724-live.test.js`
 - **Status:** fixed
 - **Family:** `units`
+- **Related:** BUG-026, BUG-037, BUG-039
 
 ### BUG-030
 - **Date / turn:** 2026-11-16 (turn 2057)
@@ -402,6 +446,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/depth-chip-731-live.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-041
 
 ### BUG-031
 - **Date / turn:** 2026-11-16 (turn ~2060)
@@ -415,6 +460,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/number-stepper-730-live.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-019
 
 ### BUG-032
 - **Date / turn:** 2026-11-16 (turn 2060)
@@ -428,6 +474,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/prepare-pick-732-node.test.js`, `tests/prepare-pick-732-live.test.js`
 - **Status:** fixed
 - **Family:** `toolpath-geometry`
+- **Related:** BUG-056
 
 ### BUG-033
 - **Date / turn:** 2026-11-16 (turn ~2075, during 736)
@@ -441,6 +488,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/no-min-736-node.test.js`
 - **Status:** fixed
 - **Family:** `toolpath-geometry`
+- **Related:** BUG-025
 
 ### BUG-034
 - **Date / turn:** 2026-11-16 (turn 2116, during 742)
@@ -454,6 +502,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/polish-757-node.test.js`, `tests/polish-757-live.test.js`
 - **Status:** fixed
 - **Family:** `export-svg`
+- **Related:** BUG-025, BUG-043
 
 ### BUG-035
 - **Date / turn:** 2026-11-17 (turn 2283, during 761)
@@ -467,6 +516,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/bezier-loops-761-node.test.js`, `tests/bezier-loops-761-shaper-live.test.js`
 - **Status:** fixed
 - **Family:** `export-svg`
+- **Related:** BUG-043, BUG-045
 
 ### BUG-036
 - **Date / turn:** 2026-11-17 (turns 2307, 2311, 2312)
@@ -480,6 +530,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/drive-own-write-766-node.test.js`, `tests/prepare-drive-own-write-766-live.test.js`, `tests/prepare-drive-conflict-766-live.test.js`, `tests/drive-first-safety.test.js`
 - **Status:** fixed
 - **Family:** `sync`
+- **Related:** BUG-001, BUG-002, BUG-037
 
 ### BUG-037
 - **Date / turn:** 2026-11-17 (turns 2307, 2307b)
@@ -493,6 +544,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/inch-text-766-node.test.js`
 - **Status:** fixed
 - **Family:** `units`
+- **Related:** BUG-026, BUG-029, BUG-036, BUG-039
 
 ### BUG-038
 - **Date / turn:** 2026-11-17 (turns 2309, 2309b)
@@ -506,6 +558,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/shaperhub-name-767.test.js`, `tests/shaperhub-name-767-live.test.js`
 - **Status:** fixed
 - **Family:** `sync`
+- **Related:** BUG-082
 
 ### BUG-039
 - **Date / turn:** 2026-11-17 (turn 2315)
@@ -519,6 +572,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/live-units-769-node.test.js`, `tests/live-units-769-shaper-live.test.js`, `tests/live-units-769-studio-live.test.js`
 - **Status:** fixed
 - **Family:** `units`
+- **Related:** BUG-026, BUG-029, BUG-037
 
 ### BUG-040
 - **Date / turn:** 2026-11-18 (turn 2415)
@@ -532,6 +586,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/tp-close-779-live.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-020, BUG-055
 
 ### BUG-041
 - **Date / turn:** 2026-11-18 (turn ~2425, during 778/780)
@@ -545,6 +600,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/badge-780-live.test.js`, `tests/badge-780-phone-live.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-030
 
 ### BUG-042
 - **Date / turn:** 2026-11-18 (turn 2439; hunt 784/785)
@@ -558,6 +614,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/offset-781-node.test.js`, `tests/offset-781-live.test.js`, `tests/typed-sizes-782-node.test.js`, `tests/typed-sizes-782-live.test.js`, `tests/overlay-keys-783-live.test.js`, `tests/drawing-footer-landscape-783-live.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
+- **Related:** BUG-027, BUG-045
+- **Led to:** BUG-047 (task 791 overlay-keys-783-live timeout)
 
 ### BUG-043
 - **Date / turn:** 2026-11-18 to 2026-11-19 (turns 2448, 2454; hunt 785)
@@ -571,6 +629,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/cam-export-786-node.test.js`, `tests/cam-export-786-live.test.js`
 - **Status:** fixed
 - **Family:** `export-svg`
+- **Related:** BUG-022, BUG-034, BUG-035, BUG-049
 
 ### BUG-044
 - **Date / turn:** 2026-11-18 to 2026-11-19 (turns 2448, 2454; hunt 785)
@@ -584,6 +643,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/cam-paths-787-node.test.js`, `tests/cam-paths-787-review-live.test.js`
 - **Status:** fixed
 - **Family:** `toolpath-geometry`
+- **Related:** BUG-043, BUG-054, BUG-066, BUG-067
 
 ### BUG-045
 - **Date / turn:** 2026-11-18 to 2026-11-19 (turns 2448, 2454; hunt 785)
@@ -597,6 +657,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/sync-fixes-788-live.test.js`, `tests/prepare-phone-788-live.test.js`, `tests/prepare-bezier-788-live.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
+- **Related:** BUG-042, BUG-057
 
 ### BUG-046
 - **Date / turn:** 2026-11-18 to 2026-11-19 (turns 2448, 2454, 2465; hunt 784)
@@ -611,6 +672,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/tangent-branch-789-node.test.js`, `tests/dimension-size-789-node.test.js`, `tests/dimension-collapsed-789-node.test.js`, `tests/import-arc-equal-789-node.test.js`, `tests/trim-constraints-789-node.test.js`, `tests/parameters-reference-789-live.test.js`
 - **Status:** fixed
 - **Family:** `solver`
+- **Related:** BUG-005, BUG-059, BUG-060, BUG-076
+- **History:** found in hunt 784 2026-11-18 -> 789 merged 2026-11-19 -> owner widened <=0 refusal to all distances -> 789b merged 2026-11-19
 
 ### BUG-047
 - **Date / turn:** 2026-11-19 (turn ~2478)
@@ -624,6 +687,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/overlay-keys-783-live.test.js`
 - **Status:** fixed
 - **Family:** `flaky-test`
+- **Related:** BUG-069, BUG-087
+- **Regression of:** BUG-042 (test added in 783 timed out under load)
 
 ### BUG-048
 - **Date / turn:** 2026-11-19 (turns 2500, 2512) and live check line 632
@@ -637,6 +702,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** unknown (`shaper-addin` repo; not inspected from Sketch-Studio worktree)
 - **Status:** fixed
 - **Family:** `fusion-frame`
+- **Related:** BUG-024, BUG-064
+- **History:** reported 2026-11-19 -> fixed SA-12 2026-11-19 -> overlay colours/warnings fixed SA-12b 2026-11-19
 
 ### BUG-049
 - **Date / turn:** 2026-11-19 (turn ~2560, pre-line 650)
@@ -650,6 +717,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/export-own-attrs-802-node.test.js`
 - **Status:** fixed
 - **Family:** `export-svg`
+- **Related:** BUG-043
 
 ### BUG-050
 - **Date / turn:** 2026-11-19 (turns 2631-2635)
@@ -663,6 +731,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/stl-relief-807-node.test.js`
 - **Status:** fixed
 - **Family:** `stl-relief`
+- **Related:** BUG-058, BUG-063
 
 ### BUG-051
 - **Date / turn:** 2026-11-19 (turn ~2680, during 811)
@@ -676,6 +745,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/export-own-hole-711-node.test.js`
 - **Status:** fixed
 - **Family:** `toolpath-geometry`
+- **Related:** BUG-022
 
 ### BUG-052
 - **Date / turn:** 2026-11-19 (turn ~2695) and 2026-11-21 (turn 3214)
@@ -689,6 +759,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/selection-list-795-live.test.js`
 - **Status:** fixed
 - **Family:** `flaky-test`
+- **Related:** BUG-011, BUG-087
+- **History:** flaked across 16 gates 2026-11-19..21 -> fixed 854 2026-11-21
 
 ### BUG-053
 - **Date / turn:** 2026-11-20 (turn 2767)
@@ -702,6 +774,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/constraint-targets-820.test.js`, `tests/keyhole-constraint-highlight-820-live.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
+- **Related:** BUG-009, BUG-074
 
 ### BUG-054
 - **Date / turn:** 2026-11-20 (turn 2771)
@@ -715,6 +788,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/hold-part-822-node.test.js`, `tests/hold-part-822-live.test.js`
 - **Status:** fixed
 - **Family:** `toolpath-geometry`
+- **Related:** BUG-044
 
 ### BUG-055
 - **Date / turn:** 2026-11-20 (turn 2813)
@@ -728,6 +802,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/account-avatar-shape-826-live.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-006, BUG-040
 
 ### BUG-056
 - **Date / turn:** 2026-11-20 (turns 2955-2965)
@@ -741,6 +816,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/follow-design-832-node.test.js`, `tests/follow-design-832-live.test.js`
 - **Status:** fixed
 - **Family:** `toolpath-geometry`
+- **Related:** BUG-032, BUG-061
 
 ### BUG-057
 - **Date / turn:** 2026-11-20 (turn 3039)
@@ -754,6 +830,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/cursor-tooltip-finger-817c-node.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-045
 
 ### BUG-058
 - **Date / turn:** 2026-11-20 (turns 3059-3062)
@@ -767,6 +844,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/relief-through-839-node.test.js`, `tests/review-notes-839-node.test.js`
 - **Status:** fixed
 - **Family:** `stl-relief`
+- **Related:** BUG-050, BUG-063
 
 ### BUG-059
 - **Date / turn:** 2026-11-20 (turn 3088)
@@ -780,6 +858,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/solver-gear-847.test.js`, `tests/solver-pattern-order.test.js`
 - **Status:** fixed
 - **Family:** `solver`
+- **Related:** BUG-008, BUG-046, BUG-060
+- **Led to:** BUG-060 (task 847-B/C)
 
 ### BUG-060
 - **Date / turn:** 2026-11-20 (turns 3099-3101) and 2026-11-21 (turn 3119)
@@ -793,6 +873,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/pattern-arcs-846-node.test.js`, `tests/sample-arc-ends-847-node.test.js` (Part B test `tests/fillet-no-invert-847-node.test.js` unmerged)
 - **Status:** parked (Part B fillet inversion unmerged pending Fusion divergence ruling; Part C fixed)
 - **Family:** `solver`
+- **Related:** BUG-018, BUG-046, BUG-059
+- **History:** found 2026-11-20 (846) -> guard test 846 merged 2026-11-20 -> 847-C sampleArc merged 2026-11-21 -> 847-B fillet inversion parked on agents/solver-847-bc
 
 ### BUG-061
 - **Date / turn:** 2026-11-20 (turn 3118)
@@ -806,6 +888,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/insert-stl-841-node.test.js`, `tests/insert-stl-841-live.test.js`
 - **Status:** fixed
 - **Family:** `toolpath-geometry`
+- **Related:** BUG-056
 
 ### BUG-062
 - **Date / turn:** 2026-11-21 (turns 3171, 3175)
@@ -819,6 +902,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/site-identity-829.test.js`, `tests/og-card-837.test.js`
 - **Status:** fixed
 - **Family:** `build-deploy`
+- **Related:** none
 
 ### BUG-063
 - **Date / turn:** 2026-11-21 (turns 3191, 3203)
@@ -832,6 +916,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/my-bits-852-node.test.js`, `tests/relief-model.test.js`
 - **Status:** fixed
 - **Family:** `stl-relief`
+- **Related:** BUG-050, BUG-058
+- **History:** reported 2026-11-21 -> initial smooth attempt reverted 2026-11-21 -> re-applied with budget + smoothStairs 852b/c 2026-11-21
 
 ### BUG-064
 - **Date / turn:** 2026-11-21 (turn 3218)
@@ -845,6 +931,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** unknown (`shaper-addin` repo; not inspected from Sketch-Studio worktree)
 - **Status:** fixed
 - **Family:** `fusion-frame`
+- **Related:** BUG-024, BUG-048
 
 ### BUG-065
 - **Date / turn:** 2026-11-21 (turns 3221, 3230, 3234)
@@ -858,6 +945,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/perdesign-855-node.test.js`, `tests/perdesign-855-live.test.js`
 - **Status:** fixed
 - **Family:** `sync`
+- **Related:** BUG-013, BUG-081, BUG-082
+- **History:** chip leak found in 795c 2026-11-21 -> 855 live failed switch to empty design B 2026-11-21 -> fixed 855b/855c/855d + SA-20 2026-11-21
 
 ### BUG-066
 - **Date / turn:** 2026-11-21 (turn 3233)
@@ -871,6 +960,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/pocket-morphed-perf-856-node.test.js`
 - **Status:** fixed
 - **Family:** `toolpath-geometry`
+- **Related:** BUG-044
 
 ### BUG-067
 - **Date / turn:** 2026-11-22 (turn 3286)
@@ -884,6 +974,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/cut-band-857-node.test.js`, `tests/cut-band-857-live.test.js`
 - **Status:** fixed
 - **Family:** `toolpath-geometry`
+- **Related:** BUG-044
 
 ### BUG-068
 - **Date / turn:** 2026-11-22 (turn 3314)
@@ -897,6 +988,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/cdp-teardown-860.test.js`
 - **Status:** fixed
 - **Family:** `flaky-test`
+- **Related:** BUG-004, BUG-069, BUG-087
 
 ### BUG-069
 - **Date / turn:** 2026-11-23 (turn 3326)
@@ -910,6 +1002,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/export-sim-801-perf-wave-3d-live.test.js`, `tests/export-sim-801-perf-wave-passes-live.test.js`, `tests/export-sim-801-perf-raster-live.test.js`
 - **Status:** fixed
 - **Family:** `flaky-test`
+- **Related:** BUG-047, BUG-068, BUG-087
 
 ### BUG-070
 - **Date / turn:** 2026-11-20 (turn 2455-6) and 2026-11-23 (turn 3336)
@@ -923,6 +1016,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/prepare-notice-900-live.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-078, BUG-083
 
 ### BUG-071
 - **Date / turn:** 2026-11-23 (turns 3336, 3343)
@@ -936,6 +1030,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** unknown (`shaper-addin` repo; not inspected from Sketch-Studio worktree)
 - **Status:** fixed
 - **Family:** `fusion-frame`
+- **Related:** BUG-024, BUG-080
 
 ### BUG-072
 - **Date / turn:** 2026-11-23 (turn 3349)
@@ -949,6 +1044,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/stockkeep-864-live.test.js`
 - **Status:** fixed
 - **Family:** `stock`
+- **Related:** BUG-080, BUG-088
 
 ### BUG-073
 - **Date / turn:** 2026-11-23 (turn 3379; `.evidence/1002/owner-report-3380.txt` Finding 1)
@@ -962,6 +1058,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/rect-snap-constraint-867-node.test.js`, `tests/rect-snap-constraint-867-live.test.js`
 - **Status:** fixed
 - **Family:** `snap-not-applied`
+- **Related:** BUG-010, BUG-074, BUG-075
+- **Led to:** Audit 869 (docs/SNAP-CONSTRAINT-AUDIT-869.md) -> task 870 (circle/polygon/slot)
 
 ### BUG-074
 - **Date / turn:** 2026-11-23 (turn 3380; `.evidence/1002/owner-report-3380.txt` Finding 2)
@@ -975,6 +1073,9 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/coincident-868-node.test.js`, `tests/coincident-868-live.test.js`, `tests/constraint-refusals-871-node.test.js`, `tests/over-constrained-874-node.test.js`
 - **Status:** fixed
 - **Family:** `tool-bypasses-constraint-manager`
+- **Related:** BUG-073, BUG-075, BUG-076, BUG-090
+- **Led to:** Audit 869 -> tasks 871 (H/V + notices), 874 (overconstrained notice)
+- **History:** reported 2026-11-23 -> Coincident fixed 868 2026-11-23 -> H/V + notices 871 2026-11-23 -> Fusion-style overconstrained notice 874 2026-11-23
 
 ### BUG-075
 - **Date / turn:** 2026-11-23 (turn 3393; also audit 869 cause J)
@@ -988,6 +1089,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/bezier-snap-872-node.test.js`, `tests/bezier-snap-872-live.test.js`
 - **Status:** fixed
 - **Family:** `snap-not-applied`
+- **Related:** BUG-010, BUG-073
 
 ### BUG-076
 - **Date / turn:** 2026-11-23 (turn 3397)
@@ -1001,6 +1103,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/midpoint-arc-875-node.test.js`, `tests/midpoint-arc-875-live.test.js`
 - **Status:** fixed
 - **Family:** `solver`
+- **Related:** BUG-046, BUG-074
+- **History:** noticed in 871 2026-11-23 (notice added) -> solver + tool fixed in 875 2026-11-24
 
 ### BUG-077
 - **Date / turn:** 2026-11-23 (turn 3448)
@@ -1014,6 +1118,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** unknown (`shaper-addin` repo; not inspected from Sketch-Studio worktree)
 - **Status:** fixed
 - **Family:** `fusion-frame`
+- **Related:** BUG-078
 
 ### BUG-078
 - **Date / turn:** 2026-11-23 (turn 3452)
@@ -1027,6 +1132,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** unknown (`shaper-addin` repo; not inspected from Sketch-Studio worktree)
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-070, BUG-077
 
 ### BUG-079
 - **Date / turn:** 2026-11-24 (turn 3472)
@@ -1040,6 +1146,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/selection-notice-877-node.test.js`
 - **Status:** fixed
 - **Family:** `notice-wording`
+- **Related:** BUG-090
 
 ### BUG-080
 - **Date / turn:** 2026-11-24 (turn 3478)
@@ -1053,6 +1160,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/board-extent-879-node.test.js`, `tests/board-extent-879-live.test.js`
 - **Status:** fixed
 - **Family:** `stock`
+- **Related:** BUG-071, BUG-072, BUG-088
 
 ### BUG-081
 - **Date / turn:** 2026-11-24 (turn 3599)
@@ -1066,6 +1174,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** unknown (`shaper-addin` repo; not inspected from Sketch-Studio worktree)
 - **Status:** fixed
 - **Family:** `sync`
+- **Related:** BUG-038, BUG-065
 
 ### BUG-082
 - **Date / turn:** 2026-11-24 (turn 3608; WORK-LOG 884)
@@ -1079,6 +1188,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/shaperhub-keep-884-node.test.js`, `tests/shaperhub-keep-884-live.test.js`, `tests/shaperhub-keep-884-fusion-live.test.js`
 - **Status:** fixed
 - **Family:** `sync`
+- **Related:** BUG-038, BUG-065
+- **Led to:** task 888 chunkSetKey
 
 ### BUG-083
 - **Date / turn:** 2026-11-24 (turn 3624)
@@ -1092,6 +1203,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/relief-view-889-node.test.js`, `tests/relief-view-889-live.test.js`
 - **Status:** fixed
 - **Family:** `layout-overlap`
+- **Related:** BUG-070
 
 ### BUG-084
 - **Date / turn:** 2026-11-25 (turn 3656)
@@ -1105,6 +1217,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/test_sa35_relief_orientation.py` (`shaper-addin` repo)
 - **Status:** fixed
 - **Family:** `fusion-frame`
+- **Related:** BUG-085, BUG-086, BUG-089
+- **Led to:** BUG-089 (task SA-38 _face_slicer shared miss helper)
 
 ### BUG-085
 - **Date / turn:** 2026-11-25 (turn 3657)
@@ -1118,6 +1232,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** unknown
 - **Status:** open
 - **Family:** `fusion-frame`
+- **Related:** BUG-084, BUG-086
 
 ### BUG-086
 - **Date / turn:** 2026-11-25 (turns 3667, 3671)
@@ -1131,6 +1246,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/fusion-multibody-891-node.test.js`
 - **Status:** fixed
 - **Family:** `fusion-frame`
+- **Related:** BUG-084, BUG-085, BUG-089
+- **Led to:** BUG-089 (task SA-38 top_point per body)
 
 ### BUG-087
 - **Date / turn:** 2026-11-25 (turns 3677-3706)
@@ -1144,6 +1261,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/gate-shared-lock.test.js`, `tests/number-stepper-730-node.test.js`, `tests/gate-start-retry-893.test.js`, `tests/stockkeep-864-live.test.js`, `tests/selection-mirror-795c-live.test.js`, `tests/drive-rename-live.test.js`
 - **Status:** fixed
 - **Family:** `flaky-test`
+- **Related:** BUG-004, BUG-011, BUG-047, BUG-052, BUG-068, BUG-069
+- **Regression of:** BUG-001 (drive-rename-live flaked 3x before 899), BUG-011 (first-click-771 flaked before 893)
 
 ### BUG-088
 - **Date / turn:** 2026-11-25 (turns 3709, 3712, 3727)
@@ -1157,6 +1276,8 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/split-files-888-live.test.js` (inferred from log; exact 898 test file unmerged at `dddd689d`)
 - **Status:** open
 - **Family:** `stock`
+- **Related:** BUG-072, BUG-080
+- **History:** found in 898 merge gate 2026-11-25 -> unnumbered Stock fix fde8bfe0 merging 2026-11-25
 
 ### BUG-089
 - **Date / turn:** 2026-11-25 (turn 3720; reported in SA-35/SA-36)
@@ -1170,6 +1291,9 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/test_sa38_top_point_per_body.py` (`shaper-addin` repo)
 - **Status:** open
 - **Family:** `fusion-frame`
+- **Related:** BUG-084, BUG-086
+- **Regression of:** BUG-084 (same planeIntersection miss signal missed in _face_slicer)
+- **History:** found in SA-35/SA-36 2026-11-25 -> fixed on sa-38-top-point-per-body (95993ff) 2026-11-25, awaiting live check
 
 ### BUG-090
 - **Date / turn:** 2026-11-25 (turn 3721; pre-reported in turn 3504)
@@ -1183,29 +1307,33 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** unknown (in progress)
 - **Status:** open
 - **Family:** `notice-wording`
+- **Related:** BUG-074, BUG-079
+- **History:** noticed turn 3504 (2026-11-24) -> task 1001 dispatched 2026-11-25
 
 ---
 
 ## Family index
 
-| Family | Bug IDs |
+Entries in each family are listed in chronological date order (`MM-DD`, oldest first) so recurring patterns read as a timeline.
+
+| Family | Timeline (oldest first) |
 |---|---|
-| `sync` | BUG-001, BUG-002, BUG-012, BUG-013, BUG-036, BUG-038, BUG-065, BUG-081, BUG-082 |
-| `fusion-frame` | BUG-024, BUG-048, BUG-064, BUG-071, BUG-077, BUG-084, BUG-085, BUG-086, BUG-089 |
-| `stock` | BUG-072, BUG-080, BUG-088 |
-| `snap-not-applied` | BUG-073, BUG-075 |
-| `tool-bypasses-constraint-manager` | BUG-074 |
-| `notice-wording` | BUG-079, BUG-090 |
-| `flaky-test` | BUG-004, BUG-011, BUG-016, BUG-047, BUG-052, BUG-068, BUG-069, BUG-087 |
-| `layout-overlap` | BUG-006, BUG-007, BUG-017, BUG-019, BUG-020, BUG-028, BUG-030, BUG-031, BUG-040, BUG-041, BUG-055, BUG-057, BUG-070, BUG-078, BUG-083 |
-| `units` | BUG-026, BUG-029, BUG-037, BUG-039 |
-| `solver` | BUG-005, BUG-008, BUG-018, BUG-046, BUG-059, BUG-060, BUG-076 |
-| `export-svg` | BUG-022, BUG-025, BUG-034, BUG-035, BUG-043, BUG-049 |
-| `stl-relief` | BUG-050, BUG-058, BUG-063 |
-| `toolpath-geometry` | BUG-032, BUG-033, BUG-044, BUG-051, BUG-054, BUG-056, BUG-061, BUG-066, BUG-067 |
-| `storage-lifecycle` | BUG-014, BUG-015, BUG-023 |
-| `ui-input` | BUG-003, BUG-009, BUG-010, BUG-021, BUG-027, BUG-042, BUG-045, BUG-053 |
-| `build-deploy` | BUG-062 |
+| `build-deploy` | BUG-062 (11-21) |
+| `export-svg` | BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19) |
+| `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
+| `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25) |
+| `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
+| `notice-wording` | BUG-079 (11-24), BUG-090 (11-25) |
+| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23) |
+| `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
+| `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
+| `storage-lifecycle` | BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |
+| `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
+| `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
+| `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20) |
+| `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---
 

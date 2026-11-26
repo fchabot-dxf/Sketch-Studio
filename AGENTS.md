@@ -45,6 +45,7 @@ Don't read files or run anything; the advisor's first task tells you what you ne
 - After each removal, grep the callers of every function you touched; list in the REPORT any whose last non-test
   caller you removed.
 - List every behaviour change for EXISTING users of the code. If there is any the task didn't ask for, STOP and ask.
+- A task that fixes a bug listed in docs/BUG-ARCHIVE.md (or finds a new real one) updates its entry in the same commit: cause, fix, merge, guarding test, status.
 
 ## Waiting
 - Never end a turn "waiting for" something. Run commands in the foreground; if nothing is running, carry on or

@@ -2,7 +2,8 @@ import { dbg } from '#core/debug.js';
 import { TOOL_MODES, RECT_MODES, SLOT_MODES, ARC_MODES, CONSTRAINT_TYPES, CONSTRAINT_TOOLS } from '#core/constants.js';
 import { clearHover } from '#ui/hover-manager.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { exportToFile } from './export-manager.js';
+import { runExport } from './export-manager.js';
+import { showNotification } from '#ui/notification-manager.js';
 
 import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
 import { setupTrimTool, resetTrimState } from '#ui/input-handlers/trim-tool.js';
@@ -212,15 +213,8 @@ export function setupUI(state){
 
     const opts = { precision, arcApprox, arcSeg, scale, invertY, dxfVersion };
 
-    try{
-      const res = exportToFile(state, filename, type, opts);
-      if (res && res.ok) {
-        try{ showNotification('Export started', 'success'); }catch(_){ }
-        // S7c-2e: the router returns to Design (main.js's #btn-export-do handler) — no popup hide here.
-      } else {
-        try{ showNotification('Export failed: ' + (res && res.reason ? res.reason : 'unknown'), 'error'); }catch(_){}
-      }
-    } catch (e) { try{ showNotification('Export error', 'error'); }catch(_){} }
+    runExport(state, filename, type, opts, showNotification);
+    // S7c-2e: the router returns to Design (main.js's #btn-export-do handler) — no popup hide here.
   });
   
   // Keyboard: Esc (the declared Cancel, shortcuts.js) drops a pending constraint and returns to Select. TASK 727: the letter map that sat

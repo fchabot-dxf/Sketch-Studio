@@ -298,3 +298,12 @@ export function exportToFile(state, filename, filetype, opts = {}) {
   }
   return { ok: false, reason: 'Unknown filetype' };
 }
+
+/** Run exportToFile and notify only on failure (starting an export is normal behaviour). */
+export function runExport(state, filename, filetype, opts = {}, notify) {
+  const res = exportToFile(state, filename, filetype, opts);
+  if (!(res && res.ok) && typeof notify === 'function') {
+    notify('Export failed: ' + (res && res.reason ? res.reason : 'unknown'), 'error');
+  }
+  return res;
+}

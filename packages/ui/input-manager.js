@@ -6,7 +6,7 @@
 
 import { pickableShapes } from '#core/reference-lines.js';
 import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets, activeSketchScene, otherSketchScene, inActiveSketch } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
-import { dbg } from '#core/debug.js';
+import { dbg, logDiagnostic } from '#core/debug.js';
 import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS, ACTIVE_SKETCH_SNAP_TOOLS } from '#core/constants.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
 import { findSnap, snapBoostFor } from '#ui/snap-detection.js';
@@ -1372,11 +1372,10 @@ function setupKeyboardShortcuts(state, opts = {}) {
                     e.preventDefault();
                     return;
                 } else {
-                    showNotification(
-                        'Equal constraint requires two lines or two circles/arcs [ERR-EQUAL-01] Reason: Invalid selection for equal constraint.\nArgs: ' +
-                        JSON.stringify({ selectedShapes: [s1 && s1.type, s2 && s2.type] }),
-                        'warning'
-                    );
+                    logDiagnostic('constraints', 'ERR-EQUAL-01', 'Invalid selection for equal constraint.', {
+                        selectedShapes: [s1 && s1.type, s2 && s2.type]
+                    }, 'warn');
+                    showNotification('Equal needs two lines, or two circles or arcs.', 'warning');
                     e.preventDefault();
                     return;
                 }
@@ -1439,7 +1438,10 @@ function openContextMenuFor(e, svg, state, { touch = false } = {}) {
         toggleDriving: (c) => {
             const res = toggleDriving(state, c);
             if (res.refused) showNotification(res.nowDriving ? `Cannot make this a reference dimension: ${res.reason}.` : 'Cannot make this dimension driving: the sketch already determines it.', 'warning');
-            if (res.error === 'ERR-DRIVE-02') showNotification('Constraint conflict detected. [ERR-DRIVE-02] Reason: Solver did not converge after toggling driving.', 'warning');
+            if (res.error === 'ERR-DRIVE-02') {
+                logDiagnostic('constraints', 'ERR-DRIVE-02', 'Solver did not converge after toggling driving.', { constraintId: c && c.id, res }, 'warn');
+                showNotification('Cannot make this dimension driving: it conflicts with existing constraints.', 'warning');
+            }
         },
         deleteSelection: () => handleDelete(state),
         toggleLock: () => toggleFixedSelection(state),

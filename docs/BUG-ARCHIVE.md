@@ -1447,6 +1447,192 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Related:** BUG-097, BUG-098
 - **History:** `EA-4` logged in task `531` -> Fusion LIVE `(a)` & `(b)` measured and `f179r10` vs `arcs-rows.js:129` interaction documented in task `1009` (`2026-11-26`); deferred to its own task
 
+### BUG-100
+- **Date / turn:** 2026-11-26 (audit `D-1`, task 1003 -> fixed in task 1004)
+- **Reported by:** worker (`1003`, Dimension tool focused audit)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, desktop & phone)
+- **Report:** `"Audit D-1: Quick-typing 4 then 5 + Enter while placing a dimension sets the dimension to 5 instead of 45."`
+- **What was wrong:** Typing a multi-digit value while placing a dimension overwrote the first digit on the second keystroke (`45` became `5`).
+- **Cause:** `packages/ui/input-manager.js:1297-1298` called `anchorPlacingDimension(svgEl, state)` (which called `showEditInput` without `initialKey`, queuing `requestAnimationFrame(() => uiState.singleInput.select())`) and then immediately called `showEditInput(svgEl, state, pc, e.key)`; on the next animation frame the stale rAF selected `'4'`, so typing `'5'` replaced it.
+- **Fix:** Pass `initialKey` through `anchorPlacingDimension(svg, state, initialKey)` (`packages/ui/input-handlers/dimension-tool.js`) so `packages/ui/input-manager.js` makes a single `showEditInput` call, and track/cancel `uiState.focusRafId` in `packages/ui/numeric-input-manager.js` (focusing synchronously with caret at end when `typeof initialKey === 'string'`).
+- **Task id(s):** `1003` (audit), `1004` (fix)
+- **Fix merge sha:** pending (`agents/dimfix-1004`)
+- **Guarding test file(s):** `tests/dimension-1004-node.test.js`, `tests/dimension-1004-live.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-101, BUG-102, BUG-103, BUG-104
+
+### BUG-101
+- **Date / turn:** 2026-11-26 (audit `D-2`, task 1003 -> fixed in task 1004)
+- **Reported by:** worker (`1003`, Dimension tool focused audit)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** `"Audit D-2: Clicking an already-dimensioned parallel or angle line pair re-enters placing on the existing dimension; pressing Esc permanently deletes it with zero undo."`
+- **What was wrong:** Picking a line pair that already had a parallel distance or angle dimension recovered the existing constraint into `__placing`, and pressing `Esc` (or switching tools) spliced it out of `state.constraints` without an undo entry.
+- **Cause:** `resetDimensionState` (`packages/ui/input-handlers/dimension-tool.js`) spliced `pc` out of `state.constraints` unconditionally instead of gating removal on `pc.__newlyPlaced === true`.
+- **Fix:** Gate constraint removal and birth-snapshot discard in `resetDimensionState` (`packages/ui/input-handlers/dimension-tool.js`) on `pc.__newlyPlaced === true` so `Esc` / tool switch only removes a dimension born in the current placement and keeps an existing dimension intact.
+- **Task id(s):** `1003` (audit), `1004` (fix)
+- **Fix merge sha:** pending (`agents/dimfix-1004`)
+- **Guarding test file(s):** `tests/dimension-1004-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-100, BUG-102, BUG-104
+
+### BUG-102
+- **Date / turn:** 2026-11-26 (audit `D-3`, task 1003 -> fixed in task 1004)
+- **Reported by:** worker (`1003`, Dimension tool focused audit)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** `"Audit D-3: Press-drag-release placement (>250 ms) leaves __newlyPlaced = true, so a later double-click + Esc deletes the dimension."`
+- **What was wrong:** Placing a dimension by press-drag-release (>250 ms) cleared `__placing` but left `__newlyPlaced = true`; later double-clicking its label and pressing `Esc` caused `numeric-input-manager.js` `handleCancel` to delete the committed dimension.
+- **Cause:** `handleDimensionPointerUp` (and driven drop paths in `anchorPlacingDimension` / `dimensionPointerDown`) in `packages/ui/input-handlers/dimension-tool.js` cleared `__placing` without clearing `__newlyPlaced` / `__restoredDimension`.
+- **Fix:** Route every placement-end-without-edit path (`handleDimensionPointerUp` drag-release and driven drops in `packages/ui/input-handlers/dimension-tool.js`) through a single `finishPlacementWithoutEdit(c, state)` helper that clears `__placing`, `__newlyPlaced`, `__restoredDimension`, and `placingConstraint`.
+- **Task id(s):** `1003` (audit), `1004` (fix)
+- **Fix merge sha:** pending (`agents/dimfix-1004`)
+- **Guarding test file(s):** `tests/dimension-1004-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-101, BUG-104
+
+### BUG-103
+- **Date / turn:** 2026-11-26 (audit `D-5` + `D-6`, task 1003 -> fixed in task 1004)
+- **Reported by:** worker (`1003`, Dimension tool focused audit)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** `"Audit D-5 + D-6: Point-first dimensions leak state.active = { mode: 'dim' }; Point -> Circle/Arc rim or switching tool mid-pick leaves pendingDimension behind and hijacks the next click into an unintended point-to-point dimension."`
+- **What was wrong:** Completing a point-first dimension (`P->P`, `P->L`, `P->Axis`) left `state.active = { mode: 'dim' }` set, and clicking a circle/arc rim after a point pick or switching tools mid-pick left `dimensionState.pendingDimension` active so returning to Dimension tool and clicking a point silently dimensioned from the stale point.
+- **Cause:** `packages/ui/input-handlers/dimension-tool.js` did not clear `state.active` on point-first completion or clear `pendingDimension` when a non-line shape superseded a point pick, and the shared tool-switch path did not call `resetDimensionState(state)`.
+- **Fix:** Add a single `clearPointPick(state)` helper in `packages/ui/input-handlers/dimension-tool.js` called on placement start (`startPlacing`, selection start, non-line supersede, creation failure) and inside `resetDimensionState(state)`, and call `resetDimensionState(state)` via `leaveActiveTool(state, nextTool)` on tool switches.
+- **Task id(s):** `1003` (audit), `1004` (fix)
+- **Fix merge sha:** pending (`agents/dimfix-1004`)
+- **Guarding test file(s):** `tests/dimension-1004-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-104
+
+### BUG-104
+- **Date / turn:** 2026-11-26 (audit `B-7` / `D-20`, tasks 1000B & 1003 -> fixed in task 1004)
+- **Reported by:** worker (`1000B` solver UX audit & `1003` Dimension tool focused audit)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, desktop & phone)
+- **Report:** `"Audit B-7 / D-20: Switching tool mid-placement (ribbon button or keyboard shortcut) leaves the half-placed __placing dimension and its birth undo snapshot in the document in all 4 hosts."`
+- **What was wrong:** Selecting another tool via the ribbon or a shortcut while a dimension was in `__placing` mode left the phantom dimension in `state.constraints` with `__placing = true` and a dangling undo step across SketchStudio, Shaper, Pen Plotter, and Trace.
+- **Cause:** Neither `switchToTool` (`packages/ui/input-manager.js`) nor `selectTool` (`packages/ui/tool-ribbon.js`) called `resetDimensionState(state)` when leaving the Dimension tool.
+- **Fix:** Extract `leaveActiveTool(state, nextTool)` in `packages/ui/input-manager.js` (calling `resetDimensionState(state)` whenever `nextTool !== TOOL_MODES.DIMENSION`, keeping re-click/re-key on Dimension active per owner ruling) and call it from `switchToTool` and `tool-ribbon.js`'s `onToolClick` branch.
+- **Task id(s):** `1000B`, `1003` (audit), `1004` (fix)
+- **Fix merge sha:** pending (`agents/dimfix-1004`)
+- **Guarding test file(s):** `tests/dimension-1004-node.test.js`, `tests/dimension-1004-live.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-101, BUG-102, BUG-103
+
+### BUG-105
+- **Date / turn:** 2026-11-26 (audit `DD-4`, task 1003; final owner ruling turn 3764 `"leave tool"`)
+- **Reported by:** worker (`1003`, Dimension tool focused audit — logged as divergence `DD-4`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** `"Audit DD-4: Pressing Esc mid-pick or mid-placement in the Dimension tool cancels the in-progress pick/placement and immediately exits to Select in one step."`
+- **What was wrong:** Not a bug. Initially flagged as an unverified divergence against Fusion (`DD-4`); advisor verified Fusion 360 live on 2026-11-26 that ONE `Esc` in Sketch Dimension exits mid-pick and mid-placement, and the owner ruled (turn 3764, `"leave tool"`) to keep one-step `Esc` (cancels whatever is in progress — new dimension removed, existing dimension kept per BUG-101 — and leaves the Dimension tool).
+- **Cause:** Intentional behaviour matching Fusion 360 (`packages/ui/input-manager.js` `handleEscape`).
+- **Task id(s):** `1003` (audit), `1004` (ruling recorded)
+- **Fix merge sha:** n/a (no code change; existing behaviour kept)
+- **Guarding test file(s):** `tests/dimension-1004-node.test.js`
+- **Status:** not a bug (closed; Fusion verified live 2026-11-26: one Esc exits mid-pick and mid-placement)
+- **Family:** `ui-input`
+- **Related:** BUG-101, BUG-104
+- **History:** logged as unverified divergence `DD-4` in task 1003 -> temporary two-step `Esc` ruling turn 3759 held after live Fusion check 2026-11-26 -> final owner ruling turn 3764 `"leave tool"` closed `DD-4` as not a bug
+
+### BUG-110
+- **Date / turn:** 2026-11-26 (audit 1000B `B-15`, owner ruling turn 3741)
+- **Reported by:** worker (auditor 1000B)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, constraint tools)
+- **Report:** Audit `B-15` (`docs/SOLVER-UX-AUDIT-1000B.md`): after a refused / invalid pick, Parallel, Perpendicular, Collinear, H/V, Midpoint and Symmetric dropped to Select while Coincident, Tangent and Equal stayed active.
+- **What was wrong:** Refused clicks in 6 of the 9 constraint tools exited the tool back to Select instead of keeping the tool active.
+- **Cause:** `packages/ui/input-manager.js:758-763` (`EXIT ON INVALID CLICK`) called `switchToTool(state, TOOL_MODES.SELECT)` whenever `handleConstraintPointerDown` returned `false`.
+- **Fix:** Removed the `if (!handled) switchToTool(state, TOOL_MODES.SELECT)` exit branch in `packages/ui/input-manager.js`; constraint tools now stay active after every use or refusal (only `Esc` or picking another tool exits).
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/constraint-refusal-stay-b15-1005-node.test.js`, `tests/constraint-activation-ux15-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-111, BUG-112
+- **History:** found in audit 1000B (`B-15`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
+### BUG-111
+- **Date / turn:** 2026-11-26 (audits 1000 `UX-15` / 1000B `B-14b,d` & second-click matrix, owner ruling turn 3741)
+- **Reported by:** workers (auditors 1000, 1000B)
+- **App(s) & host:** SketchStudio (vs Shaper, Pen Plotter, Trace)
+- **Report:** Audit `UX-15` / `B-14b,d` (`docs/SOLVER-UX-AUDIT-1000.md`, `docs/SOLVER-UX-AUDIT-1000B.md`, `docs/SOLVER-UX-CROSS-1000B.md`): in SketchStudio only, re-clicking an active constraint tool's ribbon button exited to Select, H/V with a preselected line exited to Select, and Coincident cleared the selection.
+- **What was wrong:** SketchStudio diverged from Shaper and Pen Plotter on constraint tool activation and re-click behaviour.
+- **Cause:** SketchStudio kept its own duplicate `handleToolActivate` / `setTool` in `apps/sketchstudio/ui/ui-manager.js:26-110` wired through `onToolClick` and `defaultInputCtx.setActiveTool` / `resetToSelectTool`.
+- **Fix:** Deleted `handleToolActivate`, `setTool`, `onToolClick` override, and duplicate Esc listener from `apps/sketchstudio/ui/ui-manager.js` and removed `defaultInputCtx.setActiveTool` / `resetToSelectTool` in `packages/ui/input-manager.js` so all hosts share `switchToTool`; re-clicking an active constraint tool now stays in the tool.
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/constraint-activation-ux15-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-110, BUG-113, BUG-115
+- **History:** found in audits 1000 (`UX-15`) / 1000B (`B-14b,d`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
+### BUG-112
+- **Date / turn:** 2026-11-26 (audit 1000B `B-10`)
+- **Reported by:** worker (auditor 1000B)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, Midpoint tool)
+- **Report:** Audit `B-10` (`docs/SOLVER-UX-AUDIT-1000B.md`): Midpoint picked on a line's own endpoint was silent and wedged its pick buffer until Esc; on an arc's own endpoint/centre it warned and exited to Select.
+- **What was wrong:** Line own-endpoint picks silently left `[shape, joint]` in `selectionBuffer` so subsequent valid midpoint picks failed; arc own-endpoint picks left the curve in buffer and exited the tool.
+- **Cause:** `packages/ui/input-handlers/constraint-tools.js:353-381` (`handleMidpointPointerDown`) only refused arc own endpoints (without clearing the full buffer) and had no refusal/reset path when `!endpoints.includes(midpoint)` failed on a line.
+- **Fix:** Unified own-endpoint/centre refusal for both lines and arcs in `packages/ui/input-handlers/constraint-tools.js` (`handleMidpointPointerDown`): shows a plain refusal message, clears selection and `pendingConstraint`, and stays in the Midpoint tool.
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/midpoint-own-end-b10-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-110
+- **History:** found in audit 1000B (`B-10`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
+### BUG-113
+- **Date / turn:** 2026-11-26 (audits 1000 `UX-14` / 1000B `B-14a`)
+- **Reported by:** workers (auditors 1000, 1000B)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, Equal tool)
+- **Report:** Audit `UX-14` / `B-14a` (`docs/SOLVER-UX-AUDIT-1000.md`, `docs/SOLVER-UX-AUDIT-1000B.md`): pressing `E` with 2 preselected shapes applied Equal (or refused an invalid pair) while clicking the Equal ribbon button ignored the 2-shape preselection.
+- **What was wrong:** Ribbon button and `E` shortcut ran separate code paths with different preselection behaviour.
+- **Cause:** `packages/ui/input-manager.js:1363-1385` handled 2-shape Equal preselection only in the `E` keydown branch, while `switchToTool` / `handleToolActivate` only inspected single-item preselections.
+- **Fix:** Moved `tool.equal` and `tool.horizontalVertical` into `TOOL_SHORTCUTS` -> `switchToTool` -> `activateConstraintTool` (`packages/ui/input-handlers/constraint-tools.js`), which handles 2-shape Equal preselection identically for ribbon clicks and the `E` key across all hosts.
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/equal-preselect-ux14-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-111, BUG-115
+- **History:** found in audits 1000 (`UX-14`) / 1000B (`B-14a`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
+### BUG-114
+- **Date / turn:** 2026-11-26 (audit 1000B `B-14c`)
+- **Reported by:** worker (auditor 1000B)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, H/V tool)
+- **Report:** Audit `B-14c` (`docs/SOLVER-UX-AUDIT-1000B.md`): adding a duplicate H/V via preselection + `H` key or H/V ribbon button was silent, while clicking the line in the H/V tool showed `"Sketch geometry over constrained"`.
+- **What was wrong:** Duplicate H/V gave different user feedback depending on whether preselection or click-in-tool was used.
+- **Cause:** `packages/core/constraint-manager.js:1022` (`ConstraintManager.addHorizontalOrVertical`) passed `{ source: 'auto-detect' }`, which bypassed the `opts.source === 'toolbar'` duplicate notice at `constraint-manager.js:223`.
+- **Fix:** Changed `ConstraintManager.addHorizontalOrVertical`'s default source in `packages/core/constraint-manager.js:1022` to `'toolbar'`, so preselect + `H`, preselect + H/V ribbon, and H/V tool click all emit the same over-constrained notice.
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/hv-dup-notice-b14c-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `notice-wording`
+- **Related:** BUG-079, BUG-111
+- **History:** found in audit 1000B (`B-14c`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
+### BUG-115
+- **Date / turn:** 2026-11-26 (audit 1000B `B-6`)
+- **Reported by:** worker (auditor 1000B)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab, constraint preselection)
+- **Report:** Audit `B-6` (`docs/SOLVER-UX-AUDIT-1000B.md`): preselecting a joint then activating Parallel and clicking a line created a corrupt `parallel` constraint with a joint ID in `shapes[0]`; preselecting a circle then activating H/V caused a nonsensical second-point refusal on a line click.
+- **What was wrong:** Incompatible single-item preselections were stuffed into `pendingConstraint.firstElement` without validating element kind/shape type for the chosen constraint tool.
+- **Cause:** `packages/ui/input-manager.js:1568-1585` (and deleted `apps/sketchstudio/ui/ui-manager.js:62-98`) assigned any single selected joint or shape into `pendingConstraint.firstElement`, and `handleShapeConstraintPointerDown` (`constraint-tools.js:136`) did not verify `firstElement.type === 'shape'`.
+- **Fix:** Added a declared `CONSTRAINT_PRESELECT` table in `packages/ui/input-handlers/constraint-tools.js` (`activateConstraintTool`) that refuses invalid single preselections with a plain warning, leaves `firstElement: null` and the tool active, plus guarded `firstElement.type === 'shape'` in `handleShapeConstraintPointerDown`.
+- **Task id(s):** `1005`
+- **Fix merge sha:** pending (`agents/toolexit-1005`)
+- **Guarding test file(s):** `tests/constraint-preselect-b6-1005-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-111, BUG-113
+- **History:** found in audit 1000B (`B-6`) 2026-11-25 -> fixed in task 1005 2026-11-26
+
 ### BUG-120
 - **Date / turn:** 2026-11-26 (audit IDs `UX-01`, `B-2`, `D-17`; fixed in task `1006`)
 - **Reported by:** audits `1000` (`D9.1`, `D9.2`), `1000B` (`2b`), `1003` (`V2.4.toggle.Href->Drv`, `Vref->Drv`)
@@ -1571,7 +1757,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
-| `notice-wording` | BUG-079 (11-24), BUG-090 (11-25) |
+| `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23) |
 | `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
@@ -1580,7 +1766,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-124 (11-26), BUG-125 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17) |
 
 ---
@@ -1591,4 +1777,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
-- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`, BUG-120..BUG-126 fixed in task `1006`).
+- [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`).

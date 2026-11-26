@@ -218,6 +218,7 @@ let uiState = {
     
     // State
     rafId: null,
+    focusRafId: null,
     svg: null,
     appState: null,
 
@@ -530,14 +531,22 @@ export function showEditInput(svg, state, constraint, initialKey) {
     uiState.singleInput.inputMode = BOX_INPUT_MODE;
     uiState.singleInput.value = (typeof initialKey === 'string') ? initialKey : defaultValue;
     const len = uiState.singleInput.value.length;
-    uiState.singleInput.setSelectionRange(typeof initialKey === 'string' ? len : 0, len);
+    if (typeof initialKey === 'string') {
+        uiState.singleInput.focus();
+        uiState.singleInput.setSelectionRange(len, len);
+    } else {
+        uiState.singleInput.setSelectionRange(0, len);
+    }
     uiState.singleInput.readOnly = reference;
     if (reference && uiState.hintEl) { uiState.hintEl.textContent = REFERENCE_BOX_HINT; uiState.hintEl.classList.remove('err'); showNumericInputEl(uiState.hintEl); }
     else updateAssist({ complete: typeof initialKey === 'string' });
 
-    requestAnimationFrame(() => {
+    if (uiState.focusRafId) { cancelAnimationFrame(uiState.focusRafId); uiState.focusRafId = null; }
+    uiState.focusRafId = requestAnimationFrame(() => {
+        uiState.focusRafId = null;
+        if (!uiState.active || uiState.mode !== 'edit') return;
         uiState.singleInput.focus();
-        if (!initialKey) uiState.singleInput.select();
+        if (typeof initialKey !== 'string') uiState.singleInput.select();
     });
     startTrackingLoop();
     // TASK 723: a press anywhere outside the box ends it (Fusion). Capture phase on the document: it runs BEFORE the canvas / ribbon / footer
@@ -1107,6 +1116,7 @@ function resetState() {
     }
     if (uiState.dualContainer) { uiState.dualContainer.classList.remove('sk-live-box'); hideNumericInputEl(uiState.dualContainer); }
     if (uiState.rafId) { cancelAnimationFrame(uiState.rafId); uiState.rafId = null; }
+    if (uiState.focusRafId) { cancelAnimationFrame(uiState.focusRafId); uiState.focusRafId = null; }
 }
 
 function startTrackingLoop() {

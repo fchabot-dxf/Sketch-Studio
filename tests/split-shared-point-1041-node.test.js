@@ -17,7 +17,7 @@
 //   C  a slot cap joint (both ways: the line detached from the arc, the arc detached from the line: its centre-rim equal follows the arc)
 //   D  a fillet joint: the leg detached, tangents + virtual sharp stay, the arc is no live fillet any more
 //   E  an imported shared corner, F a mirror copy corner (its symmetric stays with the owner)
-//   G  an offset copy corner (the offset record dissolves), H a pattern SOURCE corner (the pattern dissolves) and a pattern COPY corner (it stays;
+//   G  an offset copy join and an offset source join (the offset record dissolves either way), H a pattern SOURCE corner (the pattern dissolves) and a pattern COPY corner (it stays;
 //      BUG-411: when that instance is removed later its copies' detached point goes with them)
 //   I  stacked corners (a rectangle) are unchanged: no shared glyph, their coincident deletes as before
 //   J  BUG-410: 3 and 4 ends glued at one spot (chain A-B B-C, star A-B A-C), plus a pointOnLine on one stacked joint: selecting / hovering ANY
@@ -328,6 +328,14 @@ for (const which of ['line from arc', 'arc from line']) {
   check(S.engine.solve(500).converged, 'G: the solver converges');
   app.undo();
   check(S.constraints.some((c) => c.type === 'offset') && curvesAtJoint(S.shapes, join).length === 2, 'G: Undo brings the offset and the shared join back');
+  // a SOURCE join split: the offset dissolves too (Fusion, measured 2026-11-27: Offset removed, 4 per-line offset dimensions put in its place;
+  // DECLARED DIFFERENCE: this app has no per-line offset dimension, so the copies simply stop following)
+  const srcJoin = src[0].joints.find((x) => src[1].joints.includes(x));
+  setView(app, S.joints.get(srcJoin).x, S.joints.get(srcJoin).y, 80);
+  splitVia(app, srcJoin, curvesAtJoint(S.shapes, srcJoin)[0].id);
+  check(!S.constraints.some((c) => c.type === 'offset'), 'G: a SOURCE join split removes the offset relationship too (Fusion)');
+  check(off.every((s) => shapeById(S, s.id)) && curvesAtJoint(S.shapes, join).length === 2, 'G: the copies stay as plain lines, still joined');
+  check(S.engine.solve(500).converged, 'G: the solver converges after the source split');
   await app.close();
 }
 {

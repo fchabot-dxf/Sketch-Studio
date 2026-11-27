@@ -10,7 +10,9 @@
 //   - Delete on a glyph detaches ONLY that curve: it gets its own new point at the same place (sketch points +1), the other curves keep sharing;
 //   - constraints ON THE CURVES stay on the curves (Horizontal stayed on its line); everything ON THE POINT (a dimension to it, measured twice
 //     with the roles reversed) stays with the curve that joined it last; the detached curve's new point carries nothing;
-//   - Fusion never refuses: detaching an OFFSET copy's corner removes the Offset relationship (the copies become plain lines), detaching a
+//   - Fusion never refuses: detaching an OFFSET copy's corner removes the Offset relationship (the copies become plain lines); so does detaching
+//     an offset SOURCE's corner (Fusion then puts 4 separate per-line offset dimensions in its place: DECLARED DIFFERENCE, this app has no
+//     per-line offset dimension, so the copies simply stop following); detaching a
 //     PATTERN SOURCE's corner removes the pattern relationship (its copies become plain geometry and keep their own shared corners); detaching
 //     a pattern COPY's corner keeps the pattern (the CircularPattern constraint still there, points +1);
 //   - right-clicking a joined corner point offers "Delete Coincident": the same split as deleting the glyph (owner-checked; joinsAt below).
@@ -98,7 +100,7 @@ const pairsOf = (c) => (c && Array.isArray(c.joints) && (JOINT_PAIR_FORMS[c.type
  * other curves (the owner: the latest of them). A constraint ON the detached curve that names the joint through one of the curve's own joint
  * pairs (JOINT_PAIR_FORMS: its H / V, its length, an arc's centre-rim equal, a point-to-line distance to it, a midpoint of it) moves to the new
  * joint; a constraint naming the curve by its shape id needs nothing. A pair the curve shares with a curve that stays (two curves with the same
- * two joints) stays on the joint. An OFFSET whose copies the split separates, and a PATTERN whose source curve is detached, are dissolved (their
+ * two joints) stays on the joint. An OFFSET whose chain the split separates (copies or sources), and a PATTERN whose source curve is detached, are dissolved (their
  * records go, as Fusion's): the offset copies / the pattern copies stay as plain geometry. No history and no solve: the caller owns them
  * (#core/delete-manager.js deleteSharedPointCoincidents). The owner curve (or a joint no longer shared) is refused: nothing changes.
  * -> { ok: true, joint: the new joint id, owner: the owner curve id, dissolved: [the removed records] } | { ok: false, reason }
@@ -127,10 +129,9 @@ export function detachFromSharedPoint(state, jointId, shapeId) {
 
   const stayIds = new Set(stay.map((s) => s.id));
   const dissolve = state.constraints.filter((c) => {
-    if (c && c.type === CONSTRAINT_TYPES.OFFSET && Array.isArray(c.shapes)) {
-      const copies = c.shapes.filter((_, i) => i % 2 === 1); // [src0, off0, src1, off1, ...] (#core/offset.js)
-      return copies.includes(curve.id) && copies.some((id) => stayIds.has(id));
-    }
+    // an offset ([src0, off0, src1, off1, ...], #core/offset.js) whose chain the split separates: a copy join OR a source join (Fusion: both remove the
+    // Offset relationship)
+    if (c && c.type === CONSTRAINT_TYPES.OFFSET && Array.isArray(c.shapes)) return c.shapes.includes(curve.id) && c.shapes.some((id) => stayIds.has(id));
     return isPatternConstraint(c) && c.sources && c.sources.shapes.includes(curve.id);
   });
   dropConstraints(state, dissolve);

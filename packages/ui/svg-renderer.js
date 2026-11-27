@@ -1569,6 +1569,21 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   if (activeSnap) { highlight.kind = activeSnap.type; highlight.id = activeSnap.targetId; }
   else if (hoveredJoint) { highlight.kind = 'joint'; highlight.id = hoveredJoint; }
   else if (hoveredConstraint) { highlight.kind = 'constraint'; highlight.id = hoveredConstraint; }
+  // THE show-on-select rule of a POINT glyph (a coincident, a point-on-line, TASK 1041 a SharedPointCoincident): it is shown only while the glyph
+  // itself is hovered / selected, or while ANY point of the coincident cluster at its spot is hovered / selected (TASK 1041, BUG-410: it read only
+  // the glyph's own joints, so with 3+ ends glued at one spot (A-B, B-C) selecting the spot, which picks ONE of the stacked joints, hid the glyphs
+  // that do not name that joint). `parent`: the constraint a split glyph is drawn for. Any other glyph: true. drawConstraintGlyph reads it, and
+  // the SharedPointCoincident glyphs are filtered by it before they are placed (only the shown ones cost a frame).
+  const pointGlyphShown = (c, parent = null) => {
+    const spotJoints = (c.type === CONSTRAINT_TYPES.COINCIDENT && c.joints && c.joints.length >= 2) ? [c.joints[0], c.joints[1]]
+      : (c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.joint) ? [c.joint]
+      : (c.type === SHARED_POINT_COINCIDENT) ? [c.joints[0]] : null;
+    if (!spotJoints) return true;
+    if (highlight.kind === 'constraint' && (highlight.id === c || (parent && highlight.id === parent))) return true;
+    if (selectedConstraints && selectedConstraints.has(c)) return true;
+    const hoveredLeader = hoveredJoint ? getClusterLeader(hoveredJoint) : null;
+    return spotJoints.some((j) => (!!hoveredLeader && getClusterLeader(j) === hoveredLeader) || isClusterSelected(j));
+  };
 
   // Map joint highlights to cluster leaders so the visible leader shows hover/active glow when a follower is hovered
   if (highlight.kind === 'joint' && highlight.id) { highlight.id = getClusterLeader(highlight.id); }
@@ -2181,20 +2196,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const isGlyphHovered = !preview && highlight.kind === 'constraint' && (highlight.id === c || (opts && opts.parent && highlight.id === opts.parent));
     const isGlyphSelected = !preview && selectedConstraints && selectedConstraints.has(c);
 
-    // Default: render glyphs. THE show-on-select rule of a POINT glyph (a coincident, a point-on-line, TASK 1041 a SharedPointCoincident): it is
-    // visible only while the glyph itself is hovered / selected, or while ANY point of the coincident cluster at its spot is hovered / selected
-    // (TASK 1041, BUG-410: it read only the glyph's own joints, so with 3+ ends glued at one spot (A-B, B-C) selecting the spot, which picks ONE
-    // of the stacked joints, hid the glyphs that do not name that joint)
-    let visible = true;
-    const spotJoints = (c.type === CONSTRAINT_TYPES.COINCIDENT && c.joints && c.joints.length >= 2) ? [c.joints[0], c.joints[1]]
-      : (c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.joint) ? [c.joint]
-      : (c.type === SHARED_POINT_COINCIDENT) ? [c.joints[0]] : null;
-    if (spotJoints) {
-      const hoveredLeader = hoveredJoint ? getClusterLeader(hoveredJoint) : null;
-      const clusterHover = !!hoveredLeader && spotJoints.some((j) => getClusterLeader(j) === hoveredLeader);
-      const clusterSel = spotJoints.some((j) => isClusterSelected(j));
-      visible = preview || isGlyphHovered || isGlyphSelected || clusterHover || clusterSel;
-    }
+    // Default: render glyphs; a point glyph by THE show-on-select rule (pointGlyphShown)
+    const visible = preview || pointGlyphShown(c, opts && opts.parent);
     try{ c.__visible = !!visible; }catch(_){ }
 
     // Enforce visibility: if the glyph should be hidden (e.g. unselected coincident), do not render it at all.
@@ -2433,9 +2436,10 @@ switch(c.type){
 
   // CONSTRAINT GLYPHS - Rendered last so they appear on top of everything
   // glyphSize already defined at top of function
-  // TASK 1041: the derived SharedPointCoincident glyphs of this scene (#core/shared-point.js): placed in their joint's glyph bucket and drawn
-  // through drawConstraintGlyph like a coincident (its look, its show-on-select rule)
-  const sharedGlyphs = sharedPointCoincidents(joints, shapes);
+  // TASK 1041: the derived SharedPointCoincident glyphs of this scene (#core/shared-point.js) that the show-on-select rule shows (pointGlyphShown):
+  // placed in their joint's glyph bucket and drawn through drawConstraintGlyph like a coincident (its look). The hidden ones are marked hidden for
+  // the pick (hover-manager glyphAt) and cost nothing more (a big import has one per joined corner).
+  const sharedGlyphs = sharedPointCoincidents(joints, shapes).filter((g) => { const shown = pointGlyphShown(g); if (!shown) g.__visible = false; return shown; });
 
   // Smart Glyph Layout (Anti-overlap): group constraints by visual target and compute glyph positions
   try {

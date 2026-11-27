@@ -52,11 +52,17 @@ function makeLoop(nodes, edges) {
 
 // Two half-edges leaving a node whose directions differ by less than this (radians) leave TANGENT to each other: the one that turns more to the
 // left comes later counter-clockwise (TASK 761). Never applied between two lines (they keep the exact angle order of before).
+// TASK 1040 (BUG-400): half-edges that still tie (the same direction and curvature) keep the order they were listed in at the node (`tieRank`), except
+// two that also END at the same node: two curves lying ON each other end to end (the shared side of two rectangles drawn side by side, two lines whose
+// ends are made coincident). Those are ordered by `overlap` (their edge's place, its sign turned round for a half-edge walking its curve backwards): at
+// the other end each walks the other way, so the order there is the MIRROR of this one, as in a planar drawing, and the two curves bound a face of no
+// area (dropped): each rectangle is its own loop. The listed order (the same at both ends) twisted the faces: the two rectangles came out as ONE loop
+// walking both shared lines twice. Curves that overlap only in part (a short line along a longer one) end at different nodes and keep the listed order.
 const TANGENT_TIE = 1e-9;
 const byLeaving = (a, b) => {
   const d = a.angle - b.angle;
   if (d !== 0 && ((a.straight && b.straight) || Math.abs(d) > TANGENT_TIE)) return d;
-  return (a.bend - b.bend) || d;
+  return (a.bend - b.bend) || d || (a.tieRank - b.tieRank) || (a.overlap - b.overlap);
 };
 
 // Planar face traversal over the edges (each a curve of a declared kind, walked from its start `a` to its end `b`) → the bounded (inner) faces.
@@ -136,10 +142,10 @@ function edgeBlocks(edges) {
 // (counter-clockwise, positive area) ones as loops, each with `firstEdge` (not enumerable: the loop object is otherwise as before) }.
 function traverseFaces(edges, posOf, J) {
   const half = [];
-  for (const e of edges) {
-    half.push({ from: e.a, to: e.b, shapeId: e.shapeId, edge: e, forward: true });
-    half.push({ from: e.b, to: e.a, shapeId: e.shapeId, edge: e, forward: false });
-  }
+  edges.forEach((e, i) => { // overlap: the tie order of half-edges lying on each other (byLeaving), mirrored between the two ends of a curve
+    half.push({ from: e.a, to: e.b, shapeId: e.shapeId, edge: e, forward: true, overlap: i + 1 });
+    half.push({ from: e.b, to: e.a, shapeId: e.shapeId, edge: e, forward: false, overlap: -(i + 1) });
+  });
   const out = new Map();      // node -> outgoing half-edges (sorted CCW by the direction they leave in)
   const hmap = new Map();     // "from|to|shapeId" -> half-edge (to find the reverse)
   for (const h of half) {
@@ -152,7 +158,11 @@ function traverseFaces(edges, posOf, J) {
     out.get(h.from).push(h);
     hmap.set(h.from + '|' + h.to + '|' + h.shapeId, h);
   }
-  for (const arr of out.values()) arr.sort(byLeaving);
+  for (const arr of out.values()) { // tieRank: the listed place of the first half-edge from this node to the same node (byLeaving)
+    const first = new Map();
+    arr.forEach((h, j) => { if (!first.has(h.to)) first.set(h.to, j); h.tieRank = first.get(h.to); });
+    arr.sort(byLeaving);
+  }
 
   const next = (h) => {
     const arr = out.get(h.to); if (!arr || !arr.length) return null;

@@ -3618,6 +3618,54 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **History:** found in task `1039` -> fixed in task `1039`. Probe `C01`, before: `afterCentre: box=open[30]F shapes=1 active=true preview={none}`; after: `preview={line -20,10,10,10}`. Screenshots `.evidence/1039/middraw-centre-{before,after}-{desktop,phone}.png`.
 
+### BUG-400
+- **Date / turn:** 2026-11-27 (found in task `1040`)
+- **Reported by:** task `1040` (`findLoops` on two Rect-tool rectangles side by side: node kit + a pure state)
+- **App(s) & host:** every host reading `#core/loop-finder.js`: Shaper (Prepare's regions, the cut file), SketchStudio (the SVG export, BUG-401), the shared Design tab (groups, Close path)
+- **Report:** two rectangles drawn side by side (the second one's corners snapped onto the first's right side: the shared side is TWO lines lying on each other, their ends made coincident) are ONE loop: `[r1a,r1d,r1c,r2d,r1b,r2c,r2b,r2a,r2d,r1b]`, a twisted outline walking both shared lines twice (once each way). Shaper's Prepare offered that one region and its cut file cut it.
+- **What was wrong:** the planar face walk ordered the two coincident lines the SAME way at both of their ends, so the faces round them were threaded into one.
+- **Cause:** `packages/core/loop-finder.js` `byLeaving` (the order of the half-edges leaving a node): two half-edges leaving in the same direction with the same curvature tied and kept their listed order, which is the same at both ends; a planar drawing needs the mirrored order at the far end.
+- **Fix:** ONE tie rule in `byLeaving`: half-edges that tie AND end at the same node (curves lying on each other end to end) are ordered by `overlap` (the edge's place, its sign turned round for a half-edge walking its curve backwards), so the order at the far end is the mirror; the two lines bound a face of no area (dropped) and each rectangle is its own loop. Ties that end at different nodes (a short line along a longer one) keep their listed order (`tieRank`), so every other drawing keeps its loops: the finder's loops and open chains over all 163 geometries in `tests/fixtures` are identical before / after (`.evidence/1040/sweep-{before,after}.json`), and the Shaper digests of `tests/bezier-loops-761-node.test.js` (loops, chains, loop / chain paths, polygons, Outside / Spiral / tabs cut files) are bit-identical for its 160 drawings without a bezier.
+- **Task id(s):** `1040`
+- **Fix merge sha:** open (`agents/svg-loops-1040`, awaiting merge)
+- **Guarding test file(s):** `tests/svg-loops-1040-node.test.js` (`S-3`: Shaper's Prepare, 2 rectangle loops of 4 lines; `S-1` two rects: 2 closed outlines)
+- **Status:** fixed
+- **Family:** `toolpath-geometry`
+- **Related:** BUG-401
+- **History:** found in task `1040` -> fixed in task `1040` (advisor ruling A: fix the tie in the finder, Shaper impact stated). Probe before: `coincident shared side: [["r1a","r1d","r1c","r2d","r1b","r2c","r2b","r2a","r2d","r1b"]]`; after: `[["r1a","r1d","r1c","r2d"],["r1b","r2c","r2b","r2a"]]` (each rectangle holds one of the two shared lines).
+
+### BUG-401
+- **Date / turn:** 2026-11-27 (measured by the advisor; fixed in task `1040`)
+- **Reported by:** advisor (real SketchStudio tools through the node kit, `buildSVG` element counts)
+- **App(s) & host:** SketchStudio (Export, "Download SVG")
+- **Report:** closed outlines come out as LOOSE pieces: a rectangle with a line touching a corner `{"polygon":0,"line":5}`, two rectangles sharing a side `{"polygon":0,"line":8}`, a centre-to-centre slot `{"line":2,"path":2}`, a rectangle with one corner filleted `{"line":4,"path":1}`. Only a lone all-line outline was one `<polygon>`.
+- **What was wrong:** an outline was written closed only when it was made of lines alone and touched nothing; any arc / bezier in it, or any curve touching it, wrote every curve as its own element.
+- **Cause:** `apps/sketchstudio/ui/export-manager.js` `buildSVG` walked its own graph: line ends joined by coordinates rounded to 6 decimals, a `<polygon>` only for a component whose every node had degree 2 and every edge was a line.
+- **Fix:** `buildSVG` reads WHAT it writes from the app's one closed-shape finder (`#core/loop-finder.js` `findLoops` / `findOpenChains`, the calls Shaper's Prepare and cut file make) on the exported shapes (`exportedShapes`): every closed outline (lines, arcs, beziers, mixed) is ONE closed `<path ... Z>`, a circle stays a `<circle>`, every open chain is ONE `<path>` (its walk: `#core/loop-geometry.js chainWalk`, moved unchanged out of `chainToPathD`, which writes Shaper's chains from it byte-identically). Every curve is written once: a loop is written closed only when none of its curves is written yet (the finder's order), so of two loops sharing a curve (a rectangle with a divider) the second leaves its other curves to an open path (advisor ruling B). The one Y flip (`transform` / `turn`, BUG-371 / BUG-376) writes every point and arc; arcApprox (arcs / beziers sampled as `L`s), precision and stroke options as before. The coordinate join and the graph walk are deleted.
+- **Task id(s):** `1040`
+- **Fix merge sha:** open (`agents/svg-loops-1040`, awaiting merge)
+- **Guarding test file(s):** `tests/svg-loops-1040-node.test.js` (`S-1` the 6 measured drawings + a bezier loop + an open line + arc chain + a divided rectangle with a circle: closed outlines, every curve once, Invert Y off / on, arcApprox; `S-2` the round trip through the app's SVG import), `tests/export.test.js`, `tests/shape-bugs-1036-node.test.js` (`N-3`), `tests/export-roundtrip-1027-node.test.js`
+- **Status:** fixed
+- **Family:** `export-svg`
+- **Related:** BUG-300, BUG-371, BUG-376, BUG-400, BUG-402
+- **History:** measured by the advisor 2026-11-27 -> fixed in task `1040`. Counts after (`tests/svg-loops-1040-node.test.js`): rect + line `closed 1, open 1`, two rects `closed 2`, slot `closed 1`, filleted rect `closed 1`.
+
+### BUG-402
+- **Date / turn:** 2026-11-27 (found in task `1040`)
+- **Reported by:** task `1040` (the DXF check the task asked for)
+- **App(s) & host:** SketchStudio (Export, "Download DXF")
+- **Report:** the DXF export never joins curves: every line / arc / bezier / circle is its own entity (`LINE` / `ARC` / `SPLINE` / `CIRCLE`), no closed outline is ever one `LWPOLYLINE` (with bulges for arcs). One closed rectangle: `{"LINE":4}`.
+- **What was wrong:** a closed outline is 4 (or more) loose entities in the DXF, the same problem BUG-401 fixed in the SVG.
+- **Cause:** `apps/sketchstudio/ui/export-manager.js` `buildDXF` writes one entity per exported shape; it reads no loop.
+- **Fix:** open (task `1040` stopped on DXF, as told: not fixed there)
+- **Task id(s):** `1040` (found)
+- **Fix merge sha:** none
+- **Guarding test file(s):** none yet
+- **Status:** open
+- **Family:** `export-svg`
+- **Related:** BUG-401
+- **History:** found in task `1040` (`.evidence/1040/sample-output.txt`: `DXF of one closed rectangle (4 lines): {"LINE":4}`).
+
 ### BUG-410
 - **Date / turn:** 2026-11-27 (found in task `1041`)
 - **Reported by:** owner (raised through the advisor during task `1041`)
@@ -3657,7 +3705,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | Family | Timeline (oldest first) |
 |---|---|
 | `build-deploy` | BUG-062 (11-21) |
-| `export-svg` | BUG-300 (11-27), BUG-301 (11-27), BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19), BUG-371 (11-27), BUG-376 (11-27) |
+| `export-svg` | BUG-300 (11-27), BUG-301 (11-27), BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19), BUG-371 (11-27), BUG-376 (11-27), BUG-401 (11-27), BUG-402 (11-27, open) |
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
@@ -3670,7 +3718,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `storage-lifecycle` | BUG-305 (11-27), BUG-306 (11-27), BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16), BUG-372 (11-27) |
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
-| `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22), BUG-374 (11-27, open) |
+| `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22), BUG-374 (11-27, open), BUG-400 (11-27) |
 | `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27), BUG-410 (11-27) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |

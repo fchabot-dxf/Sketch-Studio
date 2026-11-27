@@ -161,16 +161,25 @@ export function compoundPathD(outerLoop, holeLoops, state, { outerD = loopToPath
   return [outerD, ...(holeLoops || []).map(holeD).filter(Boolean)].join(' ');
 }
 
-// chainToPathD(chain, state) → an OPEN SVG path "d" from an open chain of shapes (lines / arcs / beziers).
-// Orders the chain's shapes end to end, emitting `M x y` then each curve's kind's path command (#core/curve-kinds pathSeg:
-// `L`, a direction-aware `A`, a cubic `C`). No Z. TASK 761: a bezier was skipped here before (its curve missing from the export).
+// chainToPathD(chain, state) → an OPEN SVG path "d" from an open chain of shapes (lines / arcs / beziers): its walk (chainWalk) written with
+// `M x y` per stroke then each curve's kind's path command (#core/curve-kinds pathSeg: `L`, a direction-aware `A`, a cubic `C`). No Z.
+// TASK 761: a bezier was skipped here before (its curve missing from the export).
 export function chainToPathD(chain, state) {
-  if (!chain || !state || !state.joints) return '';
+  return chainWalk(chain, state).map((stroke) => `M ${num(stroke[0].fromP.x)} ${num(stroke[0].fromP.y)} ` + stroke.map((st) => curveKind(st.shape).pathSeg(st.shape, state, st.fromP, st.toP)).join(' ')).join(' ');
+}
+
+// chainWalk(chain, state) → [stroke], stroke = [{ shape, fromP, toP, forward }] — TASK 1040: THE walk of an open chain (findOpenChains' chain: its
+// `shapes`, or `edges` = shape ids), end to end, read by chainToPathD (Shaper's cut file) and the SketchStudio SVG export (each writes the curves its
+// own way). Each curve exactly once, from `fromP` to `toP` (`forward` = from its kind's start end, #core/curve-kinds ends). A stroke starts at a
+// free end (a node of one curve) when there is one, else at the first node; a branch the walk cannot carry on through starts the next stroke.
+// (Moved unchanged out of chainToPathD.)
+export function chainWalk(chain, state) {
+  if (!chain || !state || !state.joints) return [];
   const shapeById = new Map((state.shapes || []).map((s) => [s.id, s]));
   const shapes = Array.isArray(chain.shapes)
     ? chain.shapes
     : (Array.isArray(chain.edges) ? chain.edges.map((id) => shapeById.get(id)).filter(Boolean) : []);
-  if (!shapes.length) return '';
+  if (!shapes.length) return [];
 
   const node = buildNodeMap(state);
   const pos = (jid) => state.joints.get(jid);
@@ -184,10 +193,10 @@ export function chainToPathD(chain, state) {
   if (shapes.length === 1) {
     const s = shapes[0];
     const e = endsOf(s);
-    if (!e) return '';
+    if (!e) return [];
     const pa = pos(e.a), pb = pos(e.b);
-    if (!pa || !pb) return '';
-    return `M ${num(pa.x)} ${num(pa.y)} ${curveKind(s).pathSeg(s, state, pa, pb)}`;
+    if (!pa || !pb) return [];
+    return [[{ shape: s, fromP: pa, toP: pb, forward: true }]];
   }
 
   // Multi-shape chain: build adjacency graph
@@ -213,7 +222,7 @@ export function chainToPathD(chain, state) {
   const allNodes = [...nodeDegrees.keys()].sort();
 
   const visitedShapes = new Set();
-  let d = '';
+  const strokes = [];
 
   while (visitedShapes.size < shapes.length) {
     // Find next unvisited shape to start or continue a walk
@@ -224,7 +233,7 @@ export function chainToPathD(chain, state) {
     if (!startNode) break;
 
     let curNode = startNode;
-    let subpathStarted = false;
+    const stroke = [];
 
     while (true) {
       const candidates = (nodeToShapes.get(curNode) || []).filter((s) => !visitedShapes.has(s.id));
@@ -242,16 +251,13 @@ export function chainToPathD(chain, state) {
       const fromP = pos(fromJid), toP = pos(toJid);
       if (!fromP || !toP) break;
 
-      if (!subpathStarted) {
-        d += (d ? ' ' : '') + `M ${num(fromP.x)} ${num(fromP.y)}`;
-        subpathStarted = true;
-      }
-      d += ' ' + curveKind(s).pathSeg(s, state, fromP, toP);
+      stroke.push({ shape: s, fromP, toP, forward });
       curNode = nextNode;
     }
+    if (stroke.length) strokes.push(stroke);
   }
 
-  return d;
+  return strokes;
 }
 
 

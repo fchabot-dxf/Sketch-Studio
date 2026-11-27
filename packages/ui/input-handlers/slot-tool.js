@@ -3,9 +3,8 @@ import { TOOL_MODES, SLOT_MODES, CONSTRAINT_TYPES, INFERENCE_TYPES } from '#core
 import { findInference } from '#core/inference-engine.js';
 import { addConstraint } from '#core/constraints.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
+import { circumcenter3Pt, arcSweepFor3Pt } from '#core/geometry.js';   // TASK 1022: THE 3-point circle (shared with the Arc tool's 3-Point mode)
 import {
-    circumcenter3Pt,
-    arcSweepFor3Pt,
     arcAngleSpan,
     perpDistToLine,
     arcWidthFromPoint,

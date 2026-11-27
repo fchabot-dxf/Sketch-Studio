@@ -4,10 +4,8 @@ import { TOOL_MODES, SLOT_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { createEngine } from '#core/constraint-solver.js';
 import { measureResidual } from '#core/constraint-verifier.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
-import { arcSweepInfo } from '#core/geometry.js';
+import { arcSweepInfo, circumcenter3Pt, arcSweepFor3Pt } from '#core/geometry.js';   // TASK 1022: moved from #core/slot.js
 import {
-  circumcenter3Pt,
-  arcSweepFor3Pt,
   arcAngleSpan,
   makeSlotCenterToCenter,
   makeSlotOverall,

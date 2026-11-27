@@ -6,6 +6,7 @@
 import { CONSTRAINT_TYPES, SLOT_MODES } from './constants.js';
 import { createConstraint } from './constraints.js';
 import { makeArc } from './shapes.js';
+import { circumcenter3Pt, arcSweepFor3Pt } from './geometry.js';   // TASK 1022: THE 3-point circle (shared with the Arc tool's 3-Point mode)
 import { newShapeId } from './shape-id.js';
 
 const TAU = Math.PI * 2;
@@ -14,34 +15,6 @@ const MIN_SPAN = 0.1;
 
 function mod2pi(a) {
   return ((a % TAU) + TAU) % TAU;
-}
-
-/** Circumcircle { center, radius } of three non-collinear points, or null. */
-export function circumcenter3Pt(p1, p2, p3) {
-  if (!p1 || !p2 || !p3) return null;
-  const ax = p1.x, ay = p1.y;
-  const bx = p2.x, by = p2.y;
-  const cx = p3.x, cy = p3.y;
-  const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-  if (!Number.isFinite(d) || Math.abs(d) < 1e-6) return null;
-  const a2 = ax * ax + ay * ay;
-  const b2 = bx * bx + by * by;
-  const c2 = cx * cx + cy * cy;
-  const ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
-  const uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
-  const radius = Math.hypot(ax - ux, ay - uy);
-  if (!Number.isFinite(radius) || radius < MIN_SPAN) return null;
-  return { center: { x: ux, y: uy }, radius };
-}
-
-/** True if the CCW sweep from p1 to p2 around center passes through p3. */
-export function arcSweepFor3Pt(center, p1, p2, p3) {
-  const a1 = Math.atan2(p1.y - center.y, p1.x - center.x);
-  const a2 = Math.atan2(p2.y - center.y, p2.x - center.x);
-  const a3 = Math.atan2(p3.y - center.y, p3.x - center.x);
-  const d12 = mod2pi(a2 - a1);
-  const d13 = mod2pi(a3 - a1);
-  return d13 <= d12;
 }
 
 /** Positive angular span (in radians, 0..2pi] from p1 to p2 for the given sweep direction. */

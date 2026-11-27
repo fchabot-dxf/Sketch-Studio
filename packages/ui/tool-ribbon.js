@@ -8,7 +8,7 @@
 
 import { switchToTool, leaveActiveTool, restartActiveTool, toggleFixedSelection, selectionLockState, TOOL_BEGIN } from '#ui/input-manager.js';
 import { ensureIconSymbols } from '#ui/cursor-manager.js';
-import { TOOL_MODES, RECT_MODES, SLOT_MODES } from '#core/constants.js';
+import { TOOL_MODES, RECT_MODES, SLOT_MODES, ARC_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
 import { listenOutsidePress } from '#ui/outside-press.js';
 import { SHORT_VIEWPORT_QUERY, isShortViewport } from '#ui/short-viewport.js';
@@ -41,6 +41,13 @@ const SLOT_VARIANTS = [
   { mode: SLOT_MODES.CENTER_POINT_ARC, icon: 'icon-tool-slot-arccenter', label: 'Center Point Arc Slot' },
 ];
 
+// TASK 1022: Arc variants (Fusion 360 Create > Arc labels), the same dropdown mechanism as Rect / Slot. The default (Center Point Arc, what the Arc button
+// always drew) is first; Fusion lists 3-Point Arc first (a declared divergence: the first row is the mode a fresh page draws).
+const ARC_VARIANTS = [
+  { mode: ARC_MODES.CENTER_START_END, icon: 'icon-tool-arc-cse', label: 'Center Point Arc' },
+  { mode: ARC_MODES.THREE_POINT,      icon: 'icon-tool-arc-3pt', label: '3-Point Arc' },
+];
+
 // The SHARED sketcher groups (icon = cursor-manager symbol id; label = the SketchStudio button label; shortcut = its id in shortcuts.js, TASK 740:
 // the key that does what the button does, shown in the button's title).
 // TASK 647: Select is its own section, first, like Fusion's SELECT panel.
@@ -53,7 +60,7 @@ const CREATE = [
   { tool: TOOL_MODES.SLOT,    icon: 'icon-tool-slot-c2c', label: 'Slot', variants: SLOT_VARIANTS, modeKey: 'slotMode', eventName: 'slotMode', shortcut: 'tool.slot' },
   { tool: TOOL_MODES.CIRCLE,  icon: 'icon-tool-circle',   label: 'Circle', shortcut: 'tool.circle' },
   { tool: TOOL_MODES.POLYGON, icon: 'icon-tool-polygon',  label: 'Polygon', shortcut: 'tool.polygon' }, // TASK 483: regular polygon; TASK 596: its side count is an on-canvas box after the centre click
-  { tool: TOOL_MODES.ARC,     icon: 'icon-tool-arc-cse',  label: 'Arc', shortcut: 'tool.arc' }, // single-mode in the source (no dropdown)
+  { tool: TOOL_MODES.ARC,     icon: 'icon-tool-arc-cse',  label: 'Arc', variants: ARC_VARIANTS, modeKey: 'arcMode', eventName: 'arcMode', shortcut: 'tool.arc' }, // TASK 1022: Center Point / 3-Point
   { tool: TOOL_MODES.BEZIER,  icon: 'icon-tool-bezier',   label: 'Bezier', shortcut: 'tool.bezier' }, // UNIFY-3-tool: shared pen tool (all apps)
   { tool: TOOL_MODES.TEXT,    icon: 'icon-tool-text',     label: 'Text', shortcut: 'tool.text' }, // TASK 845: editable text (#ui/input-handlers/text-tool.js)
 ];
@@ -101,7 +108,7 @@ const CONSTRAIN = [
 // Lock is an ACTION (not a drawing mode): the same toggleFixedSelection as the F key and the context menu.
 const LOCK = { action: 'lock', id: 'btn-lock', icon: 'icon-lock', label: 'Lock', title: 'Lock / Unlock', shortcut: 'sketch.fix' };
 
-// TASK 740: every built-in button, for tests/shortcuts.test.js (each names its shortcut). Not tools of their own: the Rect / Slot variant rows (they
+// TASK 740: every built-in button, for tests/shortcuts.test.js (each names its shortcut). Not tools of their own: the Rect / Slot / Arc variant rows (they
 // set the tool's mode; the tool's key opens it with the last mode) and the section names (they open a dropdown).
 export const RIBBON_TOOLS = Object.freeze([...SELECT, ...CREATE, ...EDIT, ...PROFILE_ACTIONS, ...INSPECT, ...CONSTRAIN, LOCK]);
 
@@ -110,6 +117,7 @@ const ICON_IDS = [
   ...SELECT.map(t => t.icon), ...CREATE.map(t => t.icon), ...EDIT.filter(t => t.icon).map(t => t.icon), ...INSPECT.map(t => t.icon), ...CONSTRAIN.map(t => t.icon), LOCK.icon,
   ...RECT_VARIANTS.map(v => v.icon),
   ...SLOT_VARIANTS.map(v => v.icon),
+  ...ARC_VARIANTS.map(v => v.icon),
 ];
 
 let stylesInjected = false;

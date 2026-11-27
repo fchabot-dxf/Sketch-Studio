@@ -277,7 +277,7 @@ const quiet = (fn) => { const w = console.warn, l = console.log; console.warn = 
   const svg = quiet(() => buildSVG(st3, {})), dxf = quiet(() => buildDXF(st3, {}));
   const nLetters = textOutlineOf(st3, t3).length;
   ok(svg && / C /.test(svg) && (svg.match(/<(path|line|polygon)\b/g) || []).length > 0 && !/<text\b/.test(svg), `SketchStudio SVG writes the letters (${nLetters} curves: cubic paths, lines), no <text>`);
-  ok(/SPLINE/.test(dxf) && /LINE/.test(dxf), 'SketchStudio DXF writes them (SPLINE / LINE)');
+  ok(!/SPLINE/.test(dxf) && /\r\nPOLYLINE\r\n/.test(dxf), 'SketchStudio DXF writes them (R12 POLYLINEs, a bezier its sampled points: TASK 1043, BUG-421: no SPLINE)');
   eq(coreShapeToPolyline(t3, st3.joints), [], 'the plotter draws nothing for the text shape itself');
   ok(textOutlineOf(st3, t3).every((s) => (coreShapeToPolyline(s, st3.joints) || []).length >= 2), 'the plotter strokes every letter');
   ok(!isTextOutline(t3), 'the text shape is not a letter');

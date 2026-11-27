@@ -2,20 +2,22 @@
 // 66 = 1, flag 70 = 1, its VERTEXes, SEQEND; a bulge 42 on the VERTEX that starts each arc = tan(sweep / 4), positive counter-clockwise in the DXF's Y-up
 // plane) and each open chain as ONE open POLYLINE, read from the SAME decomposition the SVG export writes (export-manager.js exportOutlines: the app's ONE
 // loop finder, TASK 1040). Not an LWPOLYLINE: Fusion's DXF import refuses those (the advisor, measured 2026-11-27). A circle stays a CIRCLE, a lone line /
-// arc stays a LINE / ARC, an exact bezier stays its SPLINE (a polyline holds no cubic: its outline is the SPLINE + one open POLYLINE of the rest, the
-// joining ends written with the very same coordinates); with arcApprox every outline (a bezier's and a circle's too) is one closed POLYLINE of points.
+// arc stays a LINE / ARC. A bezier is its SAMPLED points inside the polyline (#core/curve-kinds, chord deviation <= CURVE_TOLERANCE_MM), so an outline with a
+// bezier is ONE closed POLYLINE too and NO SPLINE is ever written (BUG-421: Fusion refuses any DXF holding a SPLINE; R12 has none). Declared limit: our own
+// DXF import gives a bezier back as those lines. With arcApprox every outline (a circle's too) is one closed POLYLINE of points.
 //   D-1 the drawings of svg-loops-1040 (drawn with the real tools: node kit): the entity kinds and counts, the closed flags, the bulges (their size from the
-//       arc's sweep, their sign the outline's turn), EVERY curve written exactly once, the DXF Y-up (every point and every arc's turn mirrored)
+//       arc's sweep, their sign the outline's turn), EVERY curve written exactly once (a bezier: one chain of segments from its start to its end, each
+//       vertex on the curve, the curve within CURVE_TOLERANCE_MM of them), no SPLINE, the DXF Y-up (every point and every arc's turn mirrored)
 //   D-2 arcApprox: no ARC, no SPLINE, no bulge; every closed outline one closed POLYLINE; the same points as the exact file's ends
-//   D-3 the round trip: each file through the app's own DXF import (#core/dxf-import) gives back the same curves (lines, arcs with the same radius, side and
-//       direction, circles, the bezier) and the same closed outlines
+//   D-3 the round trip: each file through the app's own DXF import (#core/dxf-import) gives back exactly the file's segments: the same curves (lines, arcs
+//       with the same radius, side and direction, circles), a bezier as its sampled lines (the declared limit), and the same closed outlines
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { open } from './helpers/node-app.js';
 import { buildDXF } from '#app/ui/export-manager.js';
 import { importDxf } from '#core/dxf-import.js';
 import { findLoops } from '#core/loop-finder.js';
-import { exportedShapes, bezierPoints } from '#core/curve-kinds.js';
+import { exportedShapes, bezierPoints, CURVE_TOLERANCE_MM } from '#core/curve-kinds.js';
 import { arcSweepInfo } from '#core/geometry.js';
 
 const failures = [];
@@ -68,7 +70,7 @@ const DRAWINGS = {
   }, { entities: { POLYLINE: 1 }, closed: 1, open: 0, bulges: [T45] }],
   'a bezier loop (2 lines + a bezier)': [(app) => lay(app, [['p', 0, 0], ['q', 40, 0], ['q2', 40, 0], ['r', 40, -30], ['r2', 40, -30], ['p2', 0, 0]],
     [L('bl1', 'p', 'q'), L('bl2', 'q2', 'r'), { id: 'bz', type: 'bezier', joints: ['r2', 'p2'], c1: [30, -45], c2: [-10, -35] }], [['q', 'q2'], ['r', 'r2'], ['p', 'p2']]),
-  { entities: { SPLINE: 1, POLYLINE: 1 }, closed: 0, open: 1, bulges: [] }],
+  { entities: { POLYLINE: 1 }, closed: 1, open: 0, bulges: [] }], // ONE closed POLYLINE: the 2 lines and the bezier's samples
   'an open chain: a line + an arc': [(app) => lay(app, [['a', 0, 0], ['b', 30, 0], ['b2', 30, 0], ['ac', 30, -10], ['ae', 40, -10]],
     [L('ol', 'a', 'b'), { id: 'oa', type: 'arc', subType: 'CENTER', joints: ['ac', 'b2', 'ae'], sweep: false }], [['b', 'b2']]), { entities: { POLYLINE: 1 }, closed: 0, open: 1, bulges: [T45] }],
   'a rect with a divider (two loops share it) + a circle': [(app) => lay(app, [['a', 0, 0], ['m', 20, 0], ['b', 40, 0], ['c', 40, -20], ['n', 20, -20], ['d', 0, -20], ['o', 70, -10]],
@@ -114,26 +116,58 @@ function bulgeKey(p, q, b) {
   const dx = q.x - p.x, dy = q.y - p.y, chord = Math.hypot(dx, dy);
   return arcKey(p, q, { x: (p.x + q.x) / 2 + b / 2 * dy, y: (p.y + q.y) / 2 - b / 2 * dx }, chord * (1 + b * b) / (4 * Math.abs(b)));
 }
-/** every curve of a DXF as its key (Y-up, as written), and the polylines read */
+/** every segment of a DXF as its key (Y-up, as written; `segs`: [{ key, a, b }], a / b the ends of a straight one), and the polylines read; a SPLINE (or any
+ *  other entity) throws */
 function fileKeys(dxf) {
-  const keys = [], polys = [];
+  const keys = [], polys = [], segs = [];
+  const straight = (a, b) => { const key = lineKey(a, b); keys.push(key); segs.push({ key, a, b }); };
   for (const e of entitiesOf(dxf)) {
-    if (e.type === 'LINE') keys.push(lineKey({ x: num(e, 10), y: num(e, 20) }, { x: num(e, 11), y: num(e, 21) }));
-    else if (e.type === 'CIRCLE') keys.push(circleKey({ x: num(e, 10), y: num(e, 20) }, num(e, 40)));
+    if (e.type === 'LINE') straight({ x: num(e, 10), y: num(e, 20) }, { x: num(e, 11), y: num(e, 21) });
+    else if (e.type === 'CIRCLE') { const key = circleKey({ x: num(e, 10), y: num(e, 20) }, num(e, 40)); keys.push(key); segs.push({ key }); }
     else if (e.type === 'ARC') {
       const c = { x: num(e, 10), y: num(e, 20) }, r = num(e, 40), a0 = num(e, 50) * Math.PI / 180, a1 = num(e, 51) * Math.PI / 180;
       const span = ((a1 - a0) % TAU + TAU) % TAU, at = (a) => ({ x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) });
-      keys.push(arcKey(at(a0), at(a1), at(a0 + span / 2), r));
-    } else if (e.type === 'SPLINE') {
-      const xs = e.pairs.filter((p) => p[0] === 10).map((p) => Number(p[1])), ys = e.pairs.filter((p) => p[0] === 20).map((p) => Number(p[1]));
-      keys.push(bezKey(xs.map((x, i) => ({ x, y: ys[i] }))));
+      const key = arcKey(at(a0), at(a1), at(a0 + span / 2), r); keys.push(key); segs.push({ key });
     } else if (e.type === 'POLYLINE') {
       const p = polyOf(e); polys.push(p);
-      const segs = p.closed ? p.verts.length : p.verts.length - 1;
-      for (let i = 0; i < segs; i++) keys.push(bulgeKey(p.verts[i], p.verts[(i + 1) % p.verts.length], p.verts[i].bulge));
+      const n = p.closed ? p.verts.length : p.verts.length - 1;
+      for (let i = 0; i < n; i++) {
+        const a = p.verts[i], b = p.verts[(i + 1) % p.verts.length];
+        if (a.bulge) { const key = bulgeKey(a, b, a.bulge); keys.push(key); segs.push({ key }); } else straight(a, b);
+      }
     } else throw new Error('unexpected entity ' + e.type);
   }
-  return { keys: keys.sort(), polys };
+  return { keys: keys.sort(), polys, segs };
+}
+// the cubic P at t; the distance from q to segment a b; from q to the cubic (the nearest of 4000 samples, refined by a golden-section search either side)
+const cubicAt = (P, t) => { const u = 1 - t; return { x: u * u * u * P[0].x + 3 * u * u * t * P[1].x + 3 * u * t * t * P[2].x + t * t * t * P[3].x, y: u * u * u * P[0].y + 3 * u * u * t * P[1].y + 3 * u * t * t * P[2].y + t * t * t * P[3].y }; };
+const segDist = (q, a, b) => { const vx = b.x - a.x, vy = b.y - a.y, L2 = vx * vx + vy * vy, t = L2 ? Math.max(0, Math.min(1, ((q.x - a.x) * vx + (q.y - a.y) * vy) / L2)) : 0; return Math.hypot(q.x - a.x - t * vx, q.y - a.y - t * vy); };
+function distToCubic(P, q) {
+  const N = 4000, d = (t) => { const c = cubicAt(P, t); return Math.hypot(c.x - q.x, c.y - q.y); };
+  let k = 0; for (let i = 1; i <= N; i++) if (d(i / N) < d(k / N)) k = i;
+  let lo = Math.max(0, (k - 1) / N), hi = Math.min(1, (k + 1) / N);
+  for (let it = 0; it < 60; it++) { const m1 = hi - (hi - lo) / 1.618, m2 = lo + (hi - lo) / 1.618; if (d(m1) < d(m2)) hi = m2; else lo = m1; }
+  return d((lo + hi) / 2);
+}
+/** the DXF holds every exported curve of st exactly once, Y-up: a line / arc / circle as its key; a bezier as ONE chain of straight segments from its start to
+ *  its end (each end point used once, every inner vertex twice), every vertex ON the curve (1e-5: the written 6 decimals), the curve within
+ *  CURVE_TOLERANCE_MM of the chain (2001 points along it); nothing else. → fileKeys(dxf) */
+function checkCurves(name, st, dxf) {
+  const read = fileKeys(dxf), rest = read.segs.slice();
+  for (const k of curveKeys(st, true).filter((x) => !x.startsWith('C '))) { const i = rest.findIndex((sg) => sg.key === k); assert(i >= 0, `${name}: ${k} written`); rest.splice(i, 1); }
+  for (const s of exportedShapes(st).filter((x) => x.type === 'bezier')) {
+    const P = bezierPoints(s, st.joints).map((q) => ({ x: q.x, y: -q.y }));
+    const mine = rest.filter((sg) => sg.a && distToCubic(P, sg.a) < 1e-5 && distToCubic(P, sg.b) < 1e-5);
+    assert(mine.length >= 2, `${name}: the bezier ${s.id} is written as ${mine.length} segments`);
+    const uses = new Map(); for (const sg of mine) for (const q of [sg.a, sg.b]) uses.set(pt(q), (uses.get(pt(q)) || 0) + 1);
+    const ends = [pt(P[0]), pt(P[3])];
+    assert([...uses].every(([k, n]) => n === (ends.includes(k) ? 1 : 2)) && ends.every((k) => uses.get(k) === 1), `${name}: the bezier ${s.id}'s segments are one chain from its start to its end`);
+    let worst = 0; for (let i = 0; i <= 2000; i++) { const q = cubicAt(P, i / 2000); worst = Math.max(worst, Math.min(...mine.map((sg) => segDist(q, sg.a, sg.b)))); }
+    assert(worst <= CURVE_TOLERANCE_MM + 1e-5, `${name}: the bezier ${s.id} is within ${CURVE_TOLERANCE_MM} mm of its segments (${worst})`);
+    for (const sg of mine) rest.splice(rest.indexOf(sg), 1);
+  }
+  assert.deepStrictEqual(rest.map((sg) => sg.key), [], `${name}: nothing else is written`);
+  return read;
 }
 /** the curves of a state (the exported ones), each as its key, Y negated when `yUp` (a DXF's plane) */
 function curveKeys(st, yUp = false) {
@@ -171,40 +205,37 @@ for (const [name, [drawIt, want]] of Object.entries(DRAWINGS)) {
       const st = app.state;
       const dxf = buildDXF(st, { precision: 6 });
       assert.deepStrictEqual(kinds(dxf), want.entities, `${name}: the entities written`);
-      const { keys, polys } = fileKeys(dxf);
+      assert(!/\r\nSPLINE\r\n/.test(dxf), `${name}: no SPLINE (Fusion refuses it, BUG-421)`);
+      const { polys } = checkCurves(name, st, dxf);
       assert.deepStrictEqual([polys.filter((p) => p.closed).length, polys.filter((p) => !p.closed).length], [want.closed, want.open], `${name}: closed / open POLYLINEs (flag 70)`);
       for (const p of polys) assert(p.r12 && p.verts.length >= 2, `${name}: each POLYLINE is R12's: 66 = 1, the dummy point 0, its VERTEXes, a SEQEND`);
       assert(!/\r\nLWPOLYLINE\r\n/.test(dxf), `${name}: no LWPOLYLINE (Fusion's DXF import refuses it)`);
       assert.deepStrictEqual(polys.flatMap((p) => p.verts.map((v) => R(Math.abs(v.bulge)))).filter((b) => b).sort(), want.bulges.map(R).sort(), `${name}: the bulges tan(sweep / 4)`);
-      assert.deepStrictEqual(keys, curveKeys(st, true), `${name}: the file's segments are the drawing's curves, each exactly once, Y-up (Y negated: every point, every arc's side and turn)`);
       assert.strictEqual(buildDXF(st, { precision: 6, invertY: true }), dxf, `${name}: "Invert Y axis" is SVG only: the DXF is the same`);
       // a convex outline turns one way all round: each arc's bulge has the sign of the outline's own turn (its vertices' signed area, Y-up)
       for (const p of polys.filter((q) => q.closed)) for (const v of p.verts) if (v.bulge) assert.strictEqual(Math.sign(v.bulge), Math.sign(signedArea(p.verts)), `${name}: an arc's bulge turns with its outline`);
-      if (name.startsWith('a bezier loop')) { // the SPLINE's two ends ARE the POLYLINE's two ends, the very same text (an importer joining by end points closes it)
-        const sp = entitiesOf(dxf).find((e) => e.type === 'SPLINE'), x = sp.pairs.filter((q) => q[0] === 10).map((q) => q[1]), y = sp.pairs.filter((q) => q[0] === 20).map((q) => q[1]);
-        const ends = [`${x[0]},${y[0]}`, `${x[3]},${y[3]}`].sort(), pv = polys[0].verts;
-        assert.deepStrictEqual([pv[0].text, pv[pv.length - 1].text].sort(), ends, `${name}: the SPLINE ends ${ends} = the POLYLINE ends, as written`);
-      }
       // D-2 arcApprox: every curve sampled into polylines (no ARC, no SPLINE, no bulge); every closed outline (the drawing's loops a written outline holds,
       // the bezier's and the circle's too) one closed POLYLINE
       const ap = buildDXF(st, { precision: 6, arcApprox: true, arcSeg: 8 });
       assert(!/\r\n(ARC|SPLINE|CIRCLE)\r\n/.test(ap) && !/\r\n42\r\n/.test(ap), `${name}: arcApprox: no ARC, SPLINE, CIRCLE or bulge`);
       const apPolys = fileKeys(ap).polys;
-      assert.strictEqual(apPolys.filter((p) => p.closed).length, want.closed + (name.startsWith('a bezier loop') ? 1 : 0) + (want.entities.CIRCLE || 0), `${name}: arcApprox: each closed outline one closed POLYLINE`);
-      exported[name] = { dxf, keys: curveKeys(st), arcs: arcsOf(st), loops: findLoops({ joints: st.joints, shapes: exportedShapes(st), constraints: st.constraints }).length };
+      assert.strictEqual(apPolys.filter((p) => p.closed).length, want.closed + (want.entities.CIRCLE || 0), `${name}: arcApprox: each closed outline one closed POLYLINE`);
+      exported[name] = { dxf, hasBezier: exportedShapes(st).some((x) => x.type === 'bezier'), keys: curveKeys(st), arcs: arcsOf(st), loops: findLoops({ joints: st.joints, shapes: exportedShapes(st), constraints: st.constraints }).length };
     } finally { await app.close(); }
   });
 }
 
 // ───────────────────────────── D-3 the round trip ─────────────────────────────
-await run('D-3 the round trip: each file through the app\'s own DXF import gives back the same curves (lines, arcs: radius, side, direction; circles; the bezier) and the same closed outlines', async () => {
+await run('D-3 the round trip: each file through the app\'s own DXF import gives back the file\'s segments: the same curves (lines, arcs: radius, side, direction; circles), a bezier as its sampled lines (declared limit), the same closed outlines', async () => {
   assert.deepStrictEqual(Object.keys(exported), Object.keys(DRAWINGS), 'every drawing was exported (D-1)');
   for (const [name, e] of Object.entries(exported)) {
     let n = 0;
     const res = importDxf(e.dxf, { genJ: () => 'r' + (n++), idPrefix: 'rt' });
     assert(!res.error && res.stats.skipped.length === 0, `${name}: imports with nothing skipped (${JSON.stringify(res.stats && res.stats.skipped)})`);
     const st = { joints: new Map(res.joints.map((j) => [j.id, { x: j.x, y: j.y }])), shapes: res.shapes, constraints: [] };
-    assert.deepStrictEqual(curveKeys(st), e.keys, `${name}: the imported curves are the drawn ones (the same way up)`);
+    assert.deepStrictEqual(curveKeys(st, true), fileKeys(e.dxf).keys, `${name}: the import gives back exactly the file's segments (the same way up)`);
+    if (!e.hasBezier) assert.deepStrictEqual(curveKeys(st), e.keys, `${name}: the imported curves are the drawn ones`);
+    else assert(st.shapes.every((x) => x.type !== 'bezier'), `${name}: declared limit: the bezier comes back as its sampled lines`);
     assert.deepStrictEqual(arcsOf(st), e.arcs, `${name}: every arc comes back with its centre, radius and direction`);
     assert.strictEqual(findLoops(st).length, e.loops, `${name}: the drawing's ${e.loops} closed outline(s) come back closed (the import joins the entities by their end points)`);
   }
@@ -230,19 +261,20 @@ await run('D-4 the fixture drawings (bezier-loops-761\'s set): every curve once,
   for (const [name, st] of docs) {
     const dxf = buildDXF(st, { precision: 6 });
     if (!dxf) { assert.strictEqual(exportedShapes(st).length, 0, `${name}: no file only when nothing is exported`); continue; }
-    const read = fileKeys(dxf);
+    assert(!/\r\nSPLINE\r\n/.test(dxf), `${name}: no SPLINE`);
+    const read = checkCurves(name, st, dxf);
     polys += read.polys.length; closedPolys += read.polys.filter((p) => p.closed).length;
-    assert.deepStrictEqual(read.keys, curveKeys(st, true), `${name}: every curve written exactly once, Y-up`);
     let n = 0;
     const res = importDxf(dxf, { genJ: () => 'r' + (n++), idPrefix: 'rt' });
     const back = { joints: new Map(res.joints.map((j) => [j.id, { x: j.x, y: j.y }])), shapes: res.shapes, constraints: [] };
-    assert.deepStrictEqual(curveKeys(back), curveKeys(st), `${name}: the round trip gives back the same curves`);
+    assert.deepStrictEqual(curveKeys(back, true), read.keys, `${name}: the round trip gives back the file's segments`);
+    if (!exportedShapes(st).some((x) => x.type === 'bezier')) assert.deepStrictEqual(curveKeys(back), curveKeys(st), `${name}: the round trip gives back the same curves`);
     assert.deepStrictEqual(arcsOf(back), arcsOf(st), `${name}: and every arc's centre, radius and direction`);
     assert.strictEqual(findLoops(back).length, findLoops({ joints: st.joints, shapes: exportedShapes(st), constraints: st.constraints }).length, `${name}: and the same closed outlines`);
   }
   // the counts measured on this task's exporter (the fixtures are frozen); angle-dimension/owner-trapezoid-angle.json's nearly flat 17188 mm arc is the case
-  // that needs a bulge's extra decimals (at the coordinates' 6 it came back off)
-  assert.deepStrictEqual([docs.length, polys, closedPolys], [151, 97, 28], `the set: ${docs.length} drawings, ${polys} POLYLINEs written, ${closedPolys} closed`);
+  // that needs a bulge's extra decimals (at the coordinates' 6 it came back off); dxf/part-mm.dxf's SPLINE (a bezier once imported) is its sampled POLYLINE
+  assert.deepStrictEqual([docs.length, polys, closedPolys], [151, 98, 28], `the set: ${docs.length} drawings, ${polys} POLYLINEs written, ${closedPolys} closed`);
   console.log(`    D-4: ${docs.length} drawings, ${polys} POLYLINEs, ${closedPolys} closed`);
 });
 

@@ -1,4 +1,4 @@
-// Export manager: build SVG or DXF exports from sketch data (lines, arcs and, TASK 761, beziers: a cubic `C` / a DXF SPLINE); TASK 1043: both from ONE decomposition
+// Export manager: build SVG or DXF exports from sketch data (lines, arcs and, TASK 761, beziers: a cubic `C` / in a DXF its sampled points, TASK 1043); TASK 1043: both from ONE decomposition
 // (exportOutlines: closed outlines + open chains), an SVG closed <path>s, a DXF closed R12 POLYLINEs
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -221,16 +221,6 @@ export function buildDXF(state, opts = {}) {
     if (dir < 0) { const tmp = startAngle; startAngle = endAngle; endAngle = tmp; }
     lines.push('0','ARC','8','0','10',f(c.x),'20',f(c.y),'40',f(r),'50',f(startAngle),'51',f(endAngle));
   };
-  // TASK 761: a bezier is a cubic SPLINE (degree 3, its four control points, knots 0 0 0 0 1 1 1 1: what #core/dxf-import reads back as one bezier). TASK
-  // 1043: in its own order, its two ends the step's points (the nodes' points, the very ones the polyline beside it writes: an importer joining by end
-  // points closes the outline)
-  const splineEnt = (st) => {
-    const P = bezierPoints(st.shape, state.joints);
-    const [p0, p3] = st.forward ? [st.fromP, st.toP] : [st.toP, st.fromP];
-    lines.push('0','SPLINE','8','0','70','8','71','3','72','8','73','4','74','0');
-    for (const k of [0, 0, 0, 0, 1, 1, 1, 1]) lines.push('40', String(k));
-    for (const q of [p0, P[1], P[2], p3].map(to)) lines.push('10', f(q.x), '20', f(q.y), '30', f(0));
-  };
   // TASK 1043 (BUG-402): ONE R12 polyline: POLYLINE (66 = 1: vertices follow; its 10 / 20 / 30 the R12 dummy point 0; flag 70: 1 closed, 0 open), a VERTEX
   // per point of `verts` = [{ p (world), bulge }], then SEQEND. A vertex's bulge (42) is the segment to the next one (0 a line; tan(sweep / 4) an arc, positive
   // counter-clockwise in the DXF's Y-up plane). NOT an LWPOLYLINE: Fusion's DXF import refuses LWPOLYLINE files (measured by the advisor 2026-11-27, with and
@@ -250,8 +240,11 @@ export function buildDXF(state, opts = {}) {
     lines.push('0','SEQEND','8','0');
   };
   // a step's vertices, its end left out (the next step's start): a line its start; an arc its start with the bulge of its sweep turning the way it is walked
-  // (the one arc-sweep function; negating Y turns it round), with arcApprox its sampled points (arcSeg segments) as straight segments; a bezier (arcApprox
-  // only: otherwise it is its SPLINE) its sampled points (#core/curve-kinds)
+  // (the one arc-sweep function; negating Y turns it round), with arcApprox its sampled points (arcSeg segments) as straight segments; a bezier ALWAYS its
+  // sampled points, the kind's own sampling (#core/curve-kinds CURVE_KINDS.bezier.points: chord deviation <= CURVE_TOLERANCE_MM, 0.005 mm, the tolerance the
+  // hold part / pocket clearing / plotter polylines stand for a curve at), from the walk's own end points. TASK 1043 (BUG-421): NO SPLINE is written: a
+  // headerless R12 DXF cannot carry one, and Fusion's DXF import refuses any file holding a SPLINE (the advisor, measured 2026-11-27), so an outline with a
+  // bezier is ONE closed POLYLINE too
   const stepVerts = (st) => {
     const s = st.shape;
     if (s.type === 'arc') {
@@ -269,28 +262,15 @@ export function buildDXF(state, opts = {}) {
     }
     return [{ p: st.fromP, bulge: 0 }];
   };
-  // a run of steps (no exact bezier in it) as ONE polyline; an open run of ONE curve that has its own entity stays that entity (a LINE, an ARC)
-  const writeRun = (steps, closed) => {
+  // a walk (an outline's steps, closed, or an open stroke's) as ONE polyline; an open walk of ONE curve that has its own R12 entity stays that entity (a
+  // LINE, an ARC; a bezier has none: its polyline)
+  const writeWalk = (steps, closed) => {
     if (!steps.length) return;
     if (!closed && steps.length === 1 && steps[0].shape.type === 'line') return lineEnt(steps[0].fromP, steps[0].toP);
     if (!closed && steps.length === 1 && steps[0].shape.type === 'arc' && !arcApprox) return arcEnt(steps[0].shape);
     const verts = steps.flatMap(stepVerts);
     if (!closed) verts.push({ p: steps[steps.length - 1].toP, bulge: 0 });
     polyEnt(verts, closed);
-  };
-  // a walk (an outline's steps, closed, or an open stroke's): ONE polyline, or, with an exact bezier in it (a polyline holds no cubic; arcApprox off),
-  // each bezier its SPLINE and each run of lines and arcs between them one open polyline (an outline read from just after a bezier, so no run wraps
-  // round its start)
-  const writeWalk = (steps, closed) => {
-    const exactBezier = (st) => st.shape.type === 'bezier' && !arcApprox;
-    if (!steps.some(exactBezier)) return writeRun(steps, closed);
-    const k0 = closed ? steps.findIndex(exactBezier) + 1 : 0;
-    let run = [];
-    for (let i = 0; i < steps.length; i++) {
-      const st = steps[(k0 + i) % steps.length];
-      if (exactBezier(st)) { writeRun(run, false); run = []; splineEnt(st); } else run.push(st);
-    }
-    writeRun(run, false);
   };
 
   // TASK 1043 (BUG-402): what is written is exportOutlines' decomposition (the one the SVG writes too): every closed outline ONE closed polyline, a circle

@@ -244,13 +244,15 @@ const parseD = (d) => [...d.matchAll(/([MLCAZ])([^MLCAZ]*)/g)].map((m) => ({ c: 
   eq(chainToPathD(ch[0], open1), 'M 0 0 L 100 0 L 100 50 C 70 90 30 90 0 50', '3: the chain path has the bezier as a C');
   const svg2 = exportShaperSVG({ state: open1, entries: [{ target: { kind: 'chain', id: ch[0].id }, rec: { ...rec, cutType: 'online' } }], encoding: exportEncoding(), docUnit: 'mm' });
   ok(svg2.includes('d="M 0 0 L 100 0 L 100 50 C 70 90 30 90 0 50"'), '3: the On line export of an open chain with a bezier now contains the curve');
-  // SketchStudio SVG / DXF: the cubic, and a DXF SPLINE that the DXF import reads back as the same bezier
+  // SketchStudio SVG / DXF: the SVG the cubic; TASK 1043 (BUG-421): the DXF no SPLINE (Fusion refuses a DXF holding one; R12 has none): the outline is ONE
+  // closed R12 POLYLINE, the bezier its sampled points (CURVE_TOLERANCE_MM), so the DXF import reads it back as lines (declared limit;
+  // tests/dxf-loops-1043-node.test.js checks the samples against the curve)
   ok(/C 70\.000000 90\.000000 30\.000000 90\.000000 0\.000000 50\.000000/.test(buildSVG(S1)), '3: SketchStudio SVG writes the bezier as a cubic C');
   const dx = buildDXF(S1);
-  ok(dx.includes('SPLINE'), '3: SketchStudio DXF writes a SPLINE');
+  ok(!dx.includes('SPLINE') && (dx.match(/\r\nPOLYLINE\r\n/g) || []).length === 1, '3: SketchStudio DXF writes no SPLINE: the outline is one POLYLINE');
   let n = 0;
-  const back = importDxf(dx.replace(/\r\n/g, '\n'), { genJ: () => 'k' + (n++), idPrefix: 'r' }).shapes.filter((x) => x.type === 'bezier');
-  eq(back.map((b) => [b.c1, b.c2]), [[[70, 90], [30, 90]]], '3: and the DXF import reads it back as one bezier, the same way up (BUG-301: the export writes Y-up, the import flips it back)');
+  const back = importDxf(dx.replace(/\r\n/g, '\n'), { genJ: () => 'k' + (n++), idPrefix: 'r' }).shapes;
+  ok(back.length > 4 && back.every((x) => x.type === 'line'), `3: and the DXF import reads it back as ${back.length} lines (3 + the bezier's samples)`);
 }
 { // pocket clearing (Spiral, Loop on) and hold part (tabs) on the bezier outline
   const loops = findLoops(S1), loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, S1, byIdOf(S1))]));

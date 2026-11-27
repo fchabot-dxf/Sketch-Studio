@@ -26,7 +26,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 /** The CHORD DEVIATION (base mm) a bezier is sampled at wherever a polyline stands for it (loop polygons: containment, picking, offsets, the pocket
  *  clearing and hold part regions, the 3D Review; the plotter's strokes): the same 0.005 mm the hold part and the pocket clearing sample arcs at
  *  (HOLD_PART.chordTolMm, POCKET_CLEARING.chordTolMm), far below a router bit's or a pen's own error. The document and the exported files keep the
- *  exact cubic. */
+ *  exact cubic, except SketchStudio's DXF (TASK 1043, BUG-421: R12 has no cubic and Fusion refuses a SPLINE), which writes these samples. */
 export const CURVE_TOLERANCE_MM = 0.005;
 /** A bound on the steps of one bezier (a huge curve at the tolerance): 2048 segments. */
 export const BEZIER_MAX_STEPS = 2048;

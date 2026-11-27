@@ -6,7 +6,7 @@
 // → Shaper) from the SAME component. Self-contained: injects its <style> once + inject-IF-MISSING icon symbols
 // (reuses cursor-manager's ICONS, the single source of truth) so #icon-* resolve in any host.
 
-import { switchToTool, leaveActiveTool, toggleFixedSelection, selectionLockState, TOOL_BEGIN } from '#ui/input-manager.js';
+import { switchToTool, leaveActiveTool, restartActiveTool, toggleFixedSelection, selectionLockState, TOOL_BEGIN } from '#ui/input-manager.js';
 import { ensureIconSymbols } from '#ui/cursor-manager.js';
 import { TOOL_MODES, RECT_MODES, SLOT_MODES } from '#core/constants.js';
 import { doCombine, doUncombine } from '#ui/profile-actions.js';
@@ -398,10 +398,13 @@ export function createToolRibbon({ state, appId = 'default', extraGroups = [], o
       if (activeMode === v.mode) item.classList.add('active');
       item.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        // TASK 1030 (I-04): the active tool's button keeps its half-made draw; ANOTHER variant of it starts the tool again (the draw was the old shape)
+        const restart = !!state && state.currentTool === t.tool && state[t.modeKey] !== v.mode;
         if (state) state[t.modeKey] = v.mode;
         if (useEl) useEl.setAttribute('href', '#' + v.icon);
         menu.querySelectorAll('.sk-ribbon-menu-item').forEach(i => i.classList.toggle('active', i.dataset.mode === v.mode));
         pop.close();
+        if (restart) restartActiveTool(state);
         selectTool(t.tool);
         fire(t.eventName, v.mode);
       });

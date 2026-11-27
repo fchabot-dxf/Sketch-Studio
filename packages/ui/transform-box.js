@@ -279,7 +279,8 @@ export async function commitTransform(state, gid, op, { undo = state.captureUndo
 // ---- the typed value (the app's numeric box: .dim-input, placed by placeAnchoredBox, lengthText for a width)
 export const TRANSFORM_INPUT_ID = 'tbox-input';
 let openBox = null;
-function closeInput() { if (openBox && openBox.el.parentNode) openBox.el.parentNode.removeChild(openBox.el); openBox = null; }
+// TASK 1030 (I-09): exported for the shared tool cancel (input-manager cancelActiveWork): another tool picked closes the typed value
+export function closeTransformInput() { if (openBox && openBox.el.parentNode) openBox.el.parentNode.removeChild(openBox.el); openBox = null; }
 
 /** The op a typed text asks for, or { error }. Rotate: degrees, counter-clockwise ("30", "-45°"). Scale: a percent ("150", "150%") or a WIDTH
  *  with its unit ("80 mm", "3 in": the box's width becomes it). */
@@ -302,7 +303,7 @@ export function parseTransformInput(kind, text, box) {
 
 /** Open the typed angle (kind 'rotate') or scale ('scale') of group `gid`, beside `world` (its handle). Enter runs it, Esc closes. */
 export function openTransformInput(svg, state, gid, kind, world) {
-  closeInput();
+  closeTransformInput();
   if (typeof document === 'undefined') return null;
   ensureNumericInputStyles();
   const box = groupBox(state, gid), name = nameOf(state, gid);
@@ -317,7 +318,7 @@ export function openTransformInput(svg, state, gid, kind, world) {
   const run = async () => {
     const op = parseTransformInput(kind, el.value, groupBox(state, gid) || box);
     if (op.error) { el.setAttribute('aria-invalid', 'true'); showTip(gid, op.error, world); return; }
-    closeInput();
+    closeTransformInput();
     await commitTransform(state, gid, op, { at: world });
   };
   el.addEventListener('input', () => el.removeAttribute('aria-invalid'));
@@ -325,9 +326,9 @@ export function openTransformInput(svg, state, gid, kind, world) {
     ev.stopPropagation(); // typing never reaches the canvas shortcuts
     if (handleBoxUndoKey(ev, el, initial, () => {})) return;
     if (ev.key === 'Enter') { ev.preventDefault(); run(); }
-    else if (ev.key === 'Escape') { ev.preventDefault(); closeInput(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); closeTransformInput(); }
   });
-  el.addEventListener('blur', () => { setTimeout(() => { if (openBox && openBox.el === el && document.activeElement !== el) closeInput(); }, 150); });
+  el.addEventListener('blur', () => { setTimeout(() => { if (openBox && openBox.el === el && document.activeElement !== el) closeTransformInput(); }, 150); });
   // the press that opened it is still in flight: its click would take the focus back to the canvas
   const focusIt = () => { if (openBox && openBox.el === el) { el.focus(); el.select(); } };
   focusIt();

@@ -39,6 +39,7 @@
         if (sel === '#arc-dropdown .tool-dropdown-item') return dropdownItems;
         return [];
       },
+      querySelector: () => null, // TASK 1030: a tool switch runs the shared tool cancel (the canvas cursor reset looks the canvas up)
       addEventListener: () => {}
     };
     doc = global.document;

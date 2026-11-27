@@ -366,7 +366,7 @@ function setupListeners() {
             }
         }, uiState.mode === 'edit' ? undefined : {
             dirty: () => !!uiState.typed[0],
-            onAtDefault: (!uiState.typed[0] && !uiState.undoneToDefault) ? handleCancel : null
+            onAtDefault: (!uiState.typed[0] && !uiState.undoneToDefault) ? () => handleCancel({ undo: true }) : null
         })) return;
         const tab = e.key === 'Tab';
         const tabCommits = tab && (uiState.mode === 'edit' || uiState.mode === 'view'); // task 1008, D-15: the dimension's one field: Tab commits like Enter, focus stays
@@ -396,7 +396,7 @@ function setupListeners() {
             updateAssist({ complete: false });
         }, {
             dirty: () => !!uiState.typed[idx],
-            onAtDefault: (!uiState.typed[0] && !uiState.typed[1] && !uiState.undoneToDefault) ? handleCancel : null
+            onAtDefault: (!uiState.typed[0] && !uiState.typed[1] && !uiState.undoneToDefault) ? () => handleCancel({ undo: true }) : null
         })) return;
         if (e.key === 'Enter') handleCommit();
         if (e.key === 'Escape') handleCancel();
@@ -1064,7 +1064,9 @@ function showLiveBoxAgain() {
 }
 SettingsManager.subscribe((name) => { if (name === 'DOC_UNIT' || isPrecisionKey(name)) showLiveBoxAgain(); });
 
-function handleCancel() {
+// The box is closed by Esc, or by Ctrl+Z at its opening value ({ undo: true }, TASK 1030: input-manager runs the canvas Undo for it, which cancels the
+// pick and stays in the tool; Esc runs the canvas Esc).
+function handleCancel(detail = {}) {
     if (uiState.mode === 'edit' && uiState.target && (uiState.target.__newlyPlaced || uiState.target.__restoredDimension)) {
         if ((uiState.target.__newlyPlaced === true || uiState.target.__restoredDimension === true) && typeof uiState.target.__birthHistoryLength === 'number' && uiState.appState && uiState.appState.discardSnapshotAt) {
             uiState.appState.discardSnapshotAt(uiState.target.__birthHistoryLength);
@@ -1081,7 +1083,7 @@ function handleCancel() {
         uiState.target.__placing = false;
         if (state && state.placingConstraint === uiState.target) state.placingConstraint = null;
     }
-    window.dispatchEvent(new CustomEvent('liveDimensionCancelled'));
+    window.dispatchEvent(new CustomEvent('liveDimensionCancelled', { detail }));
     hideInput();
 }
 

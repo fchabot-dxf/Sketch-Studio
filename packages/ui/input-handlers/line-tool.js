@@ -124,6 +124,14 @@ function abortLine(state){
 export function finishLineChain(state){
     abortLine(state);
 }
+// TASK 1028 (B-05) + TASK 1030 (I-17): THE Line right-click. It ends the chain like Enter / Done, keeping the committed segments; a typed length is
+// committed first (one segment of that length). It never adds a segment to the cursor. A typed length the sketch refuses keeps the chain (the
+// edit box says why). Nothing drawn yet: nothing happens.
+export function rightClickLine(svg, state){
+    if (!state.active || state.active.mode !== TOOL_MODES.LINE) return;
+    if (lineState.lockedLength !== null && !finalizeLineFromActive(svg, state)) return;
+    finishLineChain(state);
+}
 // TASK 642: the point the Done button sits beside, one that does NOT follow the cursor (a button that flees the mouse cannot be clicked):
 // the rubber band's end only when typed length AND angle lock it, otherwise the chain's last committed joint (the rubber band's start).
 export function lineChainAnchor(state){

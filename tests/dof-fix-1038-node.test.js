@@ -133,6 +133,25 @@ const len = (app, s) => { const a = app.state.joints.get(s.joints[0]), b = app.s
   } finally { await app.close(); }
 }
 
+{ // N-A placement (#core/creation-placement.js PLACE.perpendicular): a new branch-locked perpendicular turns the mover RIGIDLY to 90 deg (Fusion),
+  // as the fusion-oracle cell perpendicular|LR|0,0 (main's least-change solve shortened that line 61.85 -> 45.26; the dot row alone -> 15.00)
+  const app = await openApp();
+  try {
+    app.tool('line'); for (const w of [{ x: 40, y: -40 }, { x: 110, y: -40 }]) { const p = app.toScreen(w.x, w.y); app.click(p.x, p.y); }
+    app.esc(); app.tool('line'); for (const w of [{ x: 45, y: -60 }, { x: 105, y: -75 }]) { const p = app.toScreen(w.x, w.y); app.click(p.x, p.y); }
+    app.esc(); app.frames(2);
+    const [A, B] = app.state.shapes.filter((s) => s.type === 'line');
+    const before = [len(app, A), len(app, B)];
+    const c = ConstraintManager.createConstraint(app.state, CONSTRAINT_TYPES.PERPENDICULAR, { shapes: [A.id, B.id] }, { source: 'toolbar' });
+    app.engine.solve(); app.frames(2);
+    const dir = (s) => { const a = app.state.joints.get(s.joints[0]), b = app.state.joints.get(s.joints[1]); return [b.x - a.x, b.y - a.y]; };
+    const [u, v] = [dir(A), dir(B)], cosAB = (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v)), cross = u[0] * v[1] - u[1] * v[0];
+    const after = [len(app, A), len(app, B)];
+    check(!!c && Math.abs(cosAB) < 1e-9 && Math.sign(cross) === c.branch && Math.abs(after[0] - before[0]) < 1e-6 && Math.abs(after[1] - before[1]) < 1e-6,
+      `N-A placement: perpendicular (branch ${c && c.branch}) cos ${cosAB.toExponential(1)}; lengths ${before.map((l) => l.toFixed(6)).join(', ')} -> ${after.map((l) => l.toFixed(6)).join(', ')} (kept: a rigid turn)`);
+  } finally { await app.close(); }
+}
+
 { // N-C: two circles + the Tangent tool's seam (shapes, branch) draws its glyph; a line-circle tangent stored as shapes only (an older form) too
   const app = await openApp();
   try {

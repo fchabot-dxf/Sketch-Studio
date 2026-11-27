@@ -1,7 +1,8 @@
 // tests/delete-dims-709-live.test.js -- TASK 709 (live headless, REAL mouse and REAL touch via CDP, Pen Plotter = the shared Design tab).
 // Deleting geometry deletes its dimensions (owner turn 1896; Fusion: a deleted curve or point takes every dimension on it, and its parameter):
 // a line L with its length d1 and the angle d2 to a line K, a line M with its length d3 (the survivor). Three ways to delete L:
-//   A. its END POINT picked, then Delete (the Delete key with the mouse, the footer's red X with a finger)
+//   A. its END POINT picked, then Delete (the Delete key with the mouse, the footer's red X with a finger): TASK 1044 THE POINT RULE (owner
+//      2026-11-27, Fusion): a curve's point is never deleted: NOTHING goes (no undo step, L, d1, d2 stay) and the hint shows
 //   B. the Trim tool on L (no crossing: the whole line goes)
 //   C. the line itself picked, then Delete
 // After each: L is gone, the labels of d1 and d2 are gone from the canvas, their rows are gone from the Parameters window (the footer fx button),
@@ -112,14 +113,17 @@ await (async () => {
       const b = await evalJs(`JSON.stringify(${STATE}.joints.get(window.__t709.b))`).then(JSON.parse);
       await tap(await toScreen(b.x, b.y));
       assert.deepStrictEqual(await evalJs(`JSON.stringify([...${STATE}.selectedJoints])`).then(JSON.parse), [await evalJs('window.__t709.b')], `[${kind}] A: the tap picks L's end point`);
+      await evalJs(`(() => { const c = document.getElementById('notification-container'); if (c) c.innerHTML = ''; return true; })()`);
       if (kind === 'mouse') await del(); else await press('#btn-delete-selection');
       await sleep(300);
-      assert.strictEqual(await hist(), h0 + 1, `[${kind}] A: one undo step`);
-      await checkGone('A (end point + Delete)', `${kind}-2-table-after-point-delete.png`);
+      assert.strictEqual(await hist(), h0, `[${kind}] A: the point rule: no undo step`);
+      assert.strictEqual(await hasL(), true, `[${kind}] A: the point rule: L stays`);
+      await labelsAll('A (end point + Delete: the point rule)');
+      assert.deepStrictEqual(await rowsNow(`${kind}-2-table-after-point-delete.png`), ['d1', 'd2', 'd3'], `[${kind}] A: the point rule: the rows d1, d2, d3 stay`);
+      const hintA = await evalJs(`(document.getElementById('notification-container') || { textContent: '' }).textContent`);
+      assert.ok(hintA.includes('Select the line to delete it, or the corner mark to separate.'), `[${kind}] A: the point rule's hint shows (${hintA})`);
       await shot(`${kind}-2-canvas-after-point-delete.png`, cr);
-      out('A: end point + Delete -> L, d1, d2 gone; d3 stays');
-      await undoAndCheck('A', h0);
-      await shot(`${kind}-3-canvas-after-undo.png`, cr);
+      out('A: end point + Delete -> NOTHING deleted (the point rule), the hint shows');
 
       // ---- B. the Trim tool on L
       await tool('tool-trim');

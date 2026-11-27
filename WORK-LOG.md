@@ -18676,3 +18676,50 @@ Split a shared point, Fusion's way (phase 1 of "one shared point for every join"
 - **DXF (BUG-402, open):** `buildDXF` writes one LINE / ARC / SPLINE / CIRCLE per shape and never an LWPOLYLINE: `DXF of one closed rectangle (4 lines): {"LINE":4}` (`.evidence/1040/sample-output.txt`). Stopped there, as the task said.
 - **Gate:** `npm run gate:quick` before the change: `GATE tier=quick jobs=quick=22 files=684 pass=684 fail=0`; after: `GATE tier=quick jobs=quick=22 files=685 pass=685 fail=0`.
 - **After merging origin/main (task 1040, BUG-ARCHIVE conflict: both kept):** `GATE tier=quick jobs=quick=22 files=686 pass=686 fail=0 elapsed=160s`, `PROFILES-LEFT 0`; split-shared-point-1041-node `ok`; split-shared-point-1041-live exit 0 (33 ok checks).
+
+## TURN 1044
+
+Task 1044: fix what the delete audit found (`docs/DELETE-AUDIT-1042.md`, branch `origin/agents/delete-audit-1042`). Worktree `delete-fix-1044`, branch `agents/delete-fix-1044`, based on `origin/main` `de2e4cc8`. BUG-ARCHIVE BUG-430..434.
+
+- **THE POINT RULE (owner ruling 2026-11-27, BUG-430).**
+  - Cause: `deleteSelection` added every curve through a selected joint (`delete-manager.js` 240-252 on de2e4cc8).
+  - Fix: ONE plan in `packages/core/delete-manager.js`, `deletePlan`, read by `deleteSelection` and by `hasSelection`.
+  - A selected curve point (an end, a centre, a shared or glued corner, a bezier anchor) or the origin is never deleted.
+  - A free point (on no curve) still deletes with its constraints.
+  - A mixed selection deletes its curves, constraints and free points, and ignores its curve points.
+  - When the rule refused everything, `deleteSelection` returns `{ deleted: false, hint }`. `deleteRefusedHint` is ONE function choosing the text: "Select the line to delete it, or the corner mark to separate.", or "The origin can't be deleted." when only the origin was selected (advisor refinement).
+  - `#ui/input-manager.js` `handleDelete` (the key, Backspace, the right-click and touch-and-hold menus, the footer) shows the hint.
+  - The footer red X is enabled for a curve-point selection, so it agrees with the key (advisor-approved). `tests/footer-delete-clear-node.test.js:211` changed accordingly.
+- **BUG-A (BUG-431):** `removeGeometry` never puts the origin in `goneJ`. Deleting a line drawn from the origin keeps the other curves' dimensions and coincidents to the origin.
+- **BUG-B (BUG-432):** fixed by the point rule. The key and the red X read the same plan: nothing is deleted, and both show the origin's hint.
+- **BUG-C (BUG-433):** in `removeGeometry`, where a removed shape's dependants are collected, a deleted fillet arc's `filletSharp` V now goes with it, together with its point-on-line holds, in the same undo step. V is kept while a surviving curve claims it or a measurement dimension holds it (`virtualSharpProtectedJoints`, D-33b unchanged).
+- **BUG-D (BUG-434):** ONE pick rule, `#ui/hover-manager.js` `glyphOrJointPick`, called by `selectPick` (the left click and the hover) and by `pickContextTarget` (the right click and the touch hold). It picks in this order:
+  1. The pointer on a point's drawn ring (`svg-renderer.js` `pointMarkRadiusPx`, the radius `draw()` draws points at) picks the point. This follows the advisor's ruling after the first version stole an exact press on a slot's tangency point (`split-shared-point-1041-node` part C went red).
+  2. Otherwise, a glyph's ink picks the glyph.
+  3. Otherwise, the joint in reach.
+
+  The renderer's local copy of `computeBaseJointRadiusFor` is gone; it now uses `pointMarkRadiusPx`.
+- **Behaviour changes for existing users:**
+  - A curve point or the origin + Delete deletes nothing and shows the hint, by every path. This includes a window box that takes a corner point: D-74 now deletes only the side fully inside.
+  - The footer red X is enabled for a curve-point selection, the origin alone included.
+  - A left click or hover on a glyph's ink inside a point's reach takes the glyph. A press on the point's own drawn ring still takes the point.
+  - Deleting a fillet arc takes its virtual sharp. Trimming a whole fillet arc away does too, since Trim uses the same `removeGeometry`.
+  - Deleting a line from the origin keeps the other curves' ties to the origin.
+- **Tests:**
+  - NEW `tests/delete-point-rule-1044-node.test.js`. Sections:
+    - the point rule × the Delete key, Backspace, the red X, the right-click menu and the touch-and-hold menu, on a line end and a polygon's shared corner, in SketchStudio, Shaper and Pen Plotter;
+    - the origin; a free point; mixed; BUG-A (O-09b, O-09c); BUG-C;
+    - BUG-D for the Tangent, Symmetric and 2nd glued Coincident glyphs, on their ink inside a point's 30 px reach;
+    - the ring winning over a glyph drawn on a slot's tangency point.
+  - NEW `tests/delete-point-rule-1044-live.test.js`: SketchStudio desktop 1280x800 and phone 390x844, plus Trace's edit view on desktop. It covers the hints, the red X agreeing with the key, and that the line itself still deletes.
+  - Updated: `tests/delete-dims-709.test.js` (its `joint` mode and the O10 "point + Delete" case now assert the point rule), `tests/selection-origin-suppression.test.js` (comment only).
+- **Fail-first:** the new node test with the old `delete-manager` / `input-manager` / `hover-manager` (`.evidence/1044/fail-first-2.out`): `FAILED sections: THE POINT RULE ... | the origin | MIXED | BUG-A | BUG-C | BUG-D Tangent (D-56) | BUG-D Symmetric (D-60) | the point ring wins over a glyph drawn on it`. After: `delete-point-rule-1044-node: ok`. The D-48 section already passed on the old code in this scene: it is a guard, not a fail-first.
+- **1042 probes before / after** (`.evidence/1044/before-*.out`, `after-*.out`, `diff-*.txt`):
+  - points: 25 rows changed, every point row except D-01 / D-20 / D-21 / D-23 / D-24 is now `NOTHING deleted ... undo n/a (history +0)`. D-09 still lists V as "on no curve" because its fillet arc is alive.
+  - curves: 1 changed, D-33 is now `points -2 cons [equal,pointOnLine,pointOnLine,tangent,tangent,distance:d1R] ... LEFT none`.
+  - constraints: 5 changed. D-56 is now `cons [tangent]` and D-60 `cons [symmetric]`. D-61, D-72 and D-72b are now NOTHING (point rule). D-48 is unchanged: the probe clicks a hidden glyph without selecting its point first.
+  - selections: 10 changed. D-74 deletes 1 side, D-74c / D-81c / O-08 / O-08b are NOTHING, D-75 deletes the line only, O-04 / O-08c have the red X pressed with nothing deleted, and O-09b / O-09c keep `distance` / `coincident`. All 19 origin rows: `origin kept at (0, 0) fixed=true`, `LEFT none`.
+  - hosts: 12 changed. These are the same changes in Shaper and Pen Plotter (D-02, D-06, D-07, D-74, O-08b, O-09b).
+  - phone-live probe: L-03 and L-04 (phone and desktop) are now `after {"shapes":1,...} | undo "n/a (nothing deleted)"`.
+- Updated (live): `tests/delete-dims-709-live.test.js` case A (a line's END + Delete) now asserts the point rule: nothing deleted, no undo step, the 3 labels and rows stay, the hint shows (mouse + Delete key, finger + red X).
+- **Gate:** `npm run gate:quick` on the commit (origin/main had not moved: `Already up to date.`): `GATE tier=quick jobs=quick=22 files=687 pass=687 fail=0 elapsed=167s`, `PROFILES-LEFT 0` (an earlier run under load timed out `split-files-888-node` and `gate-shared-lock`; both green in this run). Merge plan: `MERGE changed=11 files vs origin/main...HEAD; 375 of 376 live tests affected` (svg-renderer / input-manager). Live tests run one at a time, all exit 0: delete-point-rule-1044-live, delete-dims-709-live, footer-delete-clear-live, footer-undo-live, glyph-pick-hover-live, constraint-glyph-menu-live, context-menu-live, split-shared-point-1041-live, tangent-glyph-1038-live, chain-select-move-live, hover-stroke-live, picks-1020-live, toast-footer-695-live, close-path-760-sketchstudio-live, drawing-stage-725-live, offset-fusion-match-667-live, overlay-keys-783-live, parameters-window-live, shortcuts-727-live, shortcuts-740-live.

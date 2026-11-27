@@ -80,6 +80,12 @@ function constraintValueText(c, options) {
 export { angleDimensionSector };
 
 export function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
+// THE drawn radius (screen px) of a point's marker ring (the JOINT_RADIUS setting): draw() draws every point at it, and the select pick takes a
+// pointer inside it as ON the point before any glyph drawn over it (TASK 1044, #ui/hover-manager.js glyphOrJointPick).
+export function pointMarkRadiusPx() {
+  const v = Number(SettingsManager.get('JOINT_RADIUS'));
+  return computeBaseJointRadiusFor(Number.isFinite(v) ? v : 4);
+}
 import { updateCursor } from './cursor-manager.js';
 import { analyzeConstraintStatus } from '#core/constraint-status.js';
 import { unsatisfiedConstraints } from '#core/constraint-verifier.js';
@@ -547,7 +553,6 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const LINE_STROKE_MULT = Math.max(0.25, getNum('LINE_STROKE', 1.0));
   const SELECTION_FEEDBACK_MULT = Math.max(0.1, getNum('SELECTION_FEEDBACK_MULT', 2));
   const HOVER_FEEDBACK_MULT = Math.max(0.1, getNum('HOVER_FEEDBACK_MULT', 3));
-  const JOINT_RADIUS_SETTING = getNum('JOINT_RADIUS', 4);
   const JOINT_STROKE_MULT = Math.max(0.25, getNum('JOINT_STROKE_MULT', 1.0));
   const { GRID_SIZE, GRID_MAJOR_STEP, lodRatio, unitScale } = gridSpacingFromSettings(SettingsManager, docUnit());
   const getStr = (key, fallback) => { const v = SettingsManager.get(key); return typeof v === 'string' && v ? v : fallback; };
@@ -560,12 +565,10 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
   const JOINT_RING = '#333333'; // ring of a point at rest: skv() maps it to --sk-joint-ring
   const JOINT_RING_HOVER = 'var(--sk-joint-ring-hover, #000000)'; // hovered point (not in SK_VAR: that map is by hex and #000000 is used elsewhere)
 
-  // Compute base joint radius in screen pixels. Allow JOINT_RADIUS down to 0.1 (=> base >= 0.4)
-  function computeBaseJointRadiusFor(settingVal) { const v = (typeof settingVal === 'number') ? settingVal * 4 : 0; return Math.max(0.4, v); }
   const BASE_LINE_STROKE = 6 * LINE_STROKE_MULT;
   const BASE_LINE_STROKE_SELECTED = BASE_LINE_STROKE * SELECTION_FEEDBACK_MULT;
   const BASE_LINE_STROKE_HOVERED = BASE_LINE_STROKE * HOVER_FEEDBACK_MULT;
-  const BASE_JOINT_RADIUS = computeBaseJointRadiusFor(JOINT_RADIUS_SETTING); // keep in screen px via multiplier
+  const BASE_JOINT_RADIUS = pointMarkRadiusPx(); // screen px (JOINT_RADIUS down to 0.1 => base >= 0.4), the pick's point ring too
   const BASE_JOINT_STROKE = BASE_LINE_STROKE * JOINT_STROKE_MULT;
   const BASE_JOINT_STROKE_SELECTED = BASE_JOINT_STROKE * SELECTION_FEEDBACK_MULT;
   const BASE_JOINT_STROKE_HOVERED = BASE_JOINT_STROKE * HOVER_FEEDBACK_MULT;

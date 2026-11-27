@@ -283,7 +283,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     held = newerSidecar(out.hosts); // before the host reads it and before anything of this document is written
     if (held) out = { ...out, newer: true };
     // BUG-305 (F-105): a shape of a stored design / a file that names a joint it does not have cannot be drawn: say so once, here, where every load ends
-    if (out.damagedShapes > 0) showNotification(`${out.damagedShapes === 1 ? '1 shape' : `${out.damagedShapes} shapes`} in this file ${out.damagedShapes === 1 ? 'was' : 'were'} damaged and could not be loaded`, 'warning');
+    if (out.damagedShapes > 0) showNotification(`${out.damagedShapes === 1 ? '1 shape' : `${out.damagedShapes} shapes`} in this design ${out.damagedShapes === 1 ? 'was' : 'were'} damaged and could not be loaded`, 'warning');
     // TASK 845: THE document read gives every text its letters (#core/document.js never stores them): at once when its font is loaded, else when it has
     // downloaded (the canvas draws them on its next frame). Before the host's onRestored, so a host reading the drawing finds them when it can.
     syncTextOutlines(state, { notify: showNotification }).then(null, (err) => showNotification(`A text's font could not be loaded: ${err.message}`, 'error'));

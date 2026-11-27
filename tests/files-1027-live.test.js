@@ -6,7 +6,7 @@ import assert from 'node:assert';
 import path from 'node:path';
 import { startKit, sleep, FIX_DIR } from './audits/files-audit-1024-kit.js';
 
-const inDialog = (k) => k.evalJs(`(() => { const d = document.querySelector('.sk-fd'); const a = document.activeElement; return !!(d && a && d.closest('[role=dialog]').contains(a)); })()`);
+const inDialog = (k, sel = '.sk-fd') => k.evalJs(`(() => { const d = document.querySelector(${JSON.stringify(sel)}); const a = document.activeElement; const m = d && d.closest('[role=dialog]'); return !!(m && a && m.contains(a)); })()`);
 const openDlg = async (k, action, mode) => { await k.menu(action); await k.waitFor(`!!document.querySelector('.sk-fd[data-file-dialog="${mode}"]')`, mode + ' dialog'); await sleep(200); };
 
 async function phase(k, label, phone) {
@@ -25,6 +25,17 @@ async function phase(k, label, phone) {
     await k.esc(); await sleep(250);
     assert.ok(await k.evalJs(`!document.querySelector('.sk-fd')`), `${label} ${mode} dialog: Esc still closes it`);
   }
+  // the New design picker (openTemplatePicker) is trapped by the same helper
+  await k.open('sketchstudio');
+  await k.menu('new-design'); await k.waitFor(`!!document.querySelector('[role=dialog][aria-label="New design"]')`, 'the template picker'); await sleep(300);
+  for (const shift of [false, true]) {
+    for (let i = 0; i < 40; i++) {
+      await k.key('Tab', { shift });
+      assert.ok(await inDialog(k, '[role=dialog][aria-label="New design"]'), `${label} template picker: after ${shift ? 'Shift+' : ''}Tab #${i + 1} the focus is still inside it`);
+    }
+  }
+  await k.esc(); await sleep(250);
+  assert.ok(await k.evalJs(`!document.querySelector('[role=dialog][aria-label="New design"]')`), `${label} template picker: Esc closes it`);
   console.log(`${label}: F-94 Tab / Shift+Tab stay inside the Save as and Open dialogs (14 presses each way, each dialog)`);
 
   // ---- F-03 / F-32: open a file, edit nothing

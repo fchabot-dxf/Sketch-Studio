@@ -236,17 +236,16 @@ function deg(v) { return (v * 180 / Math.PI); }
 export function buildDXF(state, opts = {}) {
   const precision = (typeof opts.precision === 'number') ? opts.precision : 6;
   const scale = (typeof opts.scale === 'number') ? opts.scale : 1;
-  const invertY = !!opts.invertY;
   const arcApprox = !!opts.arcApprox;
   const arcSeg = parseInt(opts.arcSeg || 32, 10) || 32;
 
   const shapes = exportedShapes(state);
   if (shapes.length === 0) return null;
 
-  // BUG-301 (F-84): DXF is Y-up and the world is Y-down, so the DXF writer negates Y (the importer, #core/dxf-import, negates it back); the
-  // Export view's "Invert Y axis" box keeps the world's own Y instead. Everything below is computed from the points AS WRITTEN (`to`), so an arc's
-  // angles and direction are the ones of the DXF's own plane.
-  const flip = !invertY;
+  // BUG-301 (F-84): DXF is Y-up and the world is Y-down, so the DXF writer ALWAYS negates Y (the importer, #core/dxf-import, negates it back); the
+  // Export view's "Invert Y axis" box is for SVG only and does not reach a DXF. Everything below is computed from the points AS WRITTEN (`to`), so an
+  // arc's angles and direction are the ones of the DXF's own plane.
+  const flip = true;
   const to = (p) => ({ x: p.x * scale, y: (flip ? -p.y : p.y) * scale });
 
   const lines = [];

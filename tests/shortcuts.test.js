@@ -113,7 +113,7 @@ const EXEMPT = {
   'packages/ui/shortcuts-list.js': [1, 'TASK 747: Settings > Shortcuts capturing a new key swallows the release of the key it captured (its code)'],
   'packages/ui/style-panel.js': [7, 'the Settings panel: inline preset question (Enter / Esc), tab-list arrows, Esc closes it'],
   'packages/ui/tabbed-dock-panel.js': [1, 'a dock window: Esc closes it'],
-  'packages/ui/template-picker.js': [5, 'the template picker modal: Esc closes, Enter in its fields; the small modal shell keeps Tab inside (BUG-307)'],
+  'packages/ui/template-picker.js': [6, 'the template picker modal: Esc closes, Enter in its fields; trapTab (BUG-307) tests Tab in the picker and in trapTab itself'],
   'packages/ui/tool-ribbon.js': [1, 'an open ribbon dropdown: Esc closes it'],
   'packages/ui/transform-box.js': [2, 'the transform box typed angle / scale: Enter / Esc'], // TASK 753
   'apps/penplotter/src/settings.js': [1, 'the plotter settings modal: Esc = Cancel'],

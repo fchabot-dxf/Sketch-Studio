@@ -1,6 +1,6 @@
 // tests/files-tabs-1027-node.test.js — TASK 1027 (files audit 1024):
 //   BUG-306 (F-03 / F-32): a design opened from a FILE and not edited is kept in the open-tabs buffer like an edited one: it survives a reload and follows to another app.
-//   BUG-305 (F-105): a file whose shape names a joint the file does not have loads as before (nothing else changes) and says so ONCE ("1 shape in this file was damaged ...").
+//   BUG-305 (F-105): a file whose shape names a joint the file does not have loads as before (nothing else changes) and says so ONCE ("1 shape in this design was damaged ...").
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { createProjectStore, createMemoryAdapter, emptyDocument } from '../packages/ui/project-store.js';
@@ -56,7 +56,7 @@ const seam = { calls: [], async open() { return { name: 'Plate.sketch.json', tex
     app.frames(3);
     const n = notices().filter((x) => /damaged/.test(x));
     eq(n.length, 1, 'F-105: ONE notice');
-    ok(/^\[warning\] \S*1 shape in this file was damaged and could not be loaded/.test(n[0]), 'F-105: its words: ' + n[0]);
+    ok(/^\[warning\] \S*1 shape in this design was damaged and could not be loaded/.test(n[0]), 'F-105: its words: ' + n[0]);
     eq(app.state.shapes.length, 1, 'F-105: what loads is unchanged (the shape is still in the document, as before)');
     app.document.querySelectorAll('#notification-container [data-level]').forEach((e) => e.remove());
     await app.buffer.openFile({ open: async () => ({ name: 'Plate.sketch.json', text, handle: null }) });

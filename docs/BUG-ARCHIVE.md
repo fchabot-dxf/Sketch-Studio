@@ -2373,7 +2373,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** Our own DXF re-imported mirrored top to bottom.
 - **What was wrong:** First lines `(80,4)-(80,40)` came back `(80,-4)-(80,-40)`.
 - **Cause:** The DXF importer negates Y (DXF is Y-up, the world Y-down); `buildDXF` wrote the world Y unchanged (the sidebar passed `invertY:false`).
-- **Fix:** The DXF writer negates Y (`flip = !invertY`) and computes an arc's angles and direction from the points as written, so export then import is the identity. Behaviour change: the Export view's "Invert Y axis" box now keeps the world Y in a DXF (the opposite of before: it used to flip).
+- **Fix:** The DXF writer ALWAYS negates Y and computes an arc's angles and direction from the points as written, so export then import is the identity. Behaviour change (owner/advisor ruling): the Export view's "Invert Y axis" box no longer reaches a DXF (it used to keep the world Y there); it is SVG only and relabelled "Invert Y axis (SVG)". The box is not a stored setting, so nothing stored changes.
 - **Task id(s):** `1027`
 - **Fix merge sha:** pending (set at merge)
 - **Guarding test file(s):** `tests/export-roundtrip-1027-node.test.js`, `tests/arc-direction.test.js` (the DXF arc check now reads Y-up angles)
@@ -2441,7 +2441,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** A shape of a file that names a joint the file does not have vanished with no word.
 - **What was wrong:** `dangling-refs.sketch.json` (a line on a joint `ghost`) opened as a tab with 0 shapes drawn and no toast.
 - **Cause:** `deserializeDocument` (`packages/core/document.js`) loaded the shape as it was and only logged dropped constraints (`dbg.warn`); nothing told the user.
-- **Fix:** `deserializeDocument` returns `damagedShapes` (shapes naming a missing joint; what loads is unchanged); the document buffer's `restored()` (`packages/ui/document-buffer-core.js`) shows ONE warning "1 shape in this file was damaged and could not be loaded" for a stored design or a file load (not for a tab switch).
+- **Fix:** `deserializeDocument` returns `damagedShapes` (shapes naming a missing joint; what loads is unchanged); the document buffer's `restored()` (`packages/ui/document-buffer-core.js`) shows ONE warning "1 shape in this design was damaged and could not be loaded" for a stored design or a file load (not for a tab switch).
 - **Task id(s):** `1027`
 - **Fix merge sha:** pending (set at merge)
 - **Guarding test file(s):** `tests/files-tabs-1027-node.test.js`
@@ -2475,7 +2475,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** Tab left the aria-modal Save as / Open dialog for the page behind.
 - **What was wrong:** Tab x9 from the name field reached the sidebar button, header tabs, document tabs and ribbon behind the dialog.
 - **Cause:** The shared small modal shell (`openSmallModal`, `packages/ui/template-picker.js`) handled only Escape.
-- **Fix:** Its key handler wraps Tab / Shift+Tab inside the panel's own visible controls. Behaviour change: the other small modals built on the same shell (name prompt, choice, close-unsaved question) now trap Tab too. The New design picker (`openTemplatePicker`) has its own handler and is NOT changed.
+- **Fix:** One shared `trapTab(panel, e)` (`packages/ui/template-picker.js`) wraps Tab / Shift+Tab inside the panel's own visible controls; `openSmallModal` and `openTemplatePicker` both call it. Behaviour change: the name prompt, choice and close-unsaved modals trap Tab too.
 - **Task id(s):** `1027`
 - **Fix merge sha:** pending (set at merge)
 - **Guarding test file(s):** `tests/files-1027-live.test.js` (desktop 1280 and phone 390)

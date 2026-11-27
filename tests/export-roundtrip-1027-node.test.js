@@ -65,8 +65,8 @@ const canon = (st) => {
   const re = importDxf(dxf, { genJ });
   ok(!re.error, 'our DXF imports');
   eq(canon(re), canon(state), 'F-84: export then import gives the same geometry, the same way up (lines, circle, both arc directions)');
-  const flat = importDxf(buildDXF(state, { precision: 6, invertY: true }), { genJ });
-  ok(canon(flat) .join() !== canon(state).join(), 'invertY keeps the world Y: it no longer round-trips through the Y-up import (the box is the opposite of the DXF convention)');
+  eq(buildDXF(state, { precision: 6, invertY: true }), dxf, 'the "Invert Y axis" box is SVG only: a DXF is identical with it on and off');
+  ok(buildSVG(state, { precision: 3, invertY: true }) !== buildSVG(state, { precision: 3 }), 'and it still inverts an SVG');
   const ap = buildDXF(state, { precision: 6, arcApprox: true, arcSeg: 8 });
   const reAp = importDxf(ap, { genJ });
   const lines = reAp.shapes.filter((s) => s.type === 'line').length;

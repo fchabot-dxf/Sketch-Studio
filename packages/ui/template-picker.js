@@ -488,6 +488,7 @@ export function openTemplatePicker({ templates = TEMPLATES } = {}) {
     let backToCards = null; // set while the START view of a template shows: Esc / Cancel go back to the cards
     let stopStart = null; // TASK 674: undoes what a start view listens to (the window's resize: its corner pickers follow the preview)
     function onKey(e) {
+      if (e.key === 'Tab') { trapTab(panel, e); return; } // BUG-307 (F-94)
       if (e.key !== 'Escape') return;
       e.preventDefault(); e.stopImmediatePropagation();
       if (backToCards) backToCards(); else finish(null);
@@ -856,6 +857,16 @@ export function choicePicker(spec, { read, onPick, values, corner = () => undefi
   return wrap;
 }
 
+/** BUG-307 (F-94): the ONE focus trap of every modal here: on a Tab / Shift+Tab keydown `e`, the focus walks `panel`'s own visible controls and wraps
+ *  at either end, never on to the page behind. Any other key is left alone. */
+export function trapTab(panel, e) {
+  if (e.key !== 'Tab') return;
+  const list = [...panel.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')].filter((x) => !x.disabled && x.getAttribute('tabindex') !== '-1' && x.getClientRects().length > 0);
+  const at = list.indexOf(document.activeElement);
+  if (!list.length) { e.preventDefault(); return; }
+  if (at === -1 || (e.shiftKey && at === 0) || (!e.shiftKey && at === list.length - 1)) { e.preventDefault(); list[e.shiftKey ? list.length - 1 : 0].focus(); }
+}
+
 /** TASK 681: the shared modal shell (backdrop + small panel, role=dialog aria-modal): `fill(body, actions, finish)` adds the content and the buttons; it returns the element to focus.
  *  Esc and a press outside finish(null). Focus goes back to where it was. TASK 759: exported, so the Save as / Open dialog (#ui/file-dialog.js) is this same
  *  modal; `panelClass` adds a class to its panel (that dialog's own styles hang on it). */
@@ -879,14 +890,9 @@ export function openSmallModal(label, fill, { panelClass = '' } = {}) {
       if (returnTo && returnTo.focus && returnTo.isConnected) returnTo.focus();
       resolve(value);
     };
-    // BUG-307 (F-94): the modal holds the focus: Tab / Shift+Tab walk the panel's own controls and wrap, never on to the page behind
-    const tabbables = () => [...panel.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')].filter((x) => !x.disabled && x.getAttribute('tabindex') !== '-1' && x.getClientRects().length > 0);
     function onKey(e) {
       if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null); return; }
-      if (e.key !== 'Tab') return;
-      const list = tabbables(), at = list.indexOf(document.activeElement);
-      if (!list.length) { e.preventDefault(); return; }
-      if (at === -1 || (e.shiftKey && at === 0) || (!e.shiftKey && at === list.length - 1)) { e.preventDefault(); list[e.shiftKey ? list.length - 1 : 0].focus(); }
+      trapTab(panel, e);
     }
     document.addEventListener('keydown', onKey, true);
     // TASK 759: the click a page script sends to a hidden <input type=file> (the file chooser opening: the Open dialog's "Choose a file…") or to an <a download>

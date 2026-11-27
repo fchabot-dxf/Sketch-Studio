@@ -76,6 +76,17 @@ await run('1 the Arc button has a variant menu: Center Point Arc (the default) a
   } finally { await app.close(); }
 });
 
+await run('1b the Arc variants are wherever the Arc button is: Shaper and Pen Plotter (the shared ribbon; Trace is not a kit host)', async () => {
+  for (const host of ['shaper', 'penplotter']) {
+    const app = await open({ host });
+    try {
+      assert(app.document.getElementById('tool-arc'), `${host}: the Arc button`);
+      const rows = [...app.document.querySelectorAll('.sk-ribbon-menu-item')].filter((r) => /^arc-/.test(r.dataset.mode)).map((r) => r.dataset.mode);
+      assert.deepStrictEqual(rows, ['arc-cse', 'arc-3pt'], `${host}: the two Arc rows`);
+    } finally { await app.close(); }
+  }
+});
+
 // ── 2. three clicks make ONE arc through the three points ──
 await run('2 three clicks: one arc through start, end and the third point (centre and radius to 1e-6), the Center Point Arc shape, ONE undo step', async () => {
   for (const [S, E, P] of [[[10, 10], [50, 10], [30, 30]], [[3, -7], [-12, 4], [15, 9]], [[-40, 20], [40, 25], [0, -30]]]) {

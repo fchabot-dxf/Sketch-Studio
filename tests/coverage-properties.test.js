@@ -12,10 +12,8 @@ import { FINDINGS } from './harness/coverage/prop-findings.js';
 import inventory from './harness/coverage/inventory.js';
 
 const KNOWN = {
-  'scurve/C fully constrained (nullity 0)': 'N-F7',
-  'scurve/D 3 starts jittered by 2% return to the drawn geometry': 'N-F7',
-
-  'N-F7': 'arc/arc tangent at a shared rim is degenerate',   // N-U1's standalone repro passes since task 525 (entry deleted)
+  // N-U1's standalone repro passes since task 525 (entry deleted); N-F7 (arc/arc tangent at a shared rim degenerate) and its scurve/C, scurve/D
+  // checks pass since task 1038 (the shared-end tangent row, definitions.js sharedEndTangent: entries deleted)
 };
 // expected final nullity per drawing (what the recipe is designed to reach; every-kind is deliberately loose, it is the drag test's subject)
 const NULLITY = { plate: 0, trapezoid: 0, bracket: 0, triangle: 0, polygon: 0, scurve: 0, slot: 0, 'collinear-concentric': 0, 'axis-symmetry': 0, 'welded-T': 0, 'filleted-polygon': 0, 'every-kind': 9, 'two-sketches': 0 };

@@ -46,17 +46,19 @@ export const KNOWN = {
     diagnosis: 'solver/definitions.js:228 collinear, chord line 0.00087 long (`r0.5s0.1cw collinear-chord`): 5.7e-3 off. Not the F6 family: unchanged by the task 533 shared-joint fix (this sep cell repeats no joint index).',
     task: 'measure the finite-difference step against the 0.00087 chord before calling it a Jacobian error',
   },
-  'EA-8': {
-    severity: 'MEDIUM',
-    title: 'A feasible constraint on a short chord / tiny fillet is REFUSED (ERR-CSOLVE-01)',
-    diagnosis: 'constraint-manager.js:456 _sandboxVerify (reported at :295): PlaneGCS says the same constraint is satisfiable. Seen: perpendicular of the locked chord line of a 0.1 / 1 / 359.9 degree arc and a r 0.5 arc, H/V on the ends of a fillet r 0.5. (parallel / perpendicular on a shared corner is F4, inherited.)',
-    task: 'sandbox verification at small scales: tolerance relative to the shape size',
-  },
+  // EA-8 (a feasible perpendicular of a short chord / H/V on a tiny fillet REFUSED) has no failing cell since task 1038 (the perpendicular row is regular
+  // at 90 degrees and its mover turns rigidly at creation): entry deleted.
   'EA-9': {
     severity: 'LOW',
     title: 'H/V between two LOCKED arc joints that are within 0.05 of aligned is accepted as already satisfied; PlaneGCS calls it a conflict',
     diagnosis: 'constraint-manager.js:693-696 and :768 compare with GEOMETRY_TOLERANCE 0.05 (world units): a 0.1 degree arc (chord 0.035), the 180 degree arc (the tool nudges its end by 1e-6) and the 359.9 degree arc are all "close enough". Our DOF count 0, PlaneGCS counts -1.',
     task: 'none (a tolerance choice); noted because 0.05 is larger than the whole 0.1 degree arc',
+  },
+  'EA-11': {
+    severity: 'LOW',
+    title: 'The PlaneGCS oracle calls a tangent of two r 5000 arcs that share their touch point redundant (DOF change 0); ours and the finite-difference count say it holds 1',
+    diagnosis: 'task 1038: since the shared-end tangent row (definitions.js sharedEndTangent, BUG-381) our nullity drops by 1, exactly as the finite-difference Jacobian of our rows does; the r 20 arcs agree with PlaneGCS (-1), only the nearly flat r 5000 ones differ, PlaneGCS printing "1 redundants". Before task 1038 ours said 0 too, for the wrong reason (the zero row of N-F7).',
+    task: 'none in our solver (an oracle tolerance on nearly flat arcs); re-check if the oracle changes',
   },
   // EA-10 (an arc picked from anywhere on its circle) FIXED in task 550: snap-detection.js hits an arc only on its drawn sweep (arcSweepInfo);
   // tests/extreme-arcs.test.js asserts it with ui10().
@@ -80,6 +82,7 @@ function idOf(issue, c) {
   if (base === 'refused-feasible') return CHORD_ROWS.test(c.row) && c.state === 'shared' ? 'F4' : 'EA-8';
   if ((base === 'accepted-conflict' || base === 'nullity!=oracle') && c.state === 'locked' && /^(hv-|coincident-own)/.test(c.row)) return 'EA-9';
   if (base === 'nullity!=oracle' && c.row === 'collinear-chord' && c.state === 'shared') return 'F5';
+  if (base === 'nullity!=oracle' && c.row === 'tangent-arc' && c.state === 'shared' && c.delta === c.fdDelta) return 'EA-11';
   return null;
 }
 // { v: 'PASS' | 'N/A' | 'NA-BUILD' | 'EA-1+EA-2' ... | 'UNCLASSIFIED', ids: [...] }
@@ -101,12 +104,13 @@ export const REPRO_CELL = {
   'EA-1': ['f179r10', 'hv-start-end', 'sep'],
   // EA-3 and EA-5: their first repros (s0.1cw / r0.5s30cw tangent-line sep) pass since task 525 (the who-moves placement moves the line and
   // keeps the arc); the repro is now the first cell that still shows the finding
-  'EA-3': ['r0.5s0.1cw', 'tangent-arc', 'shared'],
+  // EA-3: its r0.5s0.1cw tangent-arc shared repro passes since task 1038 (the shared-end tangent row): the first cell that still shows it
+  'EA-3': ['f179r10', 'point-on-arc-off', 'sep'],
+  'EA-11': ['r5000s5cw', 'tangent-arc', 'shared'],
   'EA-4': ['s0.1ccw', 'hv-start-end', 'sep'],
   'EA-5': ['r0.5s0.1cw', 'dim-chord', 'sep'],
   'EA-6': ['r0.5s30cw', 'perpendicular-chord', 'sep'],
   'EA-7': ['r0.5s0.1cw', 'collinear-chord', 'sep'],
-  'EA-8': ['s0.1cw', 'perpendicular-chord', 'locked'],
   'EA-9': ['s0.1cw', 'hv-start-end', 'locked'],
 };
 export async function repro(id) {

@@ -18476,3 +18476,6 @@ Real-Design UI/UX audit of Parts C (router jig template) and D (frame gusset / t
   - `R2-11` (`misleading UI`): Reference Radius & Diameter labels format as `R (15)` and `Ø (5)` instead of `(R 15)` / `(Ø 5)` (`packages/ui/svg-renderer.js:73-80`).
   - `R2-12` (`DIVERGENCE`): No 3-Point Arc tool (Center-Start-End only). `R2-13` (`FRICTION`): No Join/Merge command after Break. `R2-14` (`FRICTION`): No "Select Other" picker for overlapping curves.
 - **Evidence:** Local untracked screenshots + MD5s in `.evidence/1017/` (all visually re-opened and verified).
+
+## TURN 1025
+Advisor: registered six open bugs found in live Fusion checks, merge gates and reviews on 2026-11-26 (BUG-240..245: short-arc wrap B-12b, startShapeDimension last-constraint fallback, missing full-width Ø leader + R/Ø switch, ui-fixes-774-live flaky, op-paths-817-live 100 ms limit, UX-20 mid-drag red flash), per BUG-ARCHIVE rule 1; linked the real-design audits 1016/1017 under Audits (rule 5).

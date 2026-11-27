@@ -3378,11 +3378,11 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **App(s) & host:** Shaper (Fusion selection / STL import)
 - **Report:** `N-5`: Shaper's Fusion / STL import gives its arcs no equal-radius rule; BUG-046's fix (task `789`) went only into the shared import landing.
 - **What was wrong:** an arc imported from Fusion had no structural equal: a radius edit moved its start only (probe: `radius 30 -> 40 applied true   radii after (start,end) 40.000,30.000`).
-- **Cause:** `apps/shaper/src/fusion-import.js importFusionSelection` landed the parsed joints and shapes with its own loops and never added `arcStructuralConstraints` (the shared landing in `packages/ui/sketch-import.js` did).
-- **Fix:** the landing is ONE function, `landImportedGeometry` (`packages/ui/sketch-import.js`: joints, shapes, each arc's structural equal); the SVG / DXF import and Shaper's Fusion / STL import both call it. Shaper's explicit `stampSketch` calls went with its loops (the state's own `joints.set` / `shapes.push` stamp the active sketch). Not changed: Shaper's import still adds no import groups (`groupImported`), as before.
+- **Cause:** `apps/shaper/src/fusion-import.js importFusionSelection` landed the parsed joints and shapes with its own loops and never added `arcStructuralConstraints` (the SVG / DXF landing in `packages/ui/sketch-import.js` did).
+- **Fix:** the landing is ONE function, `landImportedGeometry` (`packages/core/shapes.js`, beside `arcStructuralConstraints`: joints, shapes, each arc's structural equal; in `#core` so the Fusion panel build, which leaves `#ui/sketch-import.js` out, reaches it); the SVG / DXF import (`#ui/sketch-import.js importIntoSketch`) and Shaper's Fusion / STL import both call it. Shaper's explicit `stampSketch` calls went with its loops (the state's own `joints.set` / `shapes.push` stamp the active sketch). Not changed: Shaper's import still adds no import groups (`groupImported`), as before.
 - **Task id(s):** `1036`
 - **Fix merge sha:** open (`agents/shape-bugs-1036`, awaiting merge)
-- **Guarding test file(s):** `tests/shape-bugs-1036-node.test.js` (`N-5`), `tests/import-arc-equal-789-node.test.js`, `tests/fusion-import-664-node.test.js`
+- **Guarding test file(s):** `tests/shape-bugs-1036-node.test.js` (`N-5`), `tests/import-arc-equal-789-node.test.js`, `tests/fusion-import-664-node.test.js`, `tests/fusion-panel-881-node.test.js` (the panel still does not reach `#ui/sketch-import.js`)
 - **Status:** fixed
 - **Family:** `solver`
 - **Related:** BUG-046

@@ -32,7 +32,7 @@ import { importDxf, looksLikeDxf } from '#core/dxf-import.js';
 import { addSketch, activateSketch } from '#core/sketch-model.js';
 import { groupImported } from '#core/group-model.js'; // TASK 751 / 756: the import lands grouped, in every app
 import { newShapeId } from '#core/shape-id.js';
-import { arcStructuralConstraints } from '#core/shapes.js'; // TASK 789: an imported arc gets the structural constraints a drawn arc gets
+import { landImportedGeometry } from '#core/shapes.js'; // TASK 789 / 1036: THE import landing (an imported arc gets the structural constraints a drawn arc gets)
 import { fitToDrawing } from './input-handlers/pan-zoom.js';
 import { browserFileSeam, IMPORT_FILE_PICK, PROJECT_FILE_EXT } from './project-file.js';
 import { track } from './analytics.js'; // TASK 738: an SVG / DXF imported
@@ -120,17 +120,6 @@ function elementNamer(descs, shapes) {
     const d = descOf.get(piece.shapeIds[0]);
     return idOf.has(d) && piece.shapeIds.every((id) => descOf.get(id) === d) && count.get(d) === piece.shapeIds.length ? idOf.get(d) : null;
   };
-}
-
-/**
- * THE landing of an import's parsed geometry in the active sketch, for every importer (this file's SVG / DXF import; Shaper's Fusion / STL import,
- * apps/shaper/src/fusion-import.js, TASK 1036 BUG-373): the joints ({ id, x, y }) and the shapes are added, and each arc gets THE arc structural
- * constraints (#core/shapes.js, TASK 789 / BUG-046), so it keeps its two ends on one circle like a drawn one (a radius edit after an ungroup moves both).
- */
-export function landImportedGeometry(st, joints, shapes) {
-  for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
-  for (const s of shapes) st.shapes.push(s);
-  for (const s of shapes) if (s.type === 'arc') st.constraints.push(...arcStructuralConstraints(s));
 }
 
 export function importIntoSketch(text, fileName, controller, options = {}) {

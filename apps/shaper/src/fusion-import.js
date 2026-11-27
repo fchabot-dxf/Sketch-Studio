@@ -3,7 +3,7 @@
 // `buildShapesFromPrimitives` for joint merging, Y-up -> Y-down negation, real arcs (`arcShape`), and construction tagging.
 
 import { addSketch, activateSketch } from '#core/sketch-model.js';
-import { landImportedGeometry } from '#ui/sketch-import.js'; // TASK 1036: THE import landing (joints, shapes, each arc's structural equal)
+import { landImportedGeometry } from '#core/shapes.js'; // TASK 1036: THE import landing (joints, shapes, each arc's structural equal)
 import { deserializeDocument } from '#core/document.js';
 import { emptyDocument } from '#ui/project-store-core.js'; // TASK 881: the store's engine (not the page's Drive-routed store)
 import { buildShapesFromPrimitives } from '#core/dxf-import.js';
@@ -388,7 +388,7 @@ export function importFusionSelection(payload, { controller, prepare = null, onI
   });
 
   const localOf = new Map(built.joints.map((j) => [j.id, [j.x, j.y]])); // TASK 841: each new joint in the part's own frame (the payload's coordinates)
-  // TASK 1036 (BUG-373, N-5): the placed joints and the shapes land through THE shared import landing (#ui/sketch-import.js), which gives each arc
+  // TASK 1036 (BUG-373, N-5): the placed joints and the shapes land through THE shared import landing (#core/shapes.js, the SVG / DXF import's too), which gives each arc
   // its structural equal (BUG-046); the state's joints.set / shapes.push stamp them into the active sketch (#core/sketch-state.js)
   const placed = built.joints.map((j) => { const [x, y] = place ? placePoint(place, j.x, j.y) : [j.x, j.y]; return { id: j.id, x, y }; });
   landImportedGeometry(st, placed, built.shapes);

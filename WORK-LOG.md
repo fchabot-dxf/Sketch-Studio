@@ -18458,3 +18458,21 @@ Real-design start-to-finish audit of SketchStudio (desktop `1280×800`, live hea
 - **Part B highlights (Round flange Ø100/Ø20/Ø70 BC, 6× Ø8 circular pattern, 6×3 keyway, user parameters `OD`, `BC = OD - 30`, `n`, `bolt`):**
   - Parametric flow shone: Parameters window, circle draw-time formulas (`OD`, `BC`, `bolt`), dashed construction BC, Circular Pattern driven by `n`, live update `OD 100->120` + `n 6->8` (8 holes Ø8 all at `R=45`, `FC=true`), `2× Ctrl+Z` revert (`OD=100, BC=70, n=6`, `R=35`), `16× Ctrl+Z/Y` undo/redo, and Save + Reload + Close-Tab/Open-Recent Reopen were 100% lossless (`reopenMatches: true`).
   - Bugs found: `R1-12` (Trim cannot trim circle/arc for keyway; `BUG-093` notice fires), `R1-13` (dropping horizontal line dim label on Y-axis above midpoint hijacks length dim into `(90°)` Reference Angle), `R1-14` (Circular Pattern at flange zoom picks bolt center joint instead of Ø8 rim AND `Esc` leaks `state.selectedJoints` into reopened dialog), plus `R1-15` (concentric diameter label pileup), `R1-16` (unitless param friction & backwards `"a plain number cannot be a length"` error), `R1-17` (Construction shortcut `K` vs Fusion `X`).
+## TURN 1017
+Real-Design UI/UX audit of Parts C (router jig template) and D (frame gusset / triangle), AUDIT ONLY (zero code changes in `packages/` or `apps/`, branch `agents/designrun-1017` from `origin/main` `a0634db3`):
+- **Report:** `docs/DESIGN-RUN-AUDIT-1017.md` — 14 finding rows `R2-01`..`R2-14` (**11 `BUG`**, **1 `DIVERGENCE`**, **2 `FRICTION`**, **0 `REGRESSION`**) across 25 step sections (`C-01`..`C-14`, `D-01`..`D-12`, `E-01`..`E-04`: 15 `OK`, 10 with findings).
+- **Probes (outside gate):** `tests/audits/design-run-audit-1017-kit.js`, `tests/audits/design-run-audit-1017-part-c.mjs`, `tests/audits/design-run-audit-1017-part-d.mjs`, `tests/audits/design-run-audit-1017-extra.mjs` (all live headless Chrome `1280x800` via real pointer/keyboard/ribbon/context-menu/Parameters-window events, fake Drive session, exit 0).
+- **Key bugs found:**
+  - `R2-01` (`lost work`): Trim at an arc endpoint deletes both entire triangle legs + their dims (`packages/core/trim.js:57` skips non-line cutters).
+  - `R2-02` (`lost work`): Auto-reference dimension on an already-dimensioned edge is permanently lost by Undo + Redo (`packages/core/sketch-state.js:123` `_restoreSnapshot` -> `addConstraintObject` -> `hasConstraint` ignores `isDriven`).
+  - `R2-03` (`wrong geometry`): Trim on mirrored lines drops the bottom `symmetric` constraint (`packages/core/trim.js:113-116, 170-172`), breaking Mirror symmetry (`30°->45°`: `angR=45°`, `angL=142.06°`).
+  - `R2-04` (`wrong geometry`): Line draw-time box with typed length/formula (`leg = 150`, `leg * 2/3`) drops H/V inference (`packages/ui/input-handlers/line-tool.js:56`).
+  - `R2-05` (`wrong geometry`): Break does not snap to an existing joint (`H2` hole center), creating a detached 1-DOF vertex (`packages/ui/input-handlers/break-tool.js:63, 78-100`, `packages/core/break.js:58-59`).
+  - `R2-06` (`misleading UI`): Offset side-click steals focus from `#offset-distance-input` (`packages/ui/input-handlers/offset-tool.js:169-174`).
+  - `R2-07` (`misleading UI`): Offset box requires TWO `Esc` presses to leave the tool, violating owner's 1-Esc rule (`BUG-105`; `packages/ui/input-handlers/offset-tool.js:218, 222`).
+  - `R2-08` (`misleading UI`): Overlapping construction line wins hit-test over solid geometry (and vice versa) in Tangent, Equal, Collinear, and Break.
+  - `R2-09` (`misleading UI`, related to open `BUG-136`): Small `Ø 5` circle rim click (`r_px < 15 px`) stolen by its own center joint in Equal tool (`packages/ui/snap-detection.js:187`).
+  - `R2-10` (`misleading UI`): Parameters window `.pt-ref` badge wraps onto 3 stacked letters `r/e/f` (`packages/ui/parameter-table.js:248`).
+  - `R2-11` (`misleading UI`): Reference Radius & Diameter labels format as `R (15)` and `Ø (5)` instead of `(R 15)` / `(Ø 5)` (`packages/ui/svg-renderer.js:73-80`).
+  - `R2-12` (`DIVERGENCE`): No 3-Point Arc tool (Center-Start-End only). `R2-13` (`FRICTION`): No Join/Merge command after Break. `R2-14` (`FRICTION`): No "Select Other" picker for overlapping curves.
+- **Evidence:** Local untracked screenshots + MD5s in `.evidence/1017/` (all visually re-opened and verified).

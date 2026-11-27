@@ -42,6 +42,10 @@ async function openApp() {
 const T = { pointerType: 'touch' };
 const tap = (app, p) => { app.down(p.x, p.y, T); app.up(p.x, p.y, T); };
 const tapBox = (app) => app.press(app.document.getElementById('dimInput'));
+// the radius the canvas DRAWS for the preview circle mid-draw (the dashed circle the renderer makes; N-2: it must be the radius the build makes)
+const previewR = (app) => { const c = [...app.svg.querySelectorAll('circle[stroke-dasharray]')].filter((e) => e.getAttribute('fill') === 'none' && !e.dataset.shapeId); return c.length === 1 ? Number(c[0].getAttribute('r')) : NaN; };
+let midR = NaN;
+const mid = (app) => { app.frames(1); midR = previewR(app); };
 const fingerDrag = (app, a, b, steps = 8) => { app.down(a.x, a.y, T); for (let i = 1; i <= steps; i++) app.move(a.x + (b.x - a.x) * i / steps, a.y + (b.y - a.y) * i / steps, { ...T, buttons: 1 }); app.up(b.x, b.y, T); };
 
 // the document the case made: every joint / shape / constraint id replaced by its order of appearance, numbers rounded, transient fields dropped
@@ -70,19 +74,20 @@ async function drawCase(label, fn) {
   try {
     app.tool('circle');
     const s = (k) => app.toScreen(...W[k]);
+    midR = NaN;
     fn(app, s);
     const session = toolSession(app.state, CIRCLE);
-    const out = { label, doc: normalisedDoc(app.state), picks: picksOf(session.log), vias: viasOf(session.log), builds: session.builds, active: app.state.active, circles: app.state.shapes.filter((x) => x.type === 'circle').length };
-    console.log(`  ${label}: builds=${out.builds} vias=${out.vias} circles=${out.circles}`);
+    const out = { label, doc: normalisedDoc(app.state), picks: picksOf(session.log), vias: viasOf(session.log), builds: session.builds, active: app.state.active, circles: app.state.shapes.filter((x) => x.type === 'circle').length, midR, builtR: (app.state.shapes.find((x) => x.type === 'circle') || {}).radius };
+    console.log(`  ${label}: builds=${out.builds} vias=${out.vias} circles=${out.circles} previewR=${out.midR} builtR=${out.builtR}`);
     return out;
   } finally { await app.close(); }
 }
 
 const typed = [
-  await drawCase('A1 mouse: click centre, type 60, Enter', (app, s) => { app.click(s('centre').x, s('centre').y); app.move(s('rimHover').x, s('rimHover').y); app.type('60'); app.enter(); }),
-  await drawCase('A2 mouse: click centre, type 60, click', (app, s) => { app.click(s('centre').x, s('centre').y); app.move(s('rimHover').x, s('rimHover').y); app.type('60'); app.click(s('rimHover').x, s('rimHover').y); }),
-  await drawCase('A3 touch: tap centre, tap box, type 60, Enter', (app, s) => { tap(app, s('centre')); tapBox(app); app.type('60'); app.enter(); }),
-  await drawCase('A4 touch: tap centre, tap box, type 60, tap canvas', (app, s) => { tap(app, s('centre')); tapBox(app); app.type('60'); tap(app, s('rimHover')); }),
+  await drawCase('A1 mouse: click centre, type 60, Enter', (app, s) => { app.click(s('centre').x, s('centre').y); app.move(s('rimHover').x, s('rimHover').y); app.type('60'); mid(app); app.enter(); }),
+  await drawCase('A2 mouse: click centre, type 60, click', (app, s) => { app.click(s('centre').x, s('centre').y); app.move(s('rimHover').x, s('rimHover').y); app.type('60'); mid(app); app.click(s('rimHover').x, s('rimHover').y); }),
+  await drawCase('A3 touch: tap centre, tap box, type 60, Enter', (app, s) => { tap(app, s('centre')); tapBox(app); app.type('60'); mid(app); app.enter(); }),
+  await drawCase('A4 touch: tap centre, tap box, type 60, tap canvas', (app, s) => { tap(app, s('centre')); tapBox(app); app.type('60'); mid(app); tap(app, s('rimHover')); }),
 ];
 const untyped = [
   await drawCase('B1 mouse: click centre, click b', (app, s) => { app.click(s('centre').x, s('centre').y); app.move(s('b').x, s('b').y); app.click(s('b').x, s('b').y); }),
@@ -101,6 +106,7 @@ for (const group of [typed, untyped]) {
     assert.strictEqual(c.picks, group[0].picks, `${c.label}: the same steps, picks and values as ${group[0].label}\n${c.picks}\nvs\n${group[0].picks}`);
   }
 }
+for (const c of typed) assert.ok(Math.abs(c.midR - c.builtR) < 1e-9 && c.builtR === 30, `${c.label}: the preview drawn mid-draw has the radius the build makes (N-2): preview ${c.midR}, built ${c.builtR}`);
 const A = JSON.parse(typed[0].doc), B = JSON.parse(untyped[0].doc);
 const circleA = A.shapes.find((s) => s.type === 'circle'), circleB = B.shapes.find((s) => s.type === 'circle');
 assert.strictEqual(circleA.radius, 30, 'typed: radius 30 (diameter 60)');
@@ -111,5 +117,22 @@ assert.ok(B.constraints.some((c) => c.type === 'pointOnLine' && Array.isArray(c.
 assert.ok(Math.abs(circleB.radius - Math.hypot(30, 20)) < 1e-6, 'untyped: the rim on b');
 assert.deepStrictEqual(JSON.parse(typed[0].picks).map((p) => p.step), ['centre', 'rim'], 'the step log: centre, rim');
 assert.deepStrictEqual([...new Set(untyped.map((c) => c.vias))].sort(), ['click,click', 'click,enter', 'click,release'].sort(), 'only `via` differs: click / enter / release');
+// the session's box goes with its draw on every cancel path (task 1030's ONE cancel: Esc, another tool, Undo with the pick pending), and a draw
+// dropped with the document loaded in place leaves nothing held (the held picks live on state.active)
+for (const how of ['esc', 'ribbon-line', 'footer-undo', 'new-document']) {
+  const app = await openApp();
+  try {
+    app.tool('circle');
+    const c = app.toScreen(...W.centre), h = app.toScreen(...W.rimHover);
+    app.click(c.x, c.y); app.move(h.x, h.y);
+    const box = () => { const e = app.document.getElementById('dimInput'); return !!e && !e.classList.contains('hidden'); };
+    assert.ok(box(), `${how}: the diameter box is open after the centre`);
+    if (how === 'esc') app.esc(); else if (how === 'ribbon-line') app.tool('line'); else if (how === 'footer-undo') app.press(app.document.getElementById('btn-undo')); else { await app.buffer.newDesign(); app.frames(2); }
+    if (how !== 'new-document') assert.ok(!box(), `${how}: the box went with the draw`);
+    assert.ok(!toolSession(app.state, CIRCLE).pending(), `${how}: nothing held`);
+    if (how === 'new-document') { app.tool('circle'); app.click(c.x, c.y); assert.strictEqual(app.state.shapes.filter((x) => x.type === 'circle').length, 0, 'new-document: the next click is a new centre, not the rim of the old draw'); }
+    console.log(`  cancel ${how}: ok`);
+  } finally { await app.close(); }
+}
 console.log("typed doc", typed[0].doc); console.log("untyped doc", untyped[0].doc); console.log("step log (B1)", untyped[0].picks);
 console.log("PASS circle-session-1034-node");

@@ -1,7 +1,7 @@
 // tests/circle-session-1034-live.test.js — TASK 1034 (input unification trial, plan docs/INPUT-UNIFY-PLAN-1031.md 5.1): the Circle tool in a real
 // browser, desktop 1280x800 (mouse) and phone 390x844 (touch). Each case draws a line (its end b is the rim joint), then one circle, and reads the
 // saved document back. Inside each group the documents are identical (shapes + constraints, ids normalised):
-//   typed diameter 60:   desktop: Enter, click;          phone: tap the box + Enter, tap the canvas
+//   typed diameter 12:   desktop: Enter, click;          phone: tap the box + Enter, tap the canvas
 //   nothing typed, rim on b (point-on-circle):  desktop: click-click, click + hover + Enter (C-1), drag-release;  phone: tap-tap, finger drag
 // The step log and the one-build counter are read in tests/circle-session-1034-node.test.js (the same code, no browser needed).
 // Evidence: .evidence/1034/live-<case>-<tag>.png
@@ -57,8 +57,20 @@ async function run({ width, height, tag }) {
   const esc = async () => { await sendRealKey(send, 'Escape', 'Escape', 27, 0, ''); await sleep(150); };
   const type = async (t) => { await send('Input.insertText', { text: t }); await sleep(100); };
   const boxShown = () => evalJs(`(() => { const e = document.getElementById('dimInput'); return !!e && !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; })()`);
-  const tapBox = async () => tap(await evalJs(`(() => { const r = document.getElementById('dimInput').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
+  // a finger taps the box to focus it, then its text is selected (as a tap-and-select would), so the typed value replaces the opening 0
+  const tapBox = async () => { await tap(await evalJs(`(() => { const r = document.getElementById('dimInput').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`)); await evalJs(`document.getElementById('dimInput').select()`); };
   const shot = async (name) => { const { data } = await send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(path.join(EVIDENCE_DIR, `live-${name}-${tag}.png`), Buffer.from(data, 'base64')); };
+  // N-2 (audit 1035): the dashed preview circle drawn mid-draw has the radius the build makes; a legible crop around it is the evidence
+  const previewR = () => evalJs(`(() => { const c = [...document.querySelectorAll('#svgCanvas circle[stroke-dasharray]')].filter((e) => e.getAttribute('fill') === 'none' && !e.dataset.shapeId); return c.length === 1 ? Number(c[0].getAttribute('r')) : null; })()`);
+  const builtR = () => evalJs(`(() => { const c = document.querySelector('#svgCanvas circle.shape-elem[data-shape-id]'); return c ? Number(c.getAttribute('r')) : null; })()`);
+  const typedPreview = async (name) => {
+    await sleep(150);
+    const r = await previewR();
+    const b = await evalJs(`(() => { const c = [...document.querySelectorAll('#svgCanvas circle[stroke-dasharray]')].filter((e) => e.getAttribute('fill') === 'none' && !e.dataset.shapeId)[0]; const r = c.getBoundingClientRect(); return { x: r.left - 30, y: r.top - 30, w: r.width + 60, h: r.height + 60 }; })()`);
+    const { data } = await send('Page.captureScreenshot', { format: 'png', clip: { x: Math.max(0, b.x), y: Math.max(0, b.y), width: b.w, height: b.h, scale: 1 } });
+    fs.writeFileSync(path.join(EVIDENCE_DIR, `live-${name}-preview-${tag}.png`), Buffer.from(data, 'base64'));
+    return r;
+  };
   const readDoc = async () => {
     await flushAutosave();
     return evalJs(`import('/packages/ui/project-store.js').then(async (m) => { const buf = await m.getProjectStore().readBuffer(); const t = buf && buf.tabs ? (buf.tabs[buf.active || 0] || buf.tabs[0]) : null; return t && t.doc ? t.doc.geometry : null; })`);
@@ -97,14 +109,14 @@ async function run({ width, height, tag }) {
     }
     const typed = [], untyped = [];
     if (!isPhone) {
-      typed.push(await drawCase('typed-enter', async () => { await tap(P.centre); await hover(P.rim); await type('60'); await enter(); }));
-      typed.push(await drawCase('typed-click', async () => { await tap(P.centre); await hover(P.rim); await type('60'); await tap(P.rim); }));
+      typed.push(await drawCase('typed-enter', async () => { await tap(P.centre); await hover(P.rim); await type('12'); const r = await typedPreview('typed-enter'); await enter(); const b = await builtR(); check(r !== null && Math.abs(r - b) < 1e-6, `[${tag}] N-2: the preview radius mid-draw (${r}) is the built radius (${b})`); }));
+      typed.push(await drawCase('typed-click', async () => { await tap(P.centre); await hover(P.rim); await type('12'); await tap(P.rim); }));
       untyped.push(await drawCase('rim-click-click', async () => { await tap(P.centre); await hover(P.b); await tap(P.b); }));
       untyped.push(await drawCase('rim-hover-enter', async () => { await tap(P.centre); await hover(P.b); await enter(); }));
       untyped.push(await drawCase('rim-drag', async () => { await drag(P.centre, P.b); }));
     } else {
-      typed.push(await drawCase('typed-tapbox-enter', async () => { await tap(P.centre); check(await boxShown(), `[${tag}] the diameter box opened`); await tapBox(); await type('60'); await enter(); }));
-      typed.push(await drawCase('typed-tapbox-tap', async () => { await tap(P.centre); await tapBox(); await type('60'); await tap(P.rim); }));
+      typed.push(await drawCase('typed-tapbox-enter', async () => { await tap(P.centre); check(await boxShown(), `[${tag}] the diameter box opened`); await tapBox(); await type('12'); const r = await typedPreview('typed-tapbox-enter'); await enter(); const b = await builtR(); check(r !== null && Math.abs(r - b) < 1e-6, `[${tag}] N-2: the preview radius mid-draw (${r}) is the built radius (${b})`); }));
+      typed.push(await drawCase('typed-tapbox-tap', async () => { await tap(P.centre); await tapBox(); await type('12'); await tap(P.rim); }));
       untyped.push(await drawCase('rim-tap-tap', async () => { await tap(P.centre); await tap(P.b); }));
       untyped.push(await drawCase('rim-finger-drag', async () => { await drag(P.centre, P.b); }));
     }
@@ -113,7 +125,7 @@ async function run({ width, height, tag }) {
     }
     const A = typed[0].doc, B = untyped[0].doc;
     const ca = A.shapes.find((s) => s.type === 'circle'), cb = B.shapes.find((s) => s.type === 'circle');
-    check(ca && ca.radius === 30 && A.constraints.some((c) => c.type === 'distance' && c.isDiameter && c.value === 60), `[${tag}] typed: radius 30 and the diameter dimension 60`);
+    check(ca && ca.radius === 6 && A.constraints.some((c) => c.type === 'distance' && c.isDiameter && c.value === 12), `[${tag}] typed: radius 6 and the diameter dimension 12`);
     check(cb && B.constraints.some((c) => c.type === 'pointOnLine' && JSON.stringify(c).includes(`"${cb.id}"`)), `[${tag}] untyped: b is on the circle (point-on-circle) ${JSON.stringify(B.constraints)}`);
   } finally {
     await close();

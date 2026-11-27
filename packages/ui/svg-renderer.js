@@ -1776,7 +1776,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       if(active.preview.type === 'line'){
         out.push(`<line x1="${a.x}" y1="${a.y}" x2="${p.x}" y2="${p.y}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
       } else if(active.preview.type === 'circle'){
-        const r = Math.hypot(p.x - a.x, p.y - a.y);
+        // TASK 1034 (N-2): the radius the build will make (a typed diameter's half, else the cursor's: #ui/input-handlers/circle-tool.js preview)
+        const r = typeof active.preview.radius === 'number' ? active.preview.radius : Math.hypot(p.x - a.x, p.y - a.y);
         out.push(`<circle cx="${a.x}" cy="${a.y}" r="${r}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
       } else if(active.preview.type === 'polygon'){
         // Draw regular polygon preview using center 'a' and preview point 'p'

@@ -1533,6 +1533,7 @@ export const showDimInput = showEditInput;
 // (then the same tool again: restartActiveTool). The selection is not touched here (a tool switch keeps it: Dimension / Mirror / a constraint
 // start from it); Esc and Undo clear it themselves.
 function cancelActiveWork(state) {
+    cancelToolSessions(state); // TASK 1034: FIRST, while state.active still holds a session tool's picks (the resets below drop state.active): its picks, typed values and boxes go
     cancelTransformGesture(state); // TASK 753: a box handle drag: the group goes back
     cancelPointDrag(state);        // a point / shape drag: everything goes back
     closeTransformInput();
@@ -1545,7 +1546,6 @@ function cancelActiveWork(state) {
     resetFilletState();
     resetOffsetState(); // TASK 650
     resetPatternState(); // TASK 658
-    cancelToolSessions(state); // TASK 1034: a session tool's held picks, typed values and boxes
     try{ resetDrawingState(state); }catch(_){ }
     try{ resetSelectionState(); }catch(_){ }
     if (typeof state.closeDrawStep === 'function') state.closeDrawStep(); // TASK 549: a draw cancelled leaves nothing and no undo step (a committed bezier / line chain is kept)

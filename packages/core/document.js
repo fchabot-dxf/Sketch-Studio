@@ -108,7 +108,9 @@ function removedVcarveCount(doc) {
 }
 
 /**
- * deserializeDocument(doc, state) → { ok: true, hosts, removedVcarves } | { ok: false, reason }
+ * deserializeDocument(doc, state) → { ok: true, hosts, removedVcarves, damagedShapes } | { ok: false, reason }
+ *   damagedShapes (BUG-305, F-105) = how many shapes of the file name a joint the file does not have (they load as they were, and cannot be drawn):
+ *   the host that loads a FILE says so once.
  *   Replaces state's ENTIRE geometry with doc's (lesson: opening a document replaces the whole state,
  *   never blends with what was there — clear every store to default FIRST). Constraints are re-added via
  *   restoreConstraintObject (the SAME validated path undo/redo's _restoreSnapshot uses, with no duplicate check: a saved drawing comes back
@@ -134,6 +136,7 @@ export function deserializeDocument(doc, state) {
 
   state.shapes.length = 0;
   state.shapes.push(...(g.shapes || []).map((s) => ({ ...withoutDragTarget(s), joints: s.joints ? [...s.joints] : [] })));
+  const damagedShapes = state.shapes.filter((s) => s.joints.some((id) => !state.joints.has(id))).length; // BUG-305 (F-105)
 
   // the parameter list first (TASK 709): a dimension named while loading (a version-1 file) must not take a kept value's name (O10)
   if (Array.isArray(state.parameters)) replaceParameters(state.parameters, g.parameters);
@@ -180,5 +183,5 @@ export function deserializeDocument(doc, state) {
   state.active = null;
 
   // TASK 741: g.vcarves (a document saved while Shaper had V-carve) is not loaded (above: no state part reads it); removedVcarves = how many had a region
-  return { ok: true, hosts: doc.hosts || {}, removedVcarves: removedVcarveCount(doc) };
+  return { ok: true, hosts: doc.hosts || {}, removedVcarves: removedVcarveCount(doc), damagedShapes };
 }

@@ -2613,12 +2613,12 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Reported by:** advisor, merge gate
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
 - **Report:** `tests/ui-fixes-774-live.test.js` fails intermittently under gate load and passes alone.
-- **What was wrong:** Flaky live test: a red merge gate that is not a product bug.
-- **Cause:** unknown
-- **Task id(s):** unknown
-- **Fix merge sha:** none
-- **Guarding test file(s):** none yet
-- **Status:** open
+- **What was wrong:** NOT only a flaky test: a real UI bug. Hovering a Settings row's "i" near its edge opened the hint, the hint grew the panel, and the panel (centred by translate(-50%,-50%)) shifted, so the "i" slid from under the resting pointer: pointerleave closed the hint, the panel shrank, pointerenter reopened it (a ~16 ms flicker loop) and a click missed (no pin). The test's `.sk-hint:not([hidden])` read then hit null (`Cannot read properties of null (reading 'textContent')`).
+- **Cause:** `.sk-style-panel` in packages/ui/style-panel.js re-centred itself vertically whenever its content grew.
+- **Task id(s):** 1029 (fix: the panel is centred once on open and keeps that top; max-height min(82vh, room below the top), it scrolls inside)
+- **Fix merge sha:** (pending merge of agents/flaky774-1029)
+- **Guarding test file(s):** tests/settings-hint-stays-put-1029-live.test.js (desktop 1280x800 and phone 390; fails without the fix), tests/ui-fixes-774-live.test.js
+- **Status:** fixed
 - **Related:** unknown
 - **History:** seen in several merge gates on 2026-11-26.
 
@@ -2686,6 +2686,141 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `solver`
 - **History:** found in audit `1017` -> fixed in task `1019`. Probe before: `ROW E-01a.autoRefUndoRedo | afterPlace=["80","(80)"] ... afterRedo=["80"]`. After: `ROW E-01a.autoRefUndoRedo | ... afterRedo=["80","(80)"]`, `ROW E-01b.singleUndoAutoRef | before=["80","(80)","(80)"] after1Undo=["80","(80)"] after1Redo=["80","(80)","(80)"]`.
 
+### BUG-300
+- **Date / turn:** 2026-11-27 (task 1027, from the files and documents audit 1024, row F-81 / F-81b)
+- **Reported by:** audit `1024`
+- **App(s) & host:** SketchStudio
+- **Report:** Download SVG and Download DXF dropped every circle, and wrote construction geometry as real solid lines.
+- **What was wrong:** Download SVG of a design with 9 circles wrote 16 `<line>`, 0 `<circle>`; the construction line came out as a solid black line.
+- **Cause:** `buildSVG` and `buildDXF` (`apps/sketchstudio/ui/export-manager.js`) each filtered `line | arc | bezier` only, and never read `isConstruction`.
+- **Fix:** One declared filter `exportedShapes` (export-manager.js, `EXPORTED_TYPES` incl. circle, never `isConstruction`) feeds both writers; a circle is an SVG `<circle>` / a DXF CIRCLE (with arcApprox its sampled points).
+- **Task id(s):** `1027`
+- **Fix merge sha:** pending (set at merge)
+- **Guarding test file(s):** `tests/export-roundtrip-1027-node.test.js`
+- **Status:** fixed (on branch `agents/files-fix-1027`, awaiting merge)
+- **Family:** `export-svg`
+- **Related:** BUG-301
+- **History:** F-id `F-81 / F-81b` of `docs/FILES-AUDIT-1024.md`; probe `tests/audits/files-audit-1024-*.mjs`.
+
+---
+### BUG-301
+- **Date / turn:** 2026-11-27 (task 1027, from the files and documents audit 1024, row F-84)
+- **Reported by:** audit `1024`
+- **App(s) & host:** SketchStudio
+- **Report:** Our own DXF re-imported mirrored top to bottom.
+- **What was wrong:** First lines `(80,4)-(80,40)` came back `(80,-4)-(80,-40)`.
+- **Cause:** The DXF importer negates Y (DXF is Y-up, the world Y-down); `buildDXF` wrote the world Y unchanged (the sidebar passed `invertY:false`).
+- **Fix:** The DXF writer ALWAYS negates Y and computes an arc's angles and direction from the points as written, so export then import is the identity. Behaviour change (owner/advisor ruling): the Export view's "Invert Y axis" box no longer reaches a DXF (it used to keep the world Y there); it is SVG only and relabelled "Invert Y axis (SVG)". The box is not a stored setting, so nothing stored changes.
+- **Task id(s):** `1027`
+- **Fix merge sha:** pending (set at merge)
+- **Guarding test file(s):** `tests/export-roundtrip-1027-node.test.js`, `tests/arc-direction.test.js` (the DXF arc check now reads Y-up angles)
+- **Status:** fixed (on branch `agents/files-fix-1027`, awaiting merge)
+- **Family:** `export-svg`
+- **Related:** BUG-300
+- **History:** F-id `F-84` of `docs/FILES-AUDIT-1024.md`; probe `tests/audits/files-audit-1024-*.mjs`.
+
+---
+### BUG-302
+- **Date / turn:** 2026-11-27 (task 1027, from the files and documents audit 1024, row F-47a)
+- **Reported by:** audit `1024`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (SVG import)
+- **Report:** A NaN coordinate in an SVG became 0: a made-up line.
+- **What was wrong:** `<line x1="NaN" ...>` imported as the line (0,0)-(5,5), nothing said.
+- **Cause:** `num()` (`packages/core/svg-import.js`) turned every unparsable number into 0; `parsePoints` dropped bad tokens and re-paired the rest.
+- **Fix:** `coord()` returns null for a present non-numeric value (an absent one is still SVG's default 0); line, rect, circle, ellipse, polyline and polygon holding one are skipped and counted ("non-numeric coordinate, not imported"), shown by the import's one notice. `parsePoints` returns null on a bad token.
+- **Task id(s):** `1027`
+- **Fix merge sha:** pending (set at merge)
+- **Guarding test file(s):** `tests/svg-import-1027-node.test.js`
+- **Status:** fixed (on branch `agents/files-fix-1027`, awaiting merge)
+- **Family:** `import-svg`
+- **Related:** BUG-303
+- **History:** F-id `F-47a` of `docs/FILES-AUDIT-1024.md`; probe `tests/audits/files-audit-1024-*.mjs`.
+
+---
+### BUG-303
+- **Date / turn:** 2026-11-27 (task 1027, from the files and documents audit 1024, row F-47b)
+- **Reported by:** audit `1024`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (SVG import)
+- **Report:** A circle of radius 0 or less imported as a radius-0 circle, silently.
+- **What was wrong:** `<circle r="-5">` and `r="0"` gave two circles of radius 0.
+- **Cause:** The `circle` emitter (`packages/core/svg-import.js`) took `num(d.r)` with no check.
+- **Fix:** A circle with r <= 0 is skipped and counted ("radius zero or negative, not imported") in the same notice.
+- **Task id(s):** `1027`
+- **Fix merge sha:** pending (set at merge)
+- **Guarding test file(s):** `tests/svg-import-1027-node.test.js`
+- **Status:** fixed (on branch `agents/files-fix-1027`, awaiting merge)
+- **Family:** `import-svg`
+- **Related:** BUG-302
+- **History:** F-id `F-47b` of `docs/FILES-AUDIT-1024.md`; probe `tests/audits/files-audit-1024-*.mjs`.
+
+---
+### BUG-304
+- **Date / turn:** 2026-11-27 (task 1027, from the files and documents audit 1024, row F-58)
+- **Reported by:** audit `1024`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (SVG import)
+- **Report:** A circle under a non-uniform scale imported as ONE circle of a wrong radius.
+- **What was wrong:** `<circle r="5" transform="scale(2,1)">` came in as a circle of radius 7.071.
+- **Cause:** The `circle` emitter scaled the radius by `linearScaleOf(ctm)` (sqrt of the determinant), right only for a similarity.
+- **Fix:** When the CTM is not a similarity (`isSimilarity`), the circle comes in as the same flattened ring an `<ellipse>` gives (`ellipsePoints` with the CTM applied). A uniform scale still gives a circle.
+- **Task id(s):** `1027`
+- **Fix merge sha:** pending (set at merge)
+- **Guarding test file(s):** `tests/svg-import-1027-node.test.js`
+- **Status:** fixed (on branch `agents/files-fix-1027`, awaiting merge)
+- **Family:** `import-svg`
+- **Related:** BUG-302
+- **History:** F-id `F-58` of `docs/FILES-AUDIT-1024.md`; probe `tests/audits/files-audit-1024-*.mjs`.
+
+---
+### BUG-305
+- **Date / turn:** 2026-11-27 (task 1027, from the files and documents audit 1024, row F-105)
+- **Reported by:** audit `1024`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (open a file / a stored design)
+- **Report:** A shape of a file that names a joint the file does not have vanished with no word.
+- **What was wrong:** `dangling-refs.sketch.json` (a line on a joint `ghost`) opened as a tab with 0 shapes drawn and no toast.
+- **Cause:** `deserializeDocument` (`packages/core/document.js`) loaded the shape as it was and only logged dropped constraints (`dbg.warn`); nothing told the user.
+- **Fix:** `deserializeDocument` returns `damagedShapes` (shapes naming a missing joint; what loads is unchanged); the document buffer's `restored()` (`packages/ui/document-buffer-core.js`) shows ONE warning "1 shape in this design was damaged and could not be loaded" for a stored design or a file load (not for a tab switch).
+- **Task id(s):** `1027`
+- **Fix merge sha:** pending (set at merge)
+- **Guarding test file(s):** `tests/files-tabs-1027-node.test.js`
+- **Status:** fixed (on branch `agents/files-fix-1027`, awaiting merge)
+- **Family:** `storage-lifecycle`
+- **Related:** 1016 R1-07
+- **History:** F-id `F-105` of `docs/FILES-AUDIT-1024.md`; probe `tests/audits/files-audit-1024-*.mjs`.
+
+---
+### BUG-306
+- **Date / turn:** 2026-11-27 (task 1027, from the files and documents audit 1024, row F-03 / F-32)
+- **Reported by:** audit `1024`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (document tabs)
+- **Report:** A file opened and not edited was lost as a tab on a reload or when switching apps.
+- **What was wrong:** Open a file, edit nothing, reload: one empty Untitled. Switching to Shaper: an empty Untitled.
+- **Cause:** `captureBufferSnapshot` (`packages/ui/document-buffer-core.js`) wrote no buffer for "one unbound tab without content"; a file home has no content (its baseline is the file) so it counted as an empty Untitled.
+- **Fix:** The same test also asks for `!fileHome`: a design opened from a file is kept like an edited one.
+- **Task id(s):** `1027`
+- **Fix merge sha:** pending (set at merge)
+- **Guarding test file(s):** `tests/files-tabs-1027-node.test.js`, `tests/files-1027-live.test.js` (desktop 1280 and phone 390)
+- **Status:** fixed (on branch `agents/files-fix-1027`, awaiting merge)
+- **Family:** `storage-lifecycle`
+- **Related:** BUG-015
+- **History:** F-id `F-03 / F-32` of `docs/FILES-AUDIT-1024.md`; probe `tests/audits/files-audit-1024-*.mjs`.
+
+---
+### BUG-307
+- **Date / turn:** 2026-11-27 (task 1027, from the files and documents audit 1024, row F-94)
+- **Reported by:** audit `1024`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Save as / Open dialog, and every small modal)
+- **Report:** Tab left the aria-modal Save as / Open dialog for the page behind.
+- **What was wrong:** Tab x9 from the name field reached the sidebar button, header tabs, document tabs and ribbon behind the dialog.
+- **Cause:** The shared small modal shell (`openSmallModal`, `packages/ui/template-picker.js`) handled only Escape.
+- **Fix:** One shared `trapTab(panel, e)` (`packages/ui/template-picker.js`) wraps Tab / Shift+Tab inside the panel's own visible controls; `openSmallModal` and `openTemplatePicker` both call it. Behaviour change: the name prompt, choice and close-unsaved modals trap Tab too.
+- **Task id(s):** `1027`
+- **Fix merge sha:** pending (set at merge)
+- **Guarding test file(s):** `tests/files-1027-live.test.js` (desktop 1280 and phone 390)
+- **Status:** fixed (on branch `agents/files-fix-1027`, awaiting merge)
+- **Family:** `ui-input`
+- **Related:** none
+- **History:** F-id `F-94` of `docs/FILES-AUDIT-1024.md`; probe `tests/audits/files-audit-1024-*.mjs`.
+
 ---
 
 ## Family index
@@ -2695,7 +2830,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | Family | Timeline (oldest first) |
 |---|---|
 | `build-deploy` | BUG-062 (11-21) |
-| `export-svg` | BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19) |
+| `export-svg` | BUG-300 (11-27), BUG-301 (11-27), BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19) |
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
@@ -2705,11 +2840,13 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
-| `storage-lifecycle` | BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |
+| `storage-lifecycle` | BUG-305 (11-27), BUG-306 (11-27), BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
 | `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26) |
+| `ui-input` | BUG-307 (11-27), BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26) |
+| `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 
 ---

@@ -534,6 +534,12 @@ export function addConstraint(state, type, params) {
         dbg.log('constraints', '[addConstraint] Duplicate constraint rejected:', type, params);
         return false;
     }
+    // R1-15 / R1-11: a distance CREATED with no placement of its own (a draw-time box, a tool's typed size) takes the default placement among the
+    // existing labels and shapes (#core/dim-label.js), HERE and not in pushConstraint (a restore puts back exactly what was saved, task 1019). A
+    // dimension a tool places itself (the Dimension tool) carries its offset and is untouched.
+    if (type === CONSTRAINT_TYPES.DISTANCE && params && !Number.isFinite(params.offset) && !params.glyphPos && !params.__pos && !params.labelPos && !Number.isFinite(params.labelAngle) && !Number.isFinite(params.labelSlide)) {
+        return pushConstraint(state, type, { ...params, ...(defaultLabelPlacement({ type, ...params }, state) || {}) });
+    }
     return pushConstraint(state, type, params);
 }
 
@@ -558,13 +564,6 @@ function pushConstraint(state, type, params) {
     // TASK 535: every dimension has a name; one without (a new dimension, or a version-1 file) gets the next automatic one HERE, the
     // only place. It goes in BEFORE createConstraint so withDimensionState writes name and expression in one fixed order (byte-stable saves).
     if (isDimension({ ...normalized, type }) && !normalized.name) normalized.name = nextDimensionName(state.constraints, state.parameters);
-
-    // R1-15 / R1-11: a distance born with no placement of its own (a draw-time box, a tool's typed size) takes the default placement among the existing
-    // labels and shapes (#core/dim-label.js), HERE, the one place every creator reaches (ConstraintManager included), not the one fixed offset that
-    // piled concentric diameters on +X. A dimension a tool places itself (the Dimension tool) carries its offset and is untouched.
-    if (type === CONSTRAINT_TYPES.DISTANCE && !Number.isFinite(normalized.offset) && !normalized.glyphPos && !normalized.__pos && !normalized.labelPos && !Number.isFinite(normalized.labelAngle) && !Number.isFinite(normalized.labelSlide)) {
-        Object.assign(normalized, defaultLabelPlacement({ type, ...normalized }, state) || {});
-    }
 
     // Create validated constraint
     const constraint = createConstraint(type, normalized);

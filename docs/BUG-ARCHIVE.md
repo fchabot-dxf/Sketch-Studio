@@ -3598,7 +3598,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Fix:** the end step declares its winding as a `path` (`WINDING` in `arc-tool.js`): the session adds every hover AND the step's own point to it (`#ui/tool-session.js`, one rule), so a tap with no hover before it winds the short way, as a hovered click does.
 - **Task id(s):** `1039`
 - **Fix merge sha:** open (`agents/arc-session-1039`, awaiting merge)
-- **Guarding test file(s):** `tests/arc-session-1039-node.test.js` (`CB3 touch: tap centre, start, p` = `CB1 mouse: click centre, start, wind, click p`: the same document, `sweep:true`), `tests/arc-session-1039-live.test.js` (phone `centre-tap-x3` / `centre-finger-drag-tap`: the short way round)
+- **Guarding test file(s):** `tests/arc-session-1039-node.test.js` (`CB3 touch: tap centre, start, p` = `CB1 mouse: click centre, start, wind, click p`: the same document, `sweep:true`), `tests/arc-session-1039-phone-live.test.js` (split from `arc-session-1039-live.test.js` by task `1043`; phone `centre-tap-x3` / `centre-finger-drag-tap`: the short way round)
 - **Status:** fixed
 - **Family:** `ui-input`
 - **History:** found in task `1039` -> fixed in task `1039`. Probe `C04 tap-tap-tap`, before: `"sweep":false,"type":"arc"` (end `{"x":-14.8889,"y":39.5614}`, the clicks' `C01` `"sweep":true`); after: `"sweep":true,"type":"arc"`.
@@ -3651,20 +3651,39 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **History:** measured by the advisor 2026-11-27 -> fixed in task `1040`. Counts after (`tests/svg-loops-1040-node.test.js`): rect + line `closed 1, open 1`, two rects `closed 2`, slot `closed 1`, filleted rect `closed 1`.
 
 ### BUG-402
-- **Date / turn:** 2026-11-27 (found in task `1040`)
+- **Date / turn:** 2026-11-27 (found in task `1040`; fixed in task `1043`)
 - **Reported by:** task `1040` (the DXF check the task asked for)
 - **App(s) & host:** SketchStudio (Export, "Download DXF")
 - **Report:** the DXF export never joins curves: every line / arc / bezier / circle is its own entity (`LINE` / `ARC` / `SPLINE` / `CIRCLE`), no closed outline is ever one `LWPOLYLINE` (with bulges for arcs). One closed rectangle: `{"LINE":4}`.
 - **What was wrong:** a closed outline is 4 (or more) loose entities in the DXF, the same problem BUG-401 fixed in the SVG.
 - **Cause:** `apps/sketchstudio/ui/export-manager.js` `buildDXF` writes one entity per exported shape; it reads no loop.
-- **Fix:** open (task `1040` stopped on DXF, as told: not fixed there)
-- **Task id(s):** `1040` (found)
+- **Fix:** task `1043`: the decomposition BUG-401's fix wrote inline in `buildSVG` (`findLoops` / `findOpenChains` / `chainWalk` on `exportedShapes`, each curve in one place) is ONE helper, `exportOutlines(state)` in `export-manager.js`, read by BOTH `buildSVG` (its output byte-identical: 453 fixture exports compared before / after) and `buildDXF`. The DXF writes every closed outline as ONE closed `LWPOLYLINE` (`70` = 1; an arc a bulge `42` = tan(sweep / 4), its sign the way the walk turns in the DXF's Y-up plane, from the one `arcSweepInfo`), every open stroke of 2+ curves as ONE open `LWPOLYLINE` (`70` = 0), a circle a `CIRCLE`, a lone line / arc its `LINE` / `ARC` (advisor ruling b). A bulge is written with `precision` + log10(chord / (4 bulge^2)) decimals, so a nearly flat arc reads back as exact as a coordinate (at the coordinates' 6 decimals the 17188 mm arc of `angle-dimension/owner-trapezoid-angle.json` came back 0.1 mm off). A step's ends are its NODES' points (coincident joints merged, `buildNodeMap`), so two curves meeting at a node are written at the very same coordinates. Y-up as before (BUG-301: the writer negates Y; "Invert Y axis" is SVG only); construction stays out (`exportedShapes`). arcApprox: arcs and beziers sampled (arcSeg segments) into the polylines, no bulge; a circle one closed `LWPOLYLINE` of its points (was arcSeg `LINE`s).
+- **Declared limit (advisor ruling a):** an outline with a bezier is NOT one closed entity unless arcApprox is on: an `LWPOLYLINE` holds no cubic, so with arcApprox off the bezier stays its exact `SPLINE` (TASK 761) and each run of lines / arcs around it is one open `LWPOLYLINE`, the SPLINE's end points and the neighbouring vertices written with the IDENTICAL text (the same node points, the same rounding), so an importer joining by end points closes the outline (the app's own import does: `findLoops` gives 1 loop back).
+- **Task id(s):** `1040` (found), `1043` (fixed)
+- **Fix merge sha:** open (`agents/dxf-loops-1043`, awaiting merge)
+- **Guarding test file(s):** `tests/dxf-loops-1043-node.test.js` (`D-1` the svg-loops-1040 drawings drawn with the real tools: entity kinds / counts, closed flags, bulges and their sign, every curve once, Y-up, the bezier's SPLINE ends = the LWPOLYLINE ends as written; `D-2` arcApprox; `D-3` the round trip through `#core/dxf-import` (curves, arcs' centre / radius / direction, loops); `D-4` the 151 fixture drawings of bezier-loops-761: every curve once and the round trip), `tests/export-roundtrip-1027-node.test.js` (the 3-line chain one `LWPOLYLINE`), `tests/bezier-loops-761-node.test.js` (its `studioDxf` facet changed on purpose)
+- **Status:** fixed
+- **Family:** `export-svg`
+- **Related:** BUG-301, BUG-401, BUG-420
+- **History:** found in task `1040` (`.evidence/1040/sample-output.txt`: `DXF of one closed rectangle (4 lines): {"LINE":4}`) -> fixed in task `1043` (fail-first: `dxf-loops-1043-node: 1 passed, 9 failed` on the old writer; after: `11 passed, 0 failed`). Fusion import of the new files: unverified (samples in `.evidence/1043/`).
+
+---
+
+### BUG-420
+- **Date / turn:** 2026-11-27 (found in task `1043`)
+- **Reported by:** task `1043`
+- **App(s) & host:** SketchStudio (Export, "Download DXF")
+- **Report:** the Export view's "DXF version" select (`#export-dxf-version`: "R12 (default)" / "R2000") is read into the options (`dxfVersion`, `ui-manager.js`; `main.js` passes `'r12'`) but `buildDXF` never reads it, and the file has no HEADER section (no `$ACADVER`, no `$INSUNITS`). Since task `1043` the file holds `LWPOLYLINE` entities, which R12 does not have (R12's polyline is `POLYLINE` / `VERTEX` / `SEQEND`, which `#core/dxf-import` also reads), while the select still says R12.
+- **What was wrong:** a choice offered to the user does nothing; the file declares no version or units (our own import assumes mm and says so).
+- **Cause:** `apps/sketchstudio/ui/export-manager.js` `buildDXF` ignores `opts.dxfVersion` and writes the ENTITIES section only.
+- **Fix:** open (not in task `1043`'s scope: reported)
+- **Task id(s):** `1043` (found)
 - **Fix merge sha:** none
 - **Guarding test file(s):** none yet
 - **Status:** open
 - **Family:** `export-svg`
-- **Related:** BUG-401
-- **History:** found in task `1040` (`.evidence/1040/sample-output.txt`: `DXF of one closed rectangle (4 lines): {"LINE":4}`).
+- **Related:** BUG-402
+- **History:** found in task `1043` (`grep -n dxfVersion`: read in `ui-manager.js:107`, passed in `main.js:74`, used nowhere in `export-manager.js`).
 
 ---
 
@@ -3675,7 +3694,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | Family | Timeline (oldest first) |
 |---|---|
 | `build-deploy` | BUG-062 (11-21) |
-| `export-svg` | BUG-300 (11-27), BUG-301 (11-27), BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19), BUG-371 (11-27), BUG-376 (11-27), BUG-401 (11-27), BUG-402 (11-27, open) |
+| `export-svg` | BUG-300 (11-27), BUG-301 (11-27), BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19), BUG-371 (11-27), BUG-376 (11-27), BUG-401 (11-27), BUG-402 (11-27), BUG-420 (11-27, open) |
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |

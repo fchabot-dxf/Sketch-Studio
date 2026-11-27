@@ -1,5 +1,7 @@
-// tests/arc-session-1039-live.test.js — TASK 1039 (the plan's Arc migration, docs/INPUT-UNIFY-PLAN-1031.md 5.2 item 2): the Arc tool, both variants, in a
-// real browser, desktop 1280x800 (mouse) and phone 390x844 (touch). Each case draws a line (its end b is the joint the last point lands on), then one arc,
+// tests/arc-session-1039-live-runner.js — TASK 1039 (the plan's Arc migration, docs/INPUT-UNIFY-PLAN-1031.md 5.2 item 2): the Arc tool, both variants, in a
+// real browser, desktop 1280x800 (mouse) and phone 390x844 (touch). NOT a test file: TASK 1043 split the one test (its 90 s file limit hit under merge-gate
+// load) into tests/arc-session-1039-desktop-centre-live.test.js, -desktop-3pt-live.test.js and -phone-live.test.js, each calling runArcSession for its
+// device and variant(s): the same cases, the same checks. Each case draws a line (its end b is the joint the last point lands on), then one arc,
 // and reads the saved document back. Inside each group the documents are identical (shapes + constraints, ids normalised):
 //   Center Point Arc, typed radius 12 + sweep 90:   desktop: Enter / Enter, click / click;     phone: tap the box + Enter twice, tap the box + tap the canvas
 //   Center Point Arc, nothing typed, end on b:      desktop: click x3, click x2 + hover + Enter, drag-release + click;    phone: tap x3, finger drag + tap
@@ -8,7 +10,6 @@
 // Desktop: the dashed preview drawn just before the last step is the arc the build makes (its SVG arc: start, radius, flags, end).
 // The step log and the one-build counter are read in tests/arc-session-1039-node.test.js (the same code, no browser needed).
 // Evidence: .evidence/1039/live-<case>-<tag>.png
-import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser, sleep, sendRealKey } from './helpers/cdp-browser.js';
@@ -41,9 +42,11 @@ function normalised(g) {
 const arcNums = (d) => { const n = (d || '').match(/-?\d+(\.\d+)?(e[-+]?\d+)?/gi); return n && n.length >= 9 ? [n[0], n[1], n[2], n[5], n[6], n[7], n[8]].map(Number) : null; };
 const sameArcPath = (a, b) => !!a && !!b && a.every((v, i) => Math.abs(v - b[i]) < 1e-4);
 
-async function run({ width, height, tag }) {
+/** the cases of one device (`tag`) for the arc variants named (`variants`: 'centre' = Center Point Arc, '3pt' = 3-Point Arc) in one browser; → the failed checks */
+export async function runArcSession({ width, height, tag, variants }) {
   const isPhone = width <= 640;
-  const cdp = await launchBrowser({ tag: `1039-${tag}`, width, height });
+  const centre = variants.includes('centre'), three = variants.includes('3pt');
+  const cdp = await launchBrowser({ tag: `1039-${tag}-${variants.join('-')}`, width, height });
   if (!cdp) { console.log('skipped: no headless Edge/Chrome binary installed'); process.exit(0); }
   const { port, send, evalJs, waitForApp, navigate, close, flushAutosave } = cdp;
   const mouse = async (type, p) => send('Input.dispatchMouseEvent', { type, x: Math.round(p.x), y: Math.round(p.y), button: type === 'mouseMoved' ? 'none' : 'left', buttons: type === 'mousePressed' || p.held ? 1 : 0, clickCount: type === 'mouseMoved' ? 0 : 1 });
@@ -120,22 +123,27 @@ async function run({ width, height, tag }) {
     }
     const CSE = 'arc-cse', P3 = 'arc-3pt';
     const cTyped = [], cClicks = [], tTyped = [], tClicks = [];
-    if (!isPhone) {
+    if (!isPhone && centre) {
       cTyped.push(await drawCase(CSE, 'centre-typed-enter', async () => { await tap(P.centre); await hover(P.start); await type('12'); await enter(); await hoverTo(P.start, P.down); await type('90'); await notePreview('centre-typed-enter'); await enter(); }));
       cTyped.push(await drawCase(CSE, 'centre-typed-click', async () => { await tap(P.centre); await hover(P.start); await type('12'); await tap(P.start); await hoverTo(P.start, P.down); await type('90'); await tap(P.down); }));
       cClicks.push(await drawCase(CSE, 'centre-click-x3', async () => { await tap(P.centre); await hover(P.start); await tap(P.start); await hoverTo(P.start, P.b); await notePreview('centre-click-x3'); await tap(P.b); }));
       cClicks.push(await drawCase(CSE, 'centre-hover-enter', async () => { await tap(P.centre); await hover(P.start); await tap(P.start); await hoverTo(P.start, P.b); await enter(); }));
       cClicks.push(await drawCase(CSE, 'centre-drag-click', async () => { await drag(P.centre, P.start); await hoverTo(P.start, P.b); await tap(P.b); }));
+    }
+    if (!isPhone && three) {
       tTyped.push(await drawCase(P3, '3pt-typed-enter', async () => { await tap(P.s3); await hover(P.e3); await type('30'); await enter(); await hover(P.side); await type('20'); await notePreview('3pt-typed-enter'); await tap(P.side); }));
       tTyped.push(await drawCase(P3, '3pt-typed-click', async () => { await tap(P.s3); await hover(P.e3); await type('30'); await tap(P.e3); await hover(P.side); await type('20'); await tap(P.side); }));
       tClicks.push(await drawCase(P3, '3pt-click-x3', async () => { await tap(P.s3); await hover(P.e3); await tap(P.e3); await hover(P.b); await notePreview('3pt-click-x3'); await tap(P.b); }));
       tClicks.push(await drawCase(P3, '3pt-hover-enter', async () => { await tap(P.s3); await hover(P.e3); await tap(P.e3); await hover(P.b); await enter(); }));
       tClicks.push(await drawCase(P3, '3pt-drag-click', async () => { await drag(P.s3, P.e3); await hover(P.b); await tap(P.b); }));
-    } else {
+    }
+    if (isPhone && centre) {
       cTyped.push(await drawCase(CSE, 'centre-tapbox-enter', async () => { await tap(P.centre); check(await boxShown(), `[${tag}] the radius box opened`); await tapBox(); await type('12'); await enter(); await evalJs(`document.getElementById('dimInput').select()`); await type('90'); await enter(); }));
       cTyped.push(await drawCase(CSE, 'centre-tapbox-tap', async () => { await tap(P.centre); await tapBox(); await type('12'); await tap(P.start); await tapBox(); await type('90'); await tap(P.down); }));
       cClicks.push(await drawCase(CSE, 'centre-tap-x3', async () => { await tap(P.centre); await tap(P.start); await tap(P.b); }));
       cClicks.push(await drawCase(CSE, 'centre-finger-drag-tap', async () => { await drag(P.centre, P.start); await tap(P.b); }));
+    }
+    if (isPhone && three) {
       tTyped.push(await drawCase(P3, '3pt-tapbox-enter-tap', async () => { await tap(P.s3); await tapBox(); await type('30'); await enter(); await evalJs(`document.getElementById('dimInput').select()`); await type('20'); await tap(P.side); }));
       tTyped.push(await drawCase(P3, '3pt-tapbox-tap', async () => { await tap(P.s3); await tapBox(); await type('30'); await tap(P.e3); await tapBox(); await type('20'); await tap(P.side); }));
       tClicks.push(await drawCase(P3, '3pt-tap-x3', async () => { await tap(P.s3); await tap(P.e3); await tap(P.b); }));
@@ -145,17 +153,18 @@ async function run({ width, height, tag }) {
       for (const c of group.slice(1)) check(JSON.stringify(c.doc) === JSON.stringify(group[0].doc), `[${tag}] ${c.name}: the same document as ${group[0].name}${JSON.stringify(c.doc) === JSON.stringify(group[0].doc) ? '' : `\n${JSON.stringify(c.doc)}\nvs\n${JSON.stringify(group[0].doc)}`}`);
     }
     const arcOf = (d) => d.shapes.find((s) => s.type === 'arc');
-    const A = cTyped[0].doc, B = cClicks[0].doc, C3 = tTyped[0].doc, D3 = tClicks[0].doc;
-    check(A.constraints.some((c) => c.type === 'distance' && c.isRadius && c.value === 12 && c.shape === arcOf(A).id) && arcOf(A).sweep === true, `[${tag}] centre typed: the radius dimension 12, the positive winding ${JSON.stringify(A.constraints)}`);
-    check(B.constraints.some((c) => c.type === 'coincident') && arcOf(B).sweep === true, `[${tag}] centre untyped: the end on b (coincident), the short way round ${JSON.stringify(B.constraints)}`);
-    check(C3.constraints.some((c) => c.type === 'distance' && c.isRadius && c.value === 20) && C3.constraints.some((c) => c.type === 'distance' && !c.isRadius && c.value === 30), `[${tag}] 3-point typed: the radius 20 and chord 30 dimensions ${JSON.stringify(C3.constraints)}`);
-    check(D3.constraints.some((c) => c.type === 'pointOnLine' && c.shape === arcOf(D3).id), `[${tag}] 3-point untyped: b on the arc ${JSON.stringify(D3.constraints)}`);
+    if (centre) {
+      const A = cTyped[0].doc, B = cClicks[0].doc;
+      check(A.constraints.some((c) => c.type === 'distance' && c.isRadius && c.value === 12 && c.shape === arcOf(A).id) && arcOf(A).sweep === true, `[${tag}] centre typed: the radius dimension 12, the positive winding ${JSON.stringify(A.constraints)}`);
+      check(B.constraints.some((c) => c.type === 'coincident') && arcOf(B).sweep === true, `[${tag}] centre untyped: the end on b (coincident), the short way round ${JSON.stringify(B.constraints)}`);
+    }
+    if (three) {
+      const C3 = tTyped[0].doc, D3 = tClicks[0].doc;
+      check(C3.constraints.some((c) => c.type === 'distance' && c.isRadius && c.value === 20) && C3.constraints.some((c) => c.type === 'distance' && !c.isRadius && c.value === 30), `[${tag}] 3-point typed: the radius 20 and chord 30 dimensions ${JSON.stringify(C3.constraints)}`);
+      check(D3.constraints.some((c) => c.type === 'pointOnLine' && c.shape === arcOf(D3).id), `[${tag}] 3-point untyped: b on the arc ${JSON.stringify(D3.constraints)}`);
+    }
   } finally {
     await close();
   }
+  return failures;
 }
-
-await run({ width: 1280, height: 800, tag: 'desktop' });
-await run({ width: 390, height: 844, tag: 'phone' });
-assert.deepStrictEqual(failures, [], `${failures.length} check(s) failed`);
-console.log('arc-session-1039-live: PASS');

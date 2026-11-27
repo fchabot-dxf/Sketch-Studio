@@ -138,9 +138,11 @@ if (WRITE) {
     // PLACED now (tests/hold-part-822-node.test.js): its shaperTabs facet changed on purpose, every other facet is as it was
     // TASK 1040 (BUG-401): the SketchStudio SVG (studioSvg) writes each closed outline as ONE closed <path> and each open chain as one <path> now (read from
     // the loop finder; tests/svg-loops-1040-node.test.js guards it): that facet changed on purpose, every other facet is as it was
-    const mine = { ...digest[name], studioSvg: null }, was = { ...d, studioSvg: null };
+    // TASK 1043 (BUG-402): the SketchStudio DXF (studioDxf) writes each closed outline as ONE closed LWPOLYLINE and each open chain as one LWPOLYLINE now (read
+    // from the same decomposition as the SVG; tests/dxf-loops-1043-node.test.js guards it): that facet changed on purpose too
+    const mine = { ...digest[name], studioSvg: null, studioDxf: null }, was = { ...d, studioSvg: null, studioDxf: null };
     if (name === 'report/midpoint-move.json') { ok(digest[name].shaperTabs !== d.shaperTabs, `${name}: its refused tabs are placed now (TASK 822)`); eq({ ...mine, shaperTabs: null }, { ...was, shaperTabs: null }, `${name}: every other facet bit-identical`); n++; continue; }
-    eq(mine, was, `${name}: no bezier -> every facet but the SketchStudio SVG (TASK 1040) bit-identical to origin/main 97a5dba (TASK 786: its downloads to the 786 exporter)`);
+    eq(mine, was, `${name}: no bezier -> every facet but the SketchStudio SVG (TASK 1040) and DXF (TASK 1043) bit-identical to origin/main 97a5dba (TASK 786: its downloads to the 786 exporter)`);
     n++;
   }
   console.log(`no-bezier drawings bit-identical: ${n} (with a bezier, expected to change: ${Object.values(base).filter((d) => d.bezier).length})`);

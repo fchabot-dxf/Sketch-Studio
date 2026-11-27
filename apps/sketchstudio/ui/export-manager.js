@@ -1,5 +1,5 @@
 // Export manager: build SVG or DXF exports from sketch data (lines, arcs and, TASK 761, beziers: a cubic `C` / a DXF SPLINE); TASK 1043: both from ONE decomposition
-// (exportOutlines: closed outlines + open chains), an SVG closed <path>s, a DXF closed LWPOLYLINEs
+// (exportOutlines: closed outlines + open chains), an SVG closed <path>s, a DXF closed R12 POLYLINEs
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { arcSweepInfo } from '#core/geometry.js';
@@ -222,7 +222,7 @@ export function buildDXF(state, opts = {}) {
     lines.push('0','ARC','8','0','10',f(c.x),'20',f(c.y),'40',f(r),'50',f(startAngle),'51',f(endAngle));
   };
   // TASK 761: a bezier is a cubic SPLINE (degree 3, its four control points, knots 0 0 0 0 1 1 1 1: what #core/dxf-import reads back as one bezier). TASK
-  // 1043: in its own order, its two ends the step's points (the nodes' points, the very ones the LWPOLYLINE beside it writes: an importer joining by end
+  // 1043: in its own order, its two ends the step's points (the nodes' points, the very ones the polyline beside it writes: an importer joining by end
   // points closes the outline)
   const splineEnt = (st) => {
     const P = bezierPoints(st.shape, state.joints);
@@ -231,19 +231,23 @@ export function buildDXF(state, opts = {}) {
     for (const k of [0, 0, 0, 0, 1, 1, 1, 1]) lines.push('40', String(k));
     for (const q of [p0, P[1], P[2], p3].map(to)) lines.push('10', f(q.x), '20', f(q.y), '30', f(0));
   };
-  // TASK 1043 (BUG-402): ONE LWPOLYLINE (flag 70: 1 closed, 0 open) through `verts` = [{ p (world), bulge }], a vertex's bulge the segment to the next one
-  // (0 a line; tan(sweep / 4) an arc, positive counter-clockwise in the DXF's Y-up plane). A bulge is written with the decimals that keep the arc read back as
-  // exact as a written coordinate: an error e in a bulge b on a chord c moves the arc's centre (and radius) by about c e / (4 b^2), so it takes `precision`
-  // + log10(c / (4 b^2)) decimals (a nearly flat arc of a large radius needs more than its coordinates' decimals)
+  // TASK 1043 (BUG-402): ONE R12 polyline: POLYLINE (66 = 1: vertices follow; its 10 / 20 / 30 the R12 dummy point 0; flag 70: 1 closed, 0 open), a VERTEX
+  // per point of `verts` = [{ p (world), bulge }], then SEQEND. A vertex's bulge (42) is the segment to the next one (0 a line; tan(sweep / 4) an arc, positive
+  // counter-clockwise in the DXF's Y-up plane). NOT an LWPOLYLINE: Fusion's DXF import refuses LWPOLYLINE files (measured by the advisor 2026-11-27, with and
+  // without a HEADER: "InternalValidationError : bRet") and reads this R12 form (a closed slot: 2 lines + 2 arcs, 1 profile); the Export view's default is
+  // R12. A bulge is written with the decimals that keep the arc read back as exact as a written coordinate: an error e in a bulge b on a chord c moves the
+  // arc's centre (and radius) by about c e / (4 b^2), so it takes `precision` + log10(c / (4 b^2)) decimals (a nearly flat arc of a large radius needs more
+  // than its coordinates' decimals)
   const polyEnt = (verts, closed) => {
-    lines.push('0','LWPOLYLINE','8','0','90',String(verts.length),'70',closed ? '1' : '0');
+    lines.push('0','POLYLINE','8','0','66','1','10',f(0),'20',f(0),'30',f(0),'70',closed ? '1' : '0');
     verts.forEach((v, i) => {
       const q = to(v.p);
-      lines.push('10', f(q.x), '20', f(q.y));
+      lines.push('0','VERTEX','8','0','10', f(q.x), '20', f(q.y));
       if (!v.bulge) return;
       const w = to(verts[(i + 1) % verts.length].p), c = Math.hypot(w.x - q.x, w.y - q.y);
       lines.push('42', formatNum(v.bulge, Math.min(20, precision + Math.max(0, Math.ceil(Math.log10(c / (4 * v.bulge * v.bulge)))))));
     });
+    lines.push('0','SEQEND','8','0');
   };
   // a step's vertices, its end left out (the next step's start): a line its start; an arc its start with the bulge of its sweep turning the way it is walked
   // (the one arc-sweep function; negating Y turns it round), with arcApprox its sampled points (arcSeg segments) as straight segments; a bezier (arcApprox
@@ -265,7 +269,7 @@ export function buildDXF(state, opts = {}) {
     }
     return [{ p: st.fromP, bulge: 0 }];
   };
-  // a run of steps (no exact bezier in it) as ONE LWPOLYLINE; an open run of ONE curve that has its own entity stays that entity (a LINE, an ARC)
+  // a run of steps (no exact bezier in it) as ONE polyline; an open run of ONE curve that has its own entity stays that entity (a LINE, an ARC)
   const writeRun = (steps, closed) => {
     if (!steps.length) return;
     if (!closed && steps.length === 1 && steps[0].shape.type === 'line') return lineEnt(steps[0].fromP, steps[0].toP);
@@ -274,8 +278,8 @@ export function buildDXF(state, opts = {}) {
     if (!closed) verts.push({ p: steps[steps.length - 1].toP, bulge: 0 });
     polyEnt(verts, closed);
   };
-  // a walk (an outline's steps, closed, or an open stroke's): ONE LWPOLYLINE, or, with an exact bezier in it (an LWPOLYLINE holds no cubic; arcApprox off),
-  // each bezier its SPLINE and each run of lines and arcs between them one open LWPOLYLINE (an outline read from just after a bezier, so no run wraps
+  // a walk (an outline's steps, closed, or an open stroke's): ONE polyline, or, with an exact bezier in it (a polyline holds no cubic; arcApprox off),
+  // each bezier its SPLINE and each run of lines and arcs between them one open polyline (an outline read from just after a bezier, so no run wraps
   // round its start)
   const writeWalk = (steps, closed) => {
     const exactBezier = (st) => st.shape.type === 'bezier' && !arcApprox;
@@ -289,11 +293,11 @@ export function buildDXF(state, opts = {}) {
     writeRun(run, false);
   };
 
-  // TASK 1043 (BUG-402): what is written is exportOutlines' decomposition (the one the SVG writes too): every closed outline ONE closed LWPOLYLINE, a circle
-  // a CIRCLE, every open stroke ONE open LWPOLYLINE; every curve written once
+  // TASK 1043 (BUG-402): what is written is exportOutlines' decomposition (the one the SVG writes too): every closed outline ONE closed polyline, a circle
+  // a CIRCLE, every open stroke ONE open polyline; every curve written once
   for (const o of out.outlines) {
     if (o.circle) {
-      // BUG-300 (F-81): a circle is a CIRCLE entity (a DXF has no winding to keep), or with arcApprox its sampled points as one closed LWPOLYLINE
+      // BUG-300 (F-81): a circle is a CIRCLE entity (a DXF has no winding to keep), or with arcApprox its sampled points as one closed polyline
       const s = o.circle, c0 = J(s.joints[0]);
       if (!c0 || !(s.radius > 0)) continue;
       if (arcApprox) polyEnt(sampleCirclePoints(c0.x, c0.y, s.radius, arcSeg).slice(0, -1).map((p) => ({ p, bulge: 0 })), true);

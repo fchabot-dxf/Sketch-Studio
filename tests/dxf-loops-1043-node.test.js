@@ -1,11 +1,12 @@
-// tests/dxf-loops-1043-node.test.js — TASK 1043 (BUG-402): SketchStudio's "Download DXF" writes each closed outline as ONE closed LWPOLYLINE (flag 70 = 1,
-// a bulge 42 = tan(sweep / 4) for each arc, positive counter-clockwise in the DXF's Y-up plane) and each open chain as ONE open LWPOLYLINE, read from the
-// SAME decomposition the SVG export writes (export-manager.js exportOutlines: the app's ONE loop finder, TASK 1040). A circle stays a CIRCLE, a lone line /
-// arc stays a LINE / ARC, an exact bezier stays its SPLINE (an LWPOLYLINE holds no cubic: its outline is the SPLINE + one open LWPOLYLINE of the rest, the
-// joining ends written with the very same coordinates); with arcApprox every outline (a bezier's and a circle's too) is one closed LWPOLYLINE of points.
+// tests/dxf-loops-1043-node.test.js — TASK 1043 (BUG-402): SketchStudio's "Download DXF" writes each closed outline as ONE closed R12 polyline (POLYLINE
+// 66 = 1, flag 70 = 1, its VERTEXes, SEQEND; a bulge 42 on the VERTEX that starts each arc = tan(sweep / 4), positive counter-clockwise in the DXF's Y-up
+// plane) and each open chain as ONE open POLYLINE, read from the SAME decomposition the SVG export writes (export-manager.js exportOutlines: the app's ONE
+// loop finder, TASK 1040). Not an LWPOLYLINE: Fusion's DXF import refuses those (the advisor, measured 2026-11-27). A circle stays a CIRCLE, a lone line /
+// arc stays a LINE / ARC, an exact bezier stays its SPLINE (a polyline holds no cubic: its outline is the SPLINE + one open POLYLINE of the rest, the
+// joining ends written with the very same coordinates); with arcApprox every outline (a bezier's and a circle's too) is one closed POLYLINE of points.
 //   D-1 the drawings of svg-loops-1040 (drawn with the real tools: node kit): the entity kinds and counts, the closed flags, the bulges (their size from the
 //       arc's sweep, their sign the outline's turn), EVERY curve written exactly once, the DXF Y-up (every point and every arc's turn mirrored)
-//   D-2 arcApprox: no ARC, no SPLINE, no bulge; every closed outline one closed LWPOLYLINE; the same points as the exact file's ends
+//   D-2 arcApprox: no ARC, no SPLINE, no bulge; every closed outline one closed POLYLINE; the same points as the exact file's ends
 //   D-3 the round trip: each file through the app's own DXF import (#core/dxf-import) gives back the same curves (lines, arcs with the same radius, side and
 //       direction, circles, the bezier) and the same closed outlines
 import assert from 'node:assert';
@@ -50,13 +51,13 @@ function lay(app, joints, shapes, coincident = []) {
 }
 const L = (id, a, b) => ({ id, type: 'line', joints: [a, b] });
 const T45 = Math.tan(Math.PI / 8), T90 = 1; // a 90 degree arc's bulge tan(90/4), a half circle's tan(180/4)
-// name -> [draw, { entities: kind counts, closed / open LWPOLYLINEs, bulges: the |bulge| of each closed / open polyline's arcs (sorted) }]
+// name -> [draw, { entities: kind counts, closed / open POLYLINEs, bulges: the |bulge| of each closed / open polyline's arcs (sorted) }]
 const DRAWINGS = {
-  'rect 2-point alone': [(app) => draw(app, 'rect', 'rect-2pt', RECT), { entities: { LWPOLYLINE: 1 }, closed: 1, open: 0, bulges: [] }],
-  'closed line chain (Line tool)': [(app) => draw(app, 'line', null, [[10.3, -10.3], [60.3, -10.3], [60.3, -40.3], [10.3, -10.3]]), { entities: { LWPOLYLINE: 1 }, closed: 1, open: 0, bulges: [] }],
-  'rect + a line touching a corner': [(app) => { draw(app, 'rect', 'rect-2pt', RECT); draw(app, 'line', null, [[60.3, -40.3], [90.3, -60.3]]); }, { entities: { LWPOLYLINE: 1, LINE: 1 }, closed: 1, open: 0, bulges: [] }],
-  'two rects sharing an edge': [(app) => { draw(app, 'rect', 'rect-2pt', RECT); draw(app, 'rect', 'rect-2pt', [[60.3, -10.3], [100.3, -40.3]]); }, { entities: { LWPOLYLINE: 2 }, closed: 2, open: 0, bulges: [] }],
-  'slot c2c': [(app) => draw(app, 'slot', 'slot-c2c', [[20.3, -20.3], [70.3, -20.3], [70.3, -30.3]]), { entities: { LWPOLYLINE: 1 }, closed: 1, open: 0, bulges: [T90, T90] }],
+  'rect 2-point alone': [(app) => draw(app, 'rect', 'rect-2pt', RECT), { entities: { POLYLINE: 1 }, closed: 1, open: 0, bulges: [] }],
+  'closed line chain (Line tool)': [(app) => draw(app, 'line', null, [[10.3, -10.3], [60.3, -10.3], [60.3, -40.3], [10.3, -10.3]]), { entities: { POLYLINE: 1 }, closed: 1, open: 0, bulges: [] }],
+  'rect + a line touching a corner': [(app) => { draw(app, 'rect', 'rect-2pt', RECT); draw(app, 'line', null, [[60.3, -40.3], [90.3, -60.3]]); }, { entities: { POLYLINE: 1, LINE: 1 }, closed: 1, open: 0, bulges: [] }],
+  'two rects sharing an edge': [(app) => { draw(app, 'rect', 'rect-2pt', RECT); draw(app, 'rect', 'rect-2pt', [[60.3, -10.3], [100.3, -40.3]]); }, { entities: { POLYLINE: 2 }, closed: 2, open: 0, bulges: [] }],
+  'slot c2c': [(app) => draw(app, 'slot', 'slot-c2c', [[20.3, -20.3], [70.3, -20.3], [70.3, -30.3]]), { entities: { POLYLINE: 1 }, closed: 1, open: 0, bulges: [T90, T90] }],
   'rect, one corner filleted': [(app) => {
     draw(app, 'rect', 'rect-2pt', RECT);
     app.tool('fillet'); clickW(app, 60.3, -40.3);
@@ -64,15 +65,15 @@ const DRAWINGS = {
     assert(box, 'the fillet radius box opens');
     box.focus(); box.select(); app.type('5'); app.enter(); app.esc(); app.frames(2);
     assert(app.state.shapes.some((s) => s.type === 'arc'), 'the corner is filleted');
-  }, { entities: { LWPOLYLINE: 1 }, closed: 1, open: 0, bulges: [T45] }],
+  }, { entities: { POLYLINE: 1 }, closed: 1, open: 0, bulges: [T45] }],
   'a bezier loop (2 lines + a bezier)': [(app) => lay(app, [['p', 0, 0], ['q', 40, 0], ['q2', 40, 0], ['r', 40, -30], ['r2', 40, -30], ['p2', 0, 0]],
     [L('bl1', 'p', 'q'), L('bl2', 'q2', 'r'), { id: 'bz', type: 'bezier', joints: ['r2', 'p2'], c1: [30, -45], c2: [-10, -35] }], [['q', 'q2'], ['r', 'r2'], ['p', 'p2']]),
-  { entities: { SPLINE: 1, LWPOLYLINE: 1 }, closed: 0, open: 1, bulges: [] }],
+  { entities: { SPLINE: 1, POLYLINE: 1 }, closed: 0, open: 1, bulges: [] }],
   'an open chain: a line + an arc': [(app) => lay(app, [['a', 0, 0], ['b', 30, 0], ['b2', 30, 0], ['ac', 30, -10], ['ae', 40, -10]],
-    [L('ol', 'a', 'b'), { id: 'oa', type: 'arc', subType: 'CENTER', joints: ['ac', 'b2', 'ae'], sweep: false }], [['b', 'b2']]), { entities: { LWPOLYLINE: 1 }, closed: 0, open: 1, bulges: [T45] }],
+    [L('ol', 'a', 'b'), { id: 'oa', type: 'arc', subType: 'CENTER', joints: ['ac', 'b2', 'ae'], sweep: false }], [['b', 'b2']]), { entities: { POLYLINE: 1 }, closed: 0, open: 1, bulges: [T45] }],
   'a rect with a divider (two loops share it) + a circle': [(app) => lay(app, [['a', 0, 0], ['m', 20, 0], ['b', 40, 0], ['c', 40, -20], ['n', 20, -20], ['d', 0, -20], ['o', 70, -10]],
     [L('d1', 'a', 'm'), L('d2', 'm', 'b'), L('d3', 'b', 'c'), L('d4', 'c', 'n'), L('d5', 'n', 'd'), L('d6', 'd', 'a'), L('dv', 'm', 'n'), { id: 'ci', type: 'circle', joints: ['o'], radius: 6 }]),
-  { entities: { LWPOLYLINE: 2, CIRCLE: 1 }, closed: 1, open: 1, bulges: [] }], // one half closed, the other half's 3 lines (the divider written in the first) one open polyline
+  { entities: { POLYLINE: 2, CIRCLE: 1 }, closed: 1, open: 1, bulges: [] }], // one half closed, the other half's 3 lines (the divider written in the first) one open polyline
 };
 
 // ───────────────────────────── reading the DXF (an independent reader: not the app's importer) ─────────────────────────────
@@ -83,25 +84,28 @@ const lineKey = (a, b) => 'L ' + [pt(a), pt(b)].sort().join(' ');
 const arcKey = (a, b, mid, r) => 'A ' + [pt(a), pt(b)].sort().join(' ') + ' mid ' + pt(mid) + ' r ' + R(r);
 const bezKey = (P) => { const f = P.map(pt).join(' '), r = P.slice().reverse().map(pt).join(' '); return 'C ' + (f < r ? f : r); };
 const circleKey = (c, r) => `O ${pt(c)} r ${R(r)}`;
-/** the ENTITIES of a DXF as [{ type, pairs: [[code, text]] }] (the values kept as written, text) */
+/** the ENTITIES of a DXF as [{ type, pairs: [[code, text]], vertices? }] (the values kept as written, text): a POLYLINE holds the VERTEXes that follow it
+ *  (each { type, pairs }) up to its SEQEND, which must come (`ended`) */
 function entitiesOf(dxf) {
   const t = dxf.split('\r\n'), out = [];
-  let i = t.indexOf('ENTITIES') + 1, cur = null;
+  let i = t.indexOf('ENTITIES') + 1, cur = null, poly = null;
   for (; i + 1 < t.length; i += 2) {
-    if (t[i] === '0') { if (t[i + 1] === 'ENDSEC') break; cur = { type: t[i + 1], pairs: [] }; out.push(cur); } else cur.pairs.push([Number(t[i]), t[i + 1]]);
+    if (t[i] !== '0') { cur.pairs.push([Number(t[i]), t[i + 1]]); continue; }
+    if (t[i + 1] === 'ENDSEC') break;
+    cur = { type: t[i + 1], pairs: [] };
+    if (t[i + 1] === 'VERTEX') { assert(poly, 'a VERTEX follows a POLYLINE'); poly.vertices.push(cur); }
+    else if (t[i + 1] === 'SEQEND') { assert(poly, 'a SEQEND ends a POLYLINE'); poly.ended = true; poly = null; }
+    else { assert(!poly, `a POLYLINE ends with SEQEND before the next entity (${t[i + 1]})`); out.push(cur); if (cur.type === 'POLYLINE') { cur.vertices = []; poly = cur; } }
   }
+  assert(!poly, 'the last POLYLINE ends with SEQEND');
   return out;
 }
 const num = (e, code) => Number((e.pairs.find((p) => p[0] === code) || [0, 0])[1]);
-/** an LWPOLYLINE's vertices [{ x, y, bulge, text }] (text = the coordinates as written) and its closed flag */
+/** a POLYLINE's vertices [{ x, y, bulge, text }] (text = the coordinates as written), its closed flag, and its R12 form: 66 = 1 (vertices follow), its own
+ *  point the dummy 0, 0, ended by a SEQEND */
 function polyOf(e) {
-  const v = [];
-  for (const [c, s] of e.pairs) {
-    if (c === 10) v.push({ x: Number(s), y: 0, bulge: 0, text: s });
-    else if (c === 20) { v[v.length - 1].y = Number(s); v[v.length - 1].text += ',' + s; }
-    else if (c === 42) v[v.length - 1].bulge = Number(s);
-  }
-  return { verts: v, closed: (num(e, 70) & 1) === 1, n: num(e, 90) };
+  const v = e.vertices.map((w) => ({ x: num(w, 10), y: num(w, 20), bulge: num(w, 42), text: `${w.pairs.find((p) => p[0] === 10)[1]},${w.pairs.find((p) => p[0] === 20)[1]}` }));
+  return { verts: v, closed: (num(e, 70) & 1) === 1, r12: num(e, 66) === 1 && num(e, 10) === 0 && num(e, 20) === 0 && e.ended === true };
 }
 // the segment p -> q of bulge b: a line, or an arc whose midpoint is the chord's middle + b / 2 * (dy, -dx) (b > 0: counter-clockwise, the arc on the
 // chord's right) and radius chord (1 + b^2) / (4 |b|)
@@ -123,7 +127,7 @@ function fileKeys(dxf) {
     } else if (e.type === 'SPLINE') {
       const xs = e.pairs.filter((p) => p[0] === 10).map((p) => Number(p[1])), ys = e.pairs.filter((p) => p[0] === 20).map((p) => Number(p[1]));
       keys.push(bezKey(xs.map((x, i) => ({ x, y: ys[i] }))));
-    } else if (e.type === 'LWPOLYLINE') {
+    } else if (e.type === 'POLYLINE') {
       const p = polyOf(e); polys.push(p);
       const segs = p.closed ? p.verts.length : p.verts.length - 1;
       for (let i = 0; i < segs; i++) keys.push(bulgeKey(p.verts[i], p.verts[(i + 1) % p.verts.length], p.verts[i].bulge));
@@ -159,7 +163,7 @@ const signedArea = (v) => v.reduce((a, p, i) => { const q = v[(i + 1) % v.length
 // ───────────────────────────── D-1 / D-2 ─────────────────────────────
 const exported = {};
 for (const [name, [drawIt, want]] of Object.entries(DRAWINGS)) {
-  await run(`D-1 ${name}: ${JSON.stringify(want.entities)}, ${want.closed} closed / ${want.open} open LWPOLYLINE(s), bulges ${want.bulges.map(R)}; every curve once, Y-up`, async () => {
+  await run(`D-1 ${name}: ${JSON.stringify(want.entities)}, ${want.closed} closed / ${want.open} open POLYLINE(s), bulges ${want.bulges.map(R)}; every curve once, Y-up`, async () => {
     const app = await openApp();
     try {
       drawIt(app);
@@ -168,24 +172,25 @@ for (const [name, [drawIt, want]] of Object.entries(DRAWINGS)) {
       const dxf = buildDXF(st, { precision: 6 });
       assert.deepStrictEqual(kinds(dxf), want.entities, `${name}: the entities written`);
       const { keys, polys } = fileKeys(dxf);
-      assert.deepStrictEqual([polys.filter((p) => p.closed).length, polys.filter((p) => !p.closed).length], [want.closed, want.open], `${name}: closed / open LWPOLYLINEs (flag 70)`);
-      for (const p of polys) assert.strictEqual(p.n, p.verts.length, `${name}: an LWPOLYLINE's vertex count (90) is its vertices`);
+      assert.deepStrictEqual([polys.filter((p) => p.closed).length, polys.filter((p) => !p.closed).length], [want.closed, want.open], `${name}: closed / open POLYLINEs (flag 70)`);
+      for (const p of polys) assert(p.r12 && p.verts.length >= 2, `${name}: each POLYLINE is R12's: 66 = 1, the dummy point 0, its VERTEXes, a SEQEND`);
+      assert(!/\r\nLWPOLYLINE\r\n/.test(dxf), `${name}: no LWPOLYLINE (Fusion's DXF import refuses it)`);
       assert.deepStrictEqual(polys.flatMap((p) => p.verts.map((v) => R(Math.abs(v.bulge)))).filter((b) => b).sort(), want.bulges.map(R).sort(), `${name}: the bulges tan(sweep / 4)`);
       assert.deepStrictEqual(keys, curveKeys(st, true), `${name}: the file's segments are the drawing's curves, each exactly once, Y-up (Y negated: every point, every arc's side and turn)`);
       assert.strictEqual(buildDXF(st, { precision: 6, invertY: true }), dxf, `${name}: "Invert Y axis" is SVG only: the DXF is the same`);
       // a convex outline turns one way all round: each arc's bulge has the sign of the outline's own turn (its vertices' signed area, Y-up)
       for (const p of polys.filter((q) => q.closed)) for (const v of p.verts) if (v.bulge) assert.strictEqual(Math.sign(v.bulge), Math.sign(signedArea(p.verts)), `${name}: an arc's bulge turns with its outline`);
-      if (name.startsWith('a bezier loop')) { // the SPLINE's two ends ARE the LWPOLYLINE's two ends, the very same text (an importer joining by end points closes it)
+      if (name.startsWith('a bezier loop')) { // the SPLINE's two ends ARE the POLYLINE's two ends, the very same text (an importer joining by end points closes it)
         const sp = entitiesOf(dxf).find((e) => e.type === 'SPLINE'), x = sp.pairs.filter((q) => q[0] === 10).map((q) => q[1]), y = sp.pairs.filter((q) => q[0] === 20).map((q) => q[1]);
         const ends = [`${x[0]},${y[0]}`, `${x[3]},${y[3]}`].sort(), pv = polys[0].verts;
-        assert.deepStrictEqual([pv[0].text, pv[pv.length - 1].text].sort(), ends, `${name}: the SPLINE ends ${ends} = the LWPOLYLINE ends, as written`);
+        assert.deepStrictEqual([pv[0].text, pv[pv.length - 1].text].sort(), ends, `${name}: the SPLINE ends ${ends} = the POLYLINE ends, as written`);
       }
       // D-2 arcApprox: every curve sampled into polylines (no ARC, no SPLINE, no bulge); every closed outline (the drawing's loops a written outline holds,
-      // the bezier's and the circle's too) one closed LWPOLYLINE
+      // the bezier's and the circle's too) one closed POLYLINE
       const ap = buildDXF(st, { precision: 6, arcApprox: true, arcSeg: 8 });
       assert(!/\r\n(ARC|SPLINE|CIRCLE)\r\n/.test(ap) && !/\r\n42\r\n/.test(ap), `${name}: arcApprox: no ARC, SPLINE, CIRCLE or bulge`);
       const apPolys = fileKeys(ap).polys;
-      assert.strictEqual(apPolys.filter((p) => p.closed).length, want.closed + (name.startsWith('a bezier loop') ? 1 : 0) + (want.entities.CIRCLE || 0), `${name}: arcApprox: each closed outline one closed LWPOLYLINE`);
+      assert.strictEqual(apPolys.filter((p) => p.closed).length, want.closed + (name.startsWith('a bezier loop') ? 1 : 0) + (want.entities.CIRCLE || 0), `${name}: arcApprox: each closed outline one closed POLYLINE`);
       exported[name] = { dxf, keys: curveKeys(st), arcs: arcsOf(st), loops: findLoops({ joints: st.joints, shapes: exportedShapes(st), constraints: st.constraints }).length };
     } finally { await app.close(); }
   });
@@ -237,8 +242,8 @@ await run('D-4 the fixture drawings (bezier-loops-761\'s set): every curve once,
   }
   // the counts measured on this task's exporter (the fixtures are frozen); angle-dimension/owner-trapezoid-angle.json's nearly flat 17188 mm arc is the case
   // that needs a bulge's extra decimals (at the coordinates' 6 it came back off)
-  assert.deepStrictEqual([docs.length, polys, closedPolys], [151, 97, 28], `the set: ${docs.length} drawings, ${polys} LWPOLYLINEs written, ${closedPolys} closed`);
-  console.log(`    D-4: ${docs.length} drawings, ${polys} LWPOLYLINEs, ${closedPolys} closed`);
+  assert.deepStrictEqual([docs.length, polys, closedPolys], [151, 97, 28], `the set: ${docs.length} drawings, ${polys} POLYLINEs written, ${closedPolys} closed`);
+  console.log(`    D-4: ${docs.length} drawings, ${polys} POLYLINEs, ${closedPolys} closed`);
 });
 
 console.log(`dxf-loops-1043-node: ${passed} passed, ${failures.length} failed`);

@@ -879,7 +879,15 @@ export function openSmallModal(label, fill, { panelClass = '' } = {}) {
       if (returnTo && returnTo.focus && returnTo.isConnected) returnTo.focus();
       resolve(value);
     };
-    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null); } }
+    // BUG-307 (F-94): the modal holds the focus: Tab / Shift+Tab walk the panel's own controls and wrap, never on to the page behind
+    const tabbables = () => [...panel.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')].filter((x) => !x.disabled && x.getAttribute('tabindex') !== '-1' && x.getClientRects().length > 0);
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null); return; }
+      if (e.key !== 'Tab') return;
+      const list = tabbables(), at = list.indexOf(document.activeElement);
+      if (!list.length) { e.preventDefault(); return; }
+      if (at === -1 || (e.shiftKey && at === 0) || (!e.shiftKey && at === list.length - 1)) { e.preventDefault(); list[e.shiftKey ? list.length - 1 : 0].focus(); }
+    }
     document.addEventListener('keydown', onKey, true);
     // TASK 759: the click a page script sends to a hidden <input type=file> (the file chooser opening: the Open dialog's "Choose a file…") or to an <a download>
     // (a file saved as a download: the Save as dialog's Local tab), #ui/project-file.js browserFileSeam, is not a press outside

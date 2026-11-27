@@ -177,12 +177,24 @@ await test('R2-02d: a second reference on the same edge survives Undo + Redo and
   await quiet(() => app.esc()); app.frames();
   const before = pairShape();
   assert.equal(before.length, 3, 'three length dimensions: ' + before.join(' '));
+  // the saved records without the Dimension tool's session flags (__placing, __newlyPlaced, __birthHistoryLength, ...): those belong to the
+  // gesture that is over and are never put back by a restore (createConstraint's fields)
+  const records = () => JSON.stringify(serializeDocument(app.state).geometry.constraints, (k, v) => (k.startsWith('__') ? undefined : v));
+  const drawn = records();
   await quiet(() => app.undo()); app.frames();
   await quiet(() => app.redo()); app.frames();
   assert.deepEqual(pairShape(), before, 'redo brings all three back');
+  // a record rebuilt by createConstraint writes its fields in ONE fixed order (byte-stable saves); the record the tool built in the
+  // drawing holds the same fields and values in the order the tool set them
+  assert.deepEqual(JSON.parse(records()), JSON.parse(drawn), 'undo + redo: the same constraint records, field for field');
+  const saved = records();
+  await quiet(() => app.undo()); app.frames();
+  await quiet(() => app.redo()); app.frames();
+  assert.equal(records(), saved, 'undo + redo: the constraint records are byte-identical');
   const doc = JSON.parse(JSON.stringify(serializeDocument(app.state)));
   assert.ok(deserializeDocument(doc, app.state).ok, 'the document loads');
   assert.deepEqual(pairShape(), before, 'the loaded drawing holds all three');
+  assert.equal(records(), saved, 'serialize -> deserialize: the constraint records are byte-identical');
 });
 
 // BEHAVIOUR CHANGE (task 1019, R2-02): loading a file no longer drops a constraint as a duplicate. A file holding two DRIVING distances on the

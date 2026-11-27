@@ -537,7 +537,8 @@ export function addConstraint(state, type, params) {
 }
 
 // Validate, name and push ONE constraint (no duplicate check): addConstraint after its duplicate check, and restoreConstraintObject
-// (its object form refuses a preview first, addObjectWith).
+// (its object form refuses a preview first, addObjectWith). ONLY what a restore needs too: a step for a NEW constraint (a default, a
+// placement) belongs in addConstraint, never here (a restore puts back exactly what was saved, task 1019).
 function pushConstraint(state, type, params) {
     // Normalize params for robustness (accept Sets or joint objects)
     const normalized = Object.assign({}, params || {});

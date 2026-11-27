@@ -7,7 +7,7 @@ import { findNearbyJoint } from '#core/joints.js';
 import { setupNumericInput, showDualInput, hideInput, resetLockedDimensions, isInputActive } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, snapPoint, tooSmall, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, shownSnap, snapPoint, tooSmall, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 let rectState = { lockedWidth: null, lockedHeight: null, widthExpression: null, heightExpression: null, widthName: null, heightName: null, widthAssign: null, heightAssign: null, previewWidth: null, previewHeight: null };   // TASK 876 / 1013
@@ -137,12 +137,12 @@ export function setupRectTool(svg, state){
                 if (detail.field === FIELD_3PT_LENGTH && !b) {
                     const end = baseEnd(a, localState.cursor || a);
                     if (tooSmall(Math.hypot(end.x - a.x, end.y - a.y))) { detail.keepOpen = true; return; }   // no length yet: the box stays open
-                    placeBase(state, end, null, lastPointer());
+                    placeBase(state, end, rectState.lockedWidth !== null ? null : shownSnap(state), lastPointer());   // TASK 1033 (X-01): the click's snap rule
                     detail.keepOpen = true;   // the height box is up now
                 } else if (detail.field === FIELD_3PT_HEIGHT && b) {
                     const p = thirdPoint(a, b, localState.cursor || b);
                     if (tooSmall(Math.abs(heightOf(a, b, p)))) { detail.keepOpen = true; return; }   // no height yet: the box stays open
-                    placeRect(state, p, null);
+                    placeRect(state, p, rectState.lockedHeight !== null ? null : shownSnap(state));
                 }
                 return;
             }
@@ -219,7 +219,7 @@ export function finalizeRectFromActive(svg, state){
     const sized = enterCorner(state);   // TASK 782: the typed sides hold at Enter whatever the mouse did since
     if(!sized || tooSmall(...sideSizes(sized.c1, sized.corner, rectModeOf(state) === RECT_MODES.CENTER))) return false;
     const hasLockedSide = rectState.lockedWidth !== null || rectState.lockedHeight !== null;
-    return placeRect(state, sized.corner, hasLockedSide ? null : ((state.active.preview && state.active.preview.snapTarget) || null));
+    return placeRect(state, sized.corner, hasLockedSide ? null : shownSnap(state));   // TASK 1033 (X-01): the snap the cursor shows, as the click
 }
 /** The W x H boxes and the sides typed in them go away (a rectangle was placed, or the tool was left). */
 function closeRectBoxes(){ rectState.lockedWidth = null; rectState.lockedHeight = null; rectState.widthExpression = null; rectState.heightExpression = null; rectState.widthName = null; rectState.heightName = null; rectState.widthAssign = null; rectState.heightAssign = null; localState.boxes = false; localState.cursor = null; try{ hideInput(); }catch(_){ } }

@@ -2959,7 +2959,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-02`: Enter and click give equal constraint counts, 2-point and centre)
 - **Status:** fixed
 - **Family:** `snap-not-applied`
-- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-R205 ... cons{horizontal vertical horizontal vertical coincident coincident coincident coincident pointOnLine distance=40:d1 distance=20:d2} dof=8`. After: `cons{horizontal vertical horizontal vertical coincident coincident coincident coincident distance=40:d1 distance=20:d2} dof=16`, which is the click's `B-R209`. Centre: `B-RC05` after `dof=26` = `B-RC09` (click) `dof=26`.
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-R205 ... cons{horizontal vertical horizontal vertical coincident coincident coincident coincident pointOnLine distance=40:d1 distance=20:d2} dof=8`. After: `cons{horizontal vertical horizontal vertical coincident coincident coincident coincident distance=40:d1 distance=20:d2} dof=16`, which is the click's `B-R209`. Centre: `B-RC05` after `dof=26` = `B-RC09` (click) `dof=26`. Task `1033` (BUG-350, X-01): the Enter path still passed a null end snap (the preview copy it read was rebuilt on every move); Enter now gets the shown snap, as the click.
 
 ---
 
@@ -3310,6 +3310,52 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `PH-003 | rect-2pt | after1st | pinch zoom (2 fingers) | ... active=no shapes=12`; after: `PH-003 | rect-2pt | after1st | pinch zoom (2 fingers) | ... active=rect shapes=8`.
 
+### BUG-350
+- **Date / turn:** 2026-11-27 (plan ID `X-01`, with `C-1`, `P-1`, `A-2`, `R-1`, `R-3`, `S-2`, `L-2`; fixed in task `1033`)
+- **Reported by:** input plan `1031` (`docs/INPUT-UNIFY-PLAN-1031.md`, Appendix 1, probed in node)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `X-01`: Enter in a draw tool's value box drops the snap the cursor shows; a click on the same point applies it. Line end, Rect corners (all variants), Circle rim joint, Polygon corner, Arc start / end (both modes), Slot span end / arc point. Owner rule (B-02, task `1028`): Enter and click make the same result.
+- **What was wrong:** the snap reached Enter only through `state.active.preview.snapTarget`, and every tool's `updatePreview` rebuilds that object on the same move, so it was always gone; the other Enter paths passed no snap at all.
+- **Cause:** `packages/ui/input-manager.js` `updateSnapTarget` (the copy onto `state.active.preview`, was `:516-527`), read by `line-tool.js finalizeLineFromActive`, `rect-tool.js finalizeRectFromActive`, `arc-tool.js finalizeArcFromActive`; `null` / no snap in the Enter paths of `rect-tool.js` (3-point), `circle-tool.js`, `polygon-tool.js`, `arc-tool.js` (radius / sweep / chord / 3-point radius boxes), `slot-tool.js` (span / arc boxes).
+- **Fix:** ONE remembered snap: the snap the cursor shows stays in `state.activeSnap` (set by `updateSnapTarget`, read by the click as `state.activeSnap || hitSnap`); the copy onto the preview is removed. Each Enter path reads it through ONE accessor, `base-tool.js shownSnap(state)`, and passes it to the commit its click uses, where the click's typed-value rule drops it (a typed length / angle, side, diameter, radius, sweep, chord, span).
+- **Task id(s):** `1033`
+- **Fix merge sha:** open (`agents/enter-snap-1033`, awaiting merge)
+- **Guarding test file(s):** `tests/enter-snap-1033-node.test.js` (`X-01`: 13 tool steps, click vs Enter, the identical constraint list; 6 typed cases, both drop the snap); `tests/enter-snap-1033-live.test.js` (desktop 1280x800: Line, Rect, Circle, Polygon, Arc, Slot click vs real Enter; phone 390x844 guard: the finger drag-lift = the desktop click, the Slot Done = a width tap)
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **Related:** BUG-311 (B-02: one `placeRect` for click and Enter, which still got a null snap)
+- **History:** found by plan `1031` -> fixed in task `1033`. Probe before: `Line end on line L2  enter hover snap: shape locked shapes +1  new constraints: [coincident]`, `Rect 2-pt corner on line L2  enter ... [coincident,coincident,coincident,coincident,horizontal,horizontal,vertical,vertical]`. After: `Line end on line L2  enter ... [coincident,pointOnLine]`, `Rect 2-pt corner on line L2  enter ... [coincident,coincident,coincident,coincident,horizontal,horizontal,pointOnLine,vertical,vertical]` (= the click lines).
+
+### BUG-351
+- **Date / turn:** 2026-11-27 (plan ID `A-1`; fixed in task `1033`)
+- **Reported by:** input plan `1031` (`docs/INPUT-UNIFY-PLAN-1031.md`, Appendix 2, probed)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `A-1`: Arc (Center Point): after the radius is set by DRAGGING from the centre, the end click is swallowed and the sweep box becomes a radius box. The 3-Point Arc had the same on its drag (start -> end): the third click was swallowed.
+- **What was wrong:** `_tempStart` (the press placed the first point, its release is still to come) was cleared only on the click release; after a drag release it stayed set, so the NEXT release was taken for the first one: ignored, and the first step's box opened again.
+- **Cause:** `packages/ui/input-handlers/arc-tool.js` `handleArcPointerUp` (the `_tempStart` branch).
+- **Fix:** the same function: the first release consumes `_tempStart`, a click's or a drag's (`firstRelease`). A click release, and (advisor ruling) a first drag whose release placed nothing (back onto the first point: too small), leave the tool waiting with the first step's box (`waitWithFirstBox`: the radius box, the 3-Point Arc's chord box), as after a click on the first point.
+- **Task id(s):** `1033`
+- **Fix merge sha:** open (`agents/enter-snap-1033`, awaiting merge)
+- **Guarding test file(s):** `tests/enter-snap-1033-node.test.js` (`A-1`: Center Point and 3-Point, drag then one click places the arc; a drag back onto the first point waits with the radius / chord box); `tests/arc-logging.test.js` (it accepted the swallowed click, `clickIgnored`, as the outcome: it now asserts the second release places the arc)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found by plan `1031` -> fixed in task `1033`. Probe before: `after drag-release: phase start _tempStart true` / `after end click: shapes 0 phase start`. After: `after drag-release: phase start _tempStart false` / `after end click: shapes 1 phase null`.
+
+### BUG-352
+- **Date / turn:** 2026-11-27 (plan ID `S-1`; fixed in task `1033`)
+- **Reported by:** input plan `1031` (`docs/INPUT-UNIFY-PLAN-1031.md`, Appendix 3, probed)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `S-1`: Slot: a typed span keeps the span-end snap although the typed span moved the end off it; the solver then moves the slot (the first centre, clicked at x 10, went to x 20).
+- **What was wrong:** the span end was recorded with the snap it was clicked on even when `resolveSpanEnd` had put it at the typed distance. Rect / Arc / Polygon / Line drop the snap then.
+- **Cause:** `packages/ui/input-handlers/slot-tool.js` `advanceFromSpan` (the span-end pick, from the click `handleSlotPointerUp` and from Enter).
+- **Fix:** `advanceFromSpan` keeps the snap only when no span was typed (`localState.lockedSpan === null`): the rule of the other tools, in the one step both paths call.
+- **Task id(s):** `1033`
+- **Fix merge sha:** open (`agents/enter-snap-1033`, awaiting merge)
+- **Guarding test file(s):** `tests/enter-snap-1033-node.test.js` (`S-1`: typed span 20, span click on L2: no point-on-line, the first centre stays at x 10; `X-01` typed slot case: click and Enter both drop it)
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **History:** found by plan `1031` -> fixed in task `1033`. Probe before: `span typed 20: hover snap shape, new shapes 5, new pointOnLine 1, centres (40.00,6.96) (20.00,6.96), dims 9.96/20.00`. After: `span typed 20: hover snap shape, new shapes 5, new pointOnLine 0, centres (29.96,6.96) (9.96,6.96), dims 9.96/20.00`.
+
 ### BUG-340
 - **Date / turn:** 2026-11-27 (task `1032`)
 - **Reported by:** owner (phone screenshot)
@@ -3448,7 +3494,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
-| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27) |
+| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27), BUG-350 (11-27), BUG-352 (11-27) |
 | `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
@@ -3457,7 +3503,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22), BUG-374 (11-27, open) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-370 (11-27) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-370 (11-27) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 

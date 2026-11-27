@@ -187,7 +187,8 @@ try {
     rows.push(row); console.log('ROW ctrl+z while line active', JSON.stringify(row));
     results['ctrl+z while line active'] = { row };
     want('ctrl+z while line active', (r) => r.row.linesAfterFirstUndo === 2, 'the first Ctrl+Z while drawing removes no committed segment');
-    want('ctrl+z while line active', (r) => r.row.orphansAfterFirstUndo.length === 0 && r.row.toolAfterFirstUndo !== 'line', 'the first Ctrl+Z ends the tool and leaves no floating start point');
+    // TASK 1030 (owner ruling I-05): the Line tool STAYS (it used to end, TASK 549); the floating start point still goes
+    want('ctrl+z while line active', (r) => r.row.orphansAfterFirstUndo.length === 0 && r.row.toolAfterFirstUndo === 'line', 'the first Ctrl+Z cancels the rubber band, stays in the Line tool and leaves no floating start point');
     want('ctrl+z while line active', (r) => r.row.linesAfterSecond === 1 && r.row.orphansAfterSecond.length === 0, 'the second Ctrl+Z removes one segment and its new end point only');
     want('ctrl+z while line active', (r) => r.row.linesAfterThird === 0 && r.row.exactAfterThird, 'the third Ctrl+Z restores the pre-chain document exactly');
   }

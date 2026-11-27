@@ -4,7 +4,8 @@
 // 2. Owner turn 1756: typing + Ctrl+Z in radius box adds 0 history steps; confirming adds +1 step; ONE canvas Ctrl+Z removes the entire
 //    fillet (arc, tangents, radius dimension) leaving the corner sharp again (both desktop & phone).
 // 3. Shared boxes (#offset-distance-input, #dualInput Line L/°, #dimInput dimension edit): same one-step Ctrl+Z revert rule.
-// 4. Footer #btn-undo while #fillet-radius-input is open: real desktop click AND real phone touch tap both close the box and undo 1 step.
+// 4. Footer #btn-undo while #fillet-radius-input is open: real desktop click AND real phone touch tap both close the box (TASK 1030, owner ruling I-05: the
+//    pending fillet is cancelled, no document step, the tool stays); the NEXT #btn-undo undoes 1 document step.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -181,7 +182,7 @@ await (async () => {
       assert.strictEqual(sUndone.joints, base.joints, `[desktop 1756] sharp corner restored (joints ${sUndone.joints} === ${base.joints})`);
       await shotClip('c-desktop-after-canvas-undo.png', clipBox);
 
-      // C.3 Desktop footer #btn-undo while #fillet-radius-input is open: closes box & undoes 1 document step
+      // C.3 Desktop footer #btn-undo while #fillet-radius-input is open: closes the box, no document step (TASK 1030, I-05); the next one undoes 1 step
       await tapMouse(C); // open fillet box on sharp corner again
       await waitFor(`!!document.getElementById('fillet-radius-input')`, '[desktop btn-undo] fillet box re-opened');
       await typeChars('12');
@@ -191,7 +192,10 @@ await (async () => {
       await waitFor(`!document.getElementById('fillet-radius-input')`, '[desktop btn-undo] closes box');
       const afterBtnUndo = await dState();
       assert.strictEqual(afterBtnUndo.open, false, '[desktop C.3] #btn-undo closes radius box');
-      assert.strictEqual(afterBtnUndo.lines, 1, `[desktop C.3] #btn-undo undoes 1 doc step (lines ${beforeBtnUndo.lines} -> ${afterBtnUndo.lines})`);
+      assert.strictEqual(afterBtnUndo.lines, beforeBtnUndo.lines, `[desktop C.3] #btn-undo with the box open undoes no doc step (lines ${beforeBtnUndo.lines} -> ${afterBtnUndo.lines})`);
+      assert.strictEqual(afterBtnUndo.hist, beforeBtnUndo.hist, `[desktop C.3] no undo step taken or undone (${beforeBtnUndo.hist} -> ${afterBtnUndo.hist})`);
+      await tapMouse(undoPt);
+      await waitFor(`window.__designController.state.shapes.filter((s) => s.type === 'line').length === ${beforeBtnUndo.lines - 1}`, '[desktop C.3] the next #btn-undo undoes 1 doc step');
 
       // Shared boxes check on Desktop:
       // a) Offset box (#offset-distance-input)
@@ -332,7 +336,7 @@ await (async () => {
       assert.strictEqual(pUndone.lines, 2, '[phone 1756] corner sharp again');
       assert.strictEqual(pUndone.joints, pBase.joints, '[phone 1756] joints restored');
 
-      // C.3 Phone footer #btn-undo tap WHILE #fillet-radius-input is open: closes box & undoes 1 step
+      // C.3 Phone footer #btn-undo tap WHILE #fillet-radius-input is open: closes the box, no document step (TASK 1030, I-05); the next tap undoes 1 step
       await tapTouch(C);
       await waitFor(`!!document.getElementById('fillet-radius-input')`, '[phone C.3] fillet box re-opened');
       const pReopen = await pState();
@@ -343,7 +347,9 @@ await (async () => {
       await waitFor(`!document.getElementById('fillet-radius-input')`, '[phone C.3] #btn-undo tap closes radius box');
       const pAfterFooterUndo = await pState();
       assert.strictEqual(pAfterFooterUndo.open, false, '[phone C.3] #btn-undo tap closed radius box');
-      assert.strictEqual(pAfterFooterUndo.lines, 1, `[phone C.3] #btn-undo tap undid 1 doc step (lines ${pReopen.lines} -> ${pAfterFooterUndo.lines})`);
+      assert.strictEqual(pAfterFooterUndo.lines, pReopen.lines, `[phone C.3] #btn-undo tap with the box open undid no doc step (lines ${pReopen.lines} -> ${pAfterFooterUndo.lines})`);
+      await tapTouch(pReopen.undoPt);
+      await waitFor(`window.__sketch.controller.state.shapes.filter((s) => s.type === 'line').length === ${pReopen.lines - 1}`, '[phone C.3] the next #btn-undo tap undoes 1 doc step');
       await shotClipPhone('c-phone-after-btn-undo.png', pClip);
 
       console.log('phone 675 C: ALL PASS');

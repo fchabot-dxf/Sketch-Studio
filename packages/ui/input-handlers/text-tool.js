@@ -108,6 +108,9 @@ export function commitTextEditor() {
   if (!sameStyle(s.original, styleOf(text))) state.saveStateForce(TEXT_UNDO_LABELS.edit, s.snapshot);
 }
 
+/** TASK 1030 (I-05): the text editor is open (a text being placed or edited). */
+export function textEditorOpen() { return !!session; }
+
 /** Cancel / Esc: the text as it was (a text being placed is removed). No undo step. */
 export function cancelTextEditor() {
   const s = session;
@@ -291,7 +294,8 @@ function buildEditor(s) {
   // the box's keys are its own (never the canvas's shortcuts): Esc = Cancel, Ctrl / Cmd + Enter = OK (Enter in a one-line field = OK)
   box.addEventListener('keydown', (e) => {
     e.stopPropagation();
-    if (e.key === 'Escape') { e.preventDefault(); cancelTextEditor(); return; }
+    // TASK 1030 (I-02): the box's Esc is the canvas Esc too (input-manager: in the Text tool ONE Esc cancels and leaves the tool)
+    if (e.key === 'Escape') { e.preventDefault(); cancelTextEditor(); window.dispatchEvent(new CustomEvent('liveDimensionCancelled')); return; }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || e.target.tagName === 'INPUT')) { e.preventDefault(); commitTextEditor(); }
   });
 

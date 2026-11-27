@@ -7,7 +7,7 @@
 import { pickableShapes } from '#core/reference-lines.js';
 import { pickScene, snapIsInert, asPositionSnap, isConstraintInert, inertEntities, moveSelectionToSketch, moveSelectionToNewSketch, moveTargets, activeSketchScene, otherSketchScene, inActiveSketch, recordUndo } from '#core/sketch-model.js'; // TASK 577: locked / hidden sketches are out of reach of a pick
 import { dbg, logDiagnostic } from '#core/debug.js';
-import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS, ACTIVE_SKETCH_SNAP_TOOLS } from '#core/constants.js';
+import { TOOL_MODES, SNAP, INFERENCE_TYPES, CONSTRAINT_TYPES, DRAG_TYPES, AXIS_SNAP_TARGETS, CONSTRAINT_TOOLS, ACTIVE_SKETCH_SNAP_TOOLS, MIRROR_STEPS } from '#core/constants.js';
 import { undoRedoKeyAction } from '#ui/history-control.js';
 import { findSnap, snapBoostFor, findCoincidentCluster } from '#ui/snap-detection.js';
 import { gridSpacing } from '#ui/canvas-grid.js';
@@ -19,24 +19,25 @@ import { toggleDriving } from '#core/dimension-seams.js';
 import { isJointLocked, lockTargets } from '#core/lock-state.js';
 import { showContextMenu, contextMenuItems, CONSTRAINT_MENU_TYPES } from '#ui/context-menu.js';
 
-import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState } from '#ui/input-handlers/selection-tools.js';
+import { setupSelectionTools, handleSelectionPointerDown, handleSelectionPointerMove, handleSelectionPointerUp, resetSelectionState, cancelPointDrag } from '#ui/input-handlers/selection-tools.js';
 import { stepOutOfGroup, pickOwner, selectUnit, shapesInGroup, enteredGroup, isInGroup, leaveGroups } from '#core/group-model.js'; // TASK 751: Esc steps out of the entered user group, one level; a group is no constraint operand
 import { groupSelection, ungroupSelection, groupMenuActions } from '#ui/group-actions.js'; // TASK 756: THE group commands (keys + menus), every app
 import { beginClosePath, handleClosePathPointerDown, closePathMenuActions } from '#ui/close-path-actions.js'; // TASK 760: Close path (the tool, its menu entry), every app
-import { handleTextPointerDown, commitTextEditor, cancelTextEditor, textMenuActions } from '#ui/input-handlers/text-tool.js'; // TASK 845: the Text tool and its editor, every app
+import { handleTextPointerDown, commitTextEditor, cancelTextEditor, textEditorOpen, textMenuActions } from '#ui/input-handlers/text-tool.js'; // TASK 845: the Text tool and its editor, every app
 import { watchTextOutlines } from '#ui/text-fonts.js'; // TASK 845: a text's letters are rebuilt whenever its shape comes back without them (an undo)
-import { transformBoxPointerDown, transformBoxPointerMove, transformBoxPointerUp, cancelTransformGesture } from '#ui/transform-box.js'; // TASK 753: a group's transform box, every app
+import { transformBoxPointerDown, transformBoxPointerMove, transformBoxPointerUp, cancelTransformGesture, closeTransformInput } from '#ui/transform-box.js'; // TASK 753: a group's transform box, every app
 import { updateHover, clearHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
-import { setupConstraintTools, activateConstraintTool, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState, constraintToolPicks } from '#ui/input-handlers/constraint-tools.js';
+import { setupConstraintTools, activateConstraintTool, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState, constraintToolPicks, constraintPickPending } from '#ui/input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState, handlePanZoomWheel } from '#ui/input-handlers/pan-zoom.js';
 import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection, anchorPlacingDimension, isDimensionPlacing, getPlacingConstraint, resetDimensionState } from '#ui/input-handlers/dimension-tool.js';
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
 import { setupNotifications, showNotification } from '#ui/notification-manager.js';
 import { curveRefusal } from '#core/curve-kinds.js'; // TASK 762: the uses a curve kind refuses
 import { updatePreview, clearPreview, getPreviewData } from '#ui/preview-manager.js';
-import { handleLineKeyDown, finishLineChain, lineChainAnchor } from '#ui/input-handlers/line-tool.js';
-import { createLongPress } from '#ui/long-press.js';
+import { handleLineKeyDown, finishLineChain, lineChainAnchor, rightClickLine } from '#ui/input-handlers/line-tool.js';
+import { createLongPress, LONG_PRESS_MS, LONG_PRESS_SLOP } from '#ui/long-press.js';
+import { dragArrowUnder } from '#ui/drag-arrow-handle.js';
 import { createDoneButton } from '#ui/done-button.js';
 import { handleMirrorPointerDown, mirrorDone, mirrorStep, beginMirror } from '#ui/input-handlers/mirror-tool.js'; // TASK 585
 import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
@@ -45,7 +46,7 @@ import { handleCircleKeyDown } from '#ui/input-handlers/circle-tool.js';
 import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, handleBezierPointerUp, handleBezierKeyDown, resetBezierState } from '#ui/input-handlers/bezier-tool.js';
 import { setupBreakTool, handleBreakPointerDown, handleBreakPointerMove, handleBreakPointerUp, resetBreakState } from '#ui/input-handlers/break-tool.js';  // TRACE-1
 import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrimPointerUp, resetTrimState } from '#ui/input-handlers/trim-tool.js';   // TRACE-1
-import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState, filletInputOpen, filletInputValid, filletCornerPoint, commitFilletInput } from '#ui/input-handlers/fillet-tool.js';
+import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState, filletInputOpen, filletPickPending, filletInputValid, filletCornerPoint, commitFilletInput } from '#ui/input-handlers/fillet-tool.js';
 import { setupOffsetTool, handleOffsetPointerDown, handleOffsetPointerMove, handleOffsetPointerUp, resetOffsetState, offsetInputOpen, offsetAnchorPoint, commitOffsetInput, OFFSET_INPUT_ID } from '#ui/input-handlers/offset-tool.js'; // TASK 650
 import { isDimension } from '#core/parameters.js';
 import { setupPatternTool, beginCircularPattern, beginRectangularPattern, patternSessionOpen, handlePatternPointerDown, handlePatternPointerMove, handlePatternPointerUp, handlePatternKeyDown, resetPatternState, commitPattern, patternAnchorPoint, patternDoneOpen, patternDoneLabel, PATTERN_DIALOG_CLASS, PATTERN_INLINE_CLASS } from '#ui/input-handlers/pattern-tool.js'; // TASK 658 + 662
@@ -537,6 +538,14 @@ function updateSnapTarget(e, svg, state) {
 }
 
 
+// TASK 1030 (I-19): the panels a press into keeps the keyboard focus in (the user went there on purpose)
+const FOCUS_KEEPING_PANELS = '.sk-pwin, .sk-browser';
+// ... and the bar a press on gives the keyboard back to the value box being typed in
+const FOCUS_RETURNING_BARS = '.sk-footer';
+
+// TASK 1030 (I-17): the right button reaches only the Select tool (and the menus above); every other tool ignores its press and release.
+const rightPressIgnored = (e, state) => e.button === 2 && state.currentTool !== TOOL_MODES.SELECT;
+
 function handlePointerDown(e, svg, state) {
     e.preventDefault();
     try { svg.setPointerCapture(e.pointerId); } catch (_) {}
@@ -562,6 +571,12 @@ function handlePointerDown(e, svg, state) {
     // Right-click opens the context menu (select / dimension tools): consume the press so it neither drags nor
     // reselects; the menu itself opens from the contextmenu event.
     if (e.button === 2 && (state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.DIMENSION) && pickContextTarget(svg, state, e)) return true;
+    // TASK 1030 (I-17): in every other tool a right press is never a left press: it places, picks and completes nothing (a pending pick stays).
+    // Line: it ends the chain, a typed length committed first (rightClickLine, TASK 1028 B-05).
+    if (rightPressIgnored(e, state)) {
+        if (state.currentTool === TOOL_MODES.LINE) rightClickLine(svg, state);
+        return true;
+    }
 
     // Update snap target using virtual pointer coords
     try { updateSnapTarget({ clientX: screenX, clientY: screenY, isTouch }, svg, state); } catch(_) { state.snapTarget = null; }
@@ -858,6 +873,7 @@ function handlePointerMove(e, svg, state) {
 function handlePointerUp(e, svg, state) {
     e.preventDefault();
     stopEdgePan();
+    if (rightPressIgnored(e, state)) return true; // TASK 1030 (I-17): its release neither (handlePointerDown)
     const wasDragging = state.drag !== null;
 
     // Allow pinch/pan gestures to clean up before tool-specific pointer-up logic
@@ -971,6 +987,8 @@ function setupEventListeners(svg, state) {
         const hold = createLongPress({
             onFire: (x, y, down) => {
                 if (!isActiveFn()) return;
+                releaseHeldTouch(); // TASK 1030: a press still held back runs first (a hold is the press of ONE finger)
+                if (state.drag && state.drag.type === DRAG_TYPES.TRANSFORM) { hold.cancel(); return; } // TASK 753: a finger on a transform-box handle is turning / scaling, never a hold (its release is its own)
                 try { svg.releasePointerCapture(down.pointerId); } catch (_) { }
                 state.drag = null; state.inference = null; state.snapTarget = null; state.activeSnap = null;
                 resetSelectionState();
@@ -1014,28 +1032,67 @@ function setupEventListeners(svg, state) {
             if (doneButton) doneButton.sync(e.pointerType === 'touch', { x: e.clientX, y: e.clientY, start: e.type === 'pointerdown' });
         };
         const holdTools = () => state.currentTool === TOOL_MODES.SELECT || state.currentTool === TOOL_MODES.DIMENSION;
-        svg.addEventListener('pointerdown', (e) => {
-            dbg.log('input', '[input-manager] svg pointerdown', {x: e.clientX, y: e.clientY, target: e.target && e.target.nodeName});
-            if (e.pointerType === 'touch') {
-                lastTouchAt = Date.now();
-                touchPointerDown = e.isPrimary; // a second finger is a pinch / pan, not a draw
-                if (!e.isPrimary) hold.cancel();
-            }
-            holdWasPlacing = isDimensionPlacing(state);
+        const runPointerDown = (e) => {
             syncDone(e);
-            try{ handlePointerDown(e, svg, state); } catch(err){ 
+            try{ handlePointerDown(e, svg, state); } catch(err){
                 console.error('[input-manager] handlePointerDown error', err);
                 showNotification("Input Error: " + err.message, "error");
             }
-            // (TASK 753: a finger on a transform-box handle is turning / scaling, never a hold)
-            if (e.pointerType === 'touch' && e.isPrimary && isActiveFn() && holdTools() && !(state.drag && state.drag.type === DRAG_TYPES.TRANSFORM) && pickContextTarget(svg, state, e)) hold.start(e);
+        };
+        // TASK 1030 (I-21): a finger's press is held back until it is the press of ONE finger: the finger lifts, leaves the LONG_PRESS_SLOP circle,
+        // or LONG_PRESS_MS pass (the hold's own window, #ui/long-press.js). A second finger in that time makes the gesture a pinch / pan: the held
+        // press never reaches the tool (no point, no completed shape, no trim, no pick). The finger is known to the pinch at once. A finger on a tool's
+        // drag arrow (Fillet / Offset / Pattern, #ui/drag-arrow-handle.js) is a drag of that arrow: its press is not held.
+        // The fingers of a pinch / pan (every finger after the first, and a first finger whose held press was dropped) are the pinch's only: their
+        // releases go to the pan / zoom alone, never to the tool as a click.
+        let heldTouch = null; // { e, timer }
+        const pinchFingers = new Set();
+        function releaseHeldTouch() {
+            const h = heldTouch;
+            if (!h) return;
+            heldTouch = null; clearTimeout(h.timer);
+            runPointerDown(h.e);
+        }
+        const dropHeldTouch = () => { if (heldTouch) { clearTimeout(heldTouch.timer); heldTouch = null; } };
+        svg.addEventListener('pointerdown', (e) => {
+            dbg.log('input', '[input-manager] svg pointerdown', {x: e.clientX, y: e.clientY, target: e.target && e.target.nodeName});
+            holdWasPlacing = isDimensionPlacing(state);
+            if (e.pointerType === 'touch') {
+                lastTouchAt = Date.now();
+                touchPointerDown = e.isPrimary; // a second finger is a pinch / pan, not a draw
+                if (!e.isPrimary) {
+                    hold.cancel();
+                    pinchFingers.add(e.pointerId);
+                    if (heldTouch) { pinchFingers.add(heldTouch.e.pointerId); dropHeldTouch(); }
+                }
+                else if (!dragArrowUnder(svg, { x: e.clientX, y: e.clientY }, true, snapBoostFor(true))) { // a finger on a drag arrow grabs it at once
+                    e.preventDefault();
+                    handlePanZoomPointerDown(e, svg, state);
+                    heldTouch = { e, timer: setTimeout(releaseHeldTouch, LONG_PRESS_MS) };
+                    if (isActiveFn() && holdTools() && pickContextTarget(svg, state, e)) hold.start(e);
+                    return;
+                }
+            }
+            runPointerDown(e);
         });
         svg.addEventListener('pointermove', (e) => {
             if (e.pointerType === 'touch' && (hold.fired && hold.pointerId === e.pointerId || hold.move(e))) { e.preventDefault(); return; }
+            if (heldTouch && heldTouch.e.pointerId === e.pointerId) {
+                if (Math.hypot(e.clientX - heldTouch.e.clientX, e.clientY - heldTouch.e.clientY) <= LONG_PRESS_SLOP) { e.preventDefault(); return; }
+                releaseHeldTouch(); // the finger moves away: a one-finger press (a drag, a draw), from where it went down
+            }
             try{ handlePointerMove(e, svg, state); } catch(err){ console.error('[input-manager] handlePointerMove error', err); }
         });
         svg.addEventListener('pointerup', (e) => {
             dbg.log('input', 'svg pointerup', {x: e.clientX, y: e.clientY});
+            if (pinchFingers.delete(e.pointerId)) { // a pinch / pan finger lifts (TASK 1030, I-21)
+                endTouchPress(); hold.cancel();
+                e.preventDefault();
+                handlePanZoomPointerUp(e, svg, state);
+                if (svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+                return;
+            }
+            if (heldTouch && heldTouch.e.pointerId === e.pointerId) releaseHeldTouch(); // a tap: its press, then its release
             if (e.pointerType === 'touch') {
                 endTouchPress();
                 const consumed = hold.fired && hold.pointerId === e.pointerId;
@@ -1052,6 +1109,8 @@ function setupEventListeners(svg, state) {
         });
         svg.addEventListener('pointercancel', (e) => {
             if (e.pointerType !== 'touch') return;
+            if (heldTouch && heldTouch.e.pointerId === e.pointerId) dropHeldTouch();
+            pinchFingers.delete(e.pointerId);
             endTouchPress(); hold.cancel();
             try { handlePanZoomPointerUp(e, svg, state); } catch (_) { }
             try { updateMagnifier(svg, state); } catch (_) { }
@@ -1127,10 +1186,25 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
     });
 
     // Also attach keyboard shortcuts at document-level (already handled) - ensure focus doesn't steal keys
+        // TASK 1030 (I-19): the on-canvas value box the user is typing in keeps the keyboard across a press that is not the tool's: a middle-button pan
+        // of the canvas, a press on the footer bar. A press INTO the Parameters window or the Sketches browser keeps the focus there (the user went there
+        // on purpose); the next press on the canvas gives it back. A press of the tool on the canvas is the tool's own; any other press is as before.
+        let typingBox = null, boxLeftForPanel = false;
+        const isValueBox = (el) => !!el && typeof el.matches === 'function' && el.matches('.dim-input, .sk-dual-input input');
+        const boxShown = (el) => el.isConnected && el.getClientRects().length > 0;
         document.addEventListener('pointerdown',(e)=>{
             if (!isActiveFn()) return; // P5b gate (default-on)
+            if (isValueBox(document.activeElement)) { typingBox = document.activeElement; boxLeftForPanel = false; }
+            const t = e.target;
+            if (t && typeof t.closest === 'function' && t.closest(FOCUS_KEEPING_PANELS)) { boxLeftForPanel = !!typingBox; return; }
             // Don't steal focus if user is clicking an input
-            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+            const onCanvas = !!t && svg.contains(t);
+            const onBar = !!t && typeof t.closest === 'function' && !!t.closest(FOCUS_RETURNING_BARS);
+            const box = typingBox && (onBar || (onCanvas && (e.button === 1 || boxLeftForPanel))) ? typingBox : null;
+            if (onCanvas && e.button !== 1) { typingBox = null; boxLeftForPanel = false; }
+            // the press's own focus change (to the page) comes after this listener: the box takes the focus back once it is done
+            if (box) { setTimeout(() => { if (boxShown(box)) box.focus(); }, 0); return; }
             try{ svg.focus(); }catch(_){ } 
         });
 
@@ -1172,14 +1246,17 @@ export { undoRedoKeyAction };
 const DRAWING_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.BEZIER];
 const sketchHistories = new WeakMap();
 /** TASK 618: the sketch state as a history source (history-control.js): THE Undo / Redo of the Design surface, called by the Ctrl+Z / Ctrl+Y keys
- *  below and by the header buttons. TASK 549 (Fusion, measured): undo while a drawing tool is mid-draw removes NOTHING, it ENDS the tool (the
- *  uncommitted rubber-band segment / half-drawn element goes, every committed segment stays); the NEXT undo undoes one element. */
+ *  below and by the header buttons. TASK 549 (Fusion, measured): undo while a drawing tool is mid-draw removes NOTHING committed (the
+ *  uncommitted rubber-band segment / half-drawn element goes, every committed segment stays); the NEXT undo undoes one element. TASK 1030:
+ *  the tool stays (owner ruling I-05), for every tool's pending pick (toolPickPending). */
 export function sketchHistory(state) {
     let h = sketchHistories.get(state);
     if (!h) {
         h = {
-            undo: () => { if (state.active && DRAWING_TOOLS.includes(state.currentTool)) handleEscape(state); else state.undo(); },
-            redo: () => state.redo(),
+            // TASK 1030 (I-05, owner ruling): Undo with a pick pending cancels that pick / half-made shape and STAYS in the tool, with no undo step
+            // (the NEXT Undo undoes the previous finished step); Redo with a pick pending does nothing (I-15).
+            undo: () => { if (toolPickPending(state)) restartActiveTool(state); else state.undo(); },
+            redo: () => { if (!toolPickPending(state)) state.redo(); },
             canUndo: () => state.canUndo(),
             canRedo: () => state.canRedo(),
             subscribe: (fn) => state.addHistoryListener(fn),
@@ -1218,11 +1295,14 @@ function setupKeyboardShortcuts(state, opts = {}) {
     const profilesEnabled = !!(opts && opts.profiles);
     const notifyFn = (opts && typeof opts.notify === 'function') ? opts.notify : showNotification;
     const clipboard = createClipboard({ state, notify: notifyFn, unit: docUnit });
-    // TASK 596: Esc inside an on-canvas value box of a drawing tool (the box swallows the key) is the SAME Esc as on the canvas: one code path, handleEscape
-    window.addEventListener('liveDimensionCancelled', () => {
+    // TASK 596: Esc inside an on-canvas value box (the box swallows the key) is the SAME Esc as on the canvas: one code path, handleEscape. TASK 1030
+    // (I-02): in EVERY tool (the Dimension value box, the Text editor too: one Esc cancels and leaves the tool, owner ruling BUG-105). In the Select
+    // tool a box's Esc (the dimension edit box, a text edited from its menu) only closes that box.
+    window.addEventListener('liveDimensionCancelled', (e) => {
         if (!isActiveFn()) return;
-        if (state.active && [TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC, TOOL_MODES.LINE].includes(state.currentTool)) handleEscape(state);
-        else if (state.currentTool === TOOL_MODES.OFFSET || state.currentTool === TOOL_MODES.FILLET) handleEscape(state); // R2-07 / R1-09: the Offset and Fillet distance boxes (no state.active): one Esc cancels and leaves the tool
+        if (state.currentTool === TOOL_MODES.SELECT) return;
+        if (e.detail && e.detail.undo) sketchHistory(state).undo(); // Ctrl+Z in a box at its opening value: the canvas Undo (I-05: the tool stays)
+        else handleEscape(state);
     });
     document.addEventListener('keydown', (e) => {
         if (!isActiveFn()) return; // P5b gate (default-on)
@@ -1429,47 +1509,92 @@ export function toggleFixedSelection(state) {
 export const showDimInput = showEditInput;
 
 
+// TASK 1030: THE cancel of what the active tool holds: a pick, a half-made shape and its value boxes, a placement, a drag (put back where it
+// started: I-08 / I-12), the transform box's typed value (I-09), the text editor. Nothing made, no undo step, Redo untouched (a committed Bezier /
+// Line chain is kept). Shared by Esc (then the Select tool), another tool picked (then that tool: leaveActiveTool) and Undo with a pick pending
+// (then the same tool again: restartActiveTool). The selection is not touched here (a tool switch keeps it: Dimension / Mirror / a constraint
+// start from it); Esc and Undo clear it themselves.
+function cancelActiveWork(state) {
+    cancelTransformGesture(state); // TASK 753: a box handle drag: the group goes back
+    cancelPointDrag(state);        // a point / shape drag: everything goes back
+    closeTransformInput();
+    cancelTextEditor(); // TASK 845: Esc while the text editor is open (the canvas had the keys) cancels the edit
+    if (state.currentTool === TOOL_MODES.DIMENSION) resetDimensionState(state); // a placing preview or a first pick waiting for the second (task 555)
+    try{ if(state.currentTool === TOOL_MODES.LINE) deactivateLineTool(state); }catch(_){ }
+    try{ resetBezierState(state); }catch(_){ } // end/clear any in-progress bezier pen path
+    try{ resetBreakState(); }catch(_){ }  // TRACE-1
+    try{ resetTrimState(); }catch(_){ }   // TRACE-1
+    resetFilletState();
+    resetOffsetState(); // TASK 650
+    resetPatternState(); // TASK 658
+    try{ resetDrawingState(state); }catch(_){ }
+    try{ resetSelectionState(); }catch(_){ }
+    if (typeof state.closeDrawStep === 'function') state.closeDrawStep(); // TASK 549: a draw cancelled leaves nothing and no undo step (a committed bezier / line chain is kept)
+    try{ state.tempMousePos = null; }catch(_){ }
+    try{ clearPreview(state); }catch(_){ }
+    state.active = null; state.drag = null;
+    resetConstraintState(state); // the constraint tools' pick buffers
+}
+
+function clearSelectionSets(state) {
+    if (state.selectedJoints) state.selectedJoints.clear();
+    if (state.selectedConstraints) state.selectedConstraints.clear();
+    if (state.selectedShapes) state.selectedShapes.clear();
+}
+
 // Shared exit cleanup when switching tools (both switchToTool and tool-ribbon's host-owned onToolClick path).
 export function leaveActiveTool(state, nextTool) {
     commitTextEditor(); // TASK 845: another tool (its button or its key) keeps the text being edited, as a press outside the editor does
-    if (typeof state.closeDrawStep === 'function') state.closeDrawStep(); // TASK 549: picking another tool in the middle of a draw cancels it (the ribbon button does the same)
     // TASK 1004 (B-7/D-20, D-6): leaving Dimension mid-placement or mid-pick cancels it like Esc (a new dim removed, an existing one kept).
-    // Re-clicking Dimension or pressing its key keeps an active placement / pick (owner tool rule).
     if (nextTool !== TOOL_MODES.DIMENSION) resetDimensionState(state);
+    cancelActiveWork(state); // TASK 1030 (I-01, I-09, I-12): the old tool's boxes, drag and picks go with it, as with Esc
+}
+
+// TASK 1030 (I-05): what each tool holds between its picks. Undo with one of these pending cancels it and stays in the tool (no undo step, the
+// NEXT Undo undoes the previous finished step); Redo with one pending does nothing. A tool not listed holds nothing between clicks.
+const drawPending = (state) => !!state.active;
+const TOOL_PENDING = Object.freeze({
+    ...Object.fromEntries(DRAWING_TOOLS.map((t) => [t, drawPending])),
+    [TOOL_MODES.TEXT]: () => textEditorOpen(),
+    [TOOL_MODES.DIMENSION]: (state) => !!state.active || isDimensionPlacing(state),
+    ...Object.fromEntries(CONSTRAINT_TOOLS.map((t) => [t, constraintPickPending])),
+    [TOOL_MODES.FILLET]: () => filletPickPending(),
+    [TOOL_MODES.OFFSET]: () => offsetInputOpen(),
+    [TOOL_MODES.MIRROR]: (state) => mirrorStep(state) === MIRROR_STEPS.LINE || state.selectedShapes.size + state.selectedJoints.size > 0,
+    [TOOL_MODES.CIRCULAR_PATTERN]: () => patternDoneOpen(),
+    [TOOL_MODES.RECTANGULAR_PATTERN]: () => patternDoneOpen(),
+});
+export function toolPickPending(state) {
+    const pending = TOOL_PENDING[state.currentTool];
+    return !!pending && pending(state);
+}
+
+// TASK 1030 (I-05): the active tool starts again from its first pick: what it held is cancelled (cancelActiveWork) and the selection its picks lit
+// is cleared; the tool stays. Undo with a pick pending and a Rect / Slot variant changed mid-draw call it.
+export function restartActiveTool(state) {
+    const tool = state.currentTool;
+    cancelActiveWork(state);
+    clearSelectionSets(state);
+    armTool(state, tool);
 }
 
 // Helper: Switch the active tool programmatically with UI update fallback
 export function switchToTool(state, toolName) {
-    // TASK 1005 (owner ruling turn 3741): re-clicking the active constraint tool's button or key stays in the tool (never exits or re-fires preselection).
-    if (state.currentTool === toolName && CONSTRAINT_TOOLS.includes(toolName)) {
+    // TASK 1005 / 1030 (I-04, owner ruling turn 3741): re-clicking the active tool's button or pressing its key stays in the tool and keeps what it
+    // holds (a half-made draw, a typed box value, a pick): it never exits or restarts the tool.
+    if (state.currentTool === toolName) {
         inputCtx.highlightActiveTool?.(toolName);
         return;
     }
     leaveActiveTool(state, toolName);
+    armTool(state, toolName);
+}
+
+// The tool `toolName` becomes the active one, armed for its first pick (the old tool's work is already cancelled).
+function armTool(state, toolName) {
     // Primary path: let the host's toolbar handle the switch (default = SketchStudio's #tool-<name> button click +
     // active-state sync). Returns true when handled; a host without a toolbar omits it -> we fall through.
-
     if (inputCtx.setActiveTool && inputCtx.setActiveTool(toolName)) return;
-
-    // Cleanup for tool being left
-    if (state.currentTool === TOOL_MODES.LINE && toolName !== TOOL_MODES.LINE) {
-        try { deactivateLineTool(state); } catch(_) {}
-    }
-    if (state.currentTool === TOOL_MODES.BEZIER && toolName !== TOOL_MODES.BEZIER) {
-        try { resetBezierState(state); } catch(_) {}
-    }
-    if (state.currentTool === TOOL_MODES.TRIM && toolName !== TOOL_MODES.TRIM) {
-        try { resetTrimState(); } catch(_) {}
-    }
-    if (state.currentTool === TOOL_MODES.BREAK && toolName !== TOOL_MODES.BREAK) {
-        try { resetBreakState(); } catch(_) {}
-    }
-    if (state.currentTool === TOOL_MODES.FILLET && toolName !== TOOL_MODES.FILLET) {
-        resetFilletState();
-    }
-    if (state.currentTool === TOOL_MODES.OFFSET && toolName !== TOOL_MODES.OFFSET) resetOffsetState(); // TASK 650
-    if (state.currentTool !== toolName) resetConstraintState(state);
-    resetPatternState(); // TASK 658: any tool switch cancels an open pattern dialog (a new pattern tool's `begin` opens its own)
 
     state.currentTool = toolName;
     state.active = null;
@@ -1519,55 +1644,11 @@ export function handleDelete(state) {
 
 function handleEscape(state) {
     if (cancelTransformGesture(state)) return; // TASK 753: Esc during a box handle drag puts the group back (the selection stays)
-    cancelTextEditor(); // TASK 845: Esc while the text editor is open (the canvas had the keys) cancels the edit
-    // If a dimension placement is in progress, cancel it and remove the temporary constraint
-    try {
-        if (state.currentTool === TOOL_MODES.DIMENSION) {
-            resetDimensionState(state); // a placing preview or a first pick waiting for the second: Esc drops both (task 555)
-        }
-    } catch(_) {}
-
+    cancelActiveWork(state); // TASK 1030: ONE Esc cancels what the tool holds (a point drag goes back where it started: I-08) ...
     // TASK 751: Esc in the Select tool steps out of the entered user group, one level (nothing entered: nothing changes here)
     if (state.currentTool === TOOL_MODES.SELECT) stepOutOfGroup(state);
-
-    // 1. Clear selection sets
-    if (state.selectedJoints) state.selectedJoints.clear();
-    if (state.selectedConstraints) state.selectedConstraints.clear();
-    if (state.selectedShapes) state.selectedShapes.clear();
-
-    // 2. Ensure tool-specific cleanup runs (line tool and drawing state)
-    try{ if(state.currentTool === TOOL_MODES.LINE) deactivateLineTool(state); }catch(_){ }
-    try{ resetBezierState(state); }catch(_){ } // end/clear any in-progress bezier pen path
-    try{ resetBreakState(); }catch(_){ }  // TRACE-1
-    try{ resetTrimState(); }catch(_){ }   // TRACE-1
-    resetFilletState();
-    resetOffsetState(); // TASK 650
-    resetPatternState(); // TASK 658
-    try{ resetDrawingState(state); }catch(_){ }
-    try{ resetSelectionState(); }catch(_){ }
-    state.closeDrawStep(); // TASK 549: a draw cancelled by Esc leaves nothing and no undo step (a committed bezier / line chain is kept)
-
-    // 3. Clear transient interaction data
-    try{ state.tempMousePos = null; }catch(_){ }
-    try{ clearPreview(state); }catch(_){ }
-    state.active = null; state.drag = null;
-
-    // 4. RESET CONSTRAINT BUFFERS (Crucial for multi-click tools)
-    resetConstraintState(state);
-
-    // 5. Force UI to Select Mode
-    try{ state.currentTool = TOOL_MODES.SELECT; }catch(_){ }
-
-    // 6. Unified UI Update: Ensure all toolbar buttons are properly reset
-    try {
-        // Reset the toolbar buttons to Select (app-specific; default = SketchStudio toolbar). If the host has no
-        // toolbar (no resetToSelectTool, or no select button), fall back to the direct tool switch.
-        if (!(inputCtx.resetToSelectTool && inputCtx.resetToSelectTool())) {
-            switchToTool(state, 'select');
-        }
-    } catch(err) {
-        console.warn('ESC toolbar reset failed:', err);
-        // Last resort: just set tool state
-        try { state.currentTool = 'select'; } catch(_) {}
-    }
+    clearSelectionSets(state);
+    // ... and leaves the tool (owner ruling BUG-105): the Select tool, through the toolbar's reset (app-specific; default = SketchStudio toolbar)
+    // or the shared switch
+    if (!(inputCtx.resetToSelectTool && inputCtx.resetToSelectTool())) switchToTool(state, TOOL_MODES.SELECT);
 }

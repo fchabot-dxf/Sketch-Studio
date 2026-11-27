@@ -50,7 +50,7 @@ try {
   assert.ok(out.ended, '1: the closing click ended the path');
   await key('s', 'KeyS', 83, 0, 's');
   out.added = await evalJs(`${ST}.constraints.map((k) => k.type)`);
-  assert.deepStrictEqual(out.added, ['coincident'], '1: the closing click made the two ends coincident (gap 0), no line');
+  assert.deepStrictEqual(out.added, [], '1: the closing click made the two ends ONE shared point (TASK 1045: no coincident), no line');
   const loops = await loopsInPage();
   out.loops = loops.map((l) => l.kinds);
   assert.deepStrictEqual(out.loops, [['bezier', 'bezier', 'bezier']], '1: the page\'s findLoops returns ONE loop of the three beziers');

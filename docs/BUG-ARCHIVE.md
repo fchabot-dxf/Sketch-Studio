@@ -2005,7 +2005,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/drag-midpoint-snap-b18a-node.test.js`, `tests/snap-display-1010-live.test.js` (desktop: a joint dragged to a line midpoint is at (0, 8) during the drag and after release)
 - **Status:** fixed
 - **Family:** `snap-not-applied`
-- **History:** found in `1000B` (`B-18a`) -> fixed in task `1010` -> task `1045`: a rectangle's corner is ONE shared joint now (a JOINT drag, no cluster), so the cluster-only rule missed it again (`tests/drag-midpoint-snap-b18a-node.test.js` measured (0.0568, 3.9470) again); the rule is a CORNER drag now (`selection-tools.js` `cornerDrag`: a cluster, or a point two or more curves share; it infers nothing and takes the midpoint snap), the test passes again.
+- **History:** found in `1000B` (`B-18a`) -> fixed in task `1010` -> task `1045`: a rectangle's corner is ONE shared joint now (a JOINT drag, no cluster), so the cluster-only rule missed it again (`tests/drag-midpoint-snap-b18a-node.test.js` measured (0.0568, 3.9470) again); the rule is a CORNER drag now (`selection-tools.js` `cornerDrag`: a cluster, or a point two or more curves share; it infers nothing and takes the midpoint snap), the test passes again. The corner rule comes from task `584` (a cluster drag infers nothing) and task `1010` (its midpoint snap); in Fusion a rectangle corner IS one shared point, so it now also covers the points that were shared before task 1045: polygon / slot / fillet corners, imports, mirror / pattern copies (advisor ruling 2026-11-27: kept).
 
 ---
 

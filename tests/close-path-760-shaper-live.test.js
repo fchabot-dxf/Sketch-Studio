@@ -4,7 +4,7 @@
 //     a pick of Inside, Outside or Pocket makes NO operation and the card's note says why in one plain line, On line makes one (Cancel removes it); a click
 //     inside it picks nothing (no region); TASK S3: the types are the operations toolbar's buttons (a click shows no card), the refusal line is Prepare's notice;
 //  2. DESIGN: Shift+C, a click on the plate's edge closes it: ONE line, in the plate's own group (the import's "plate" group, not entered: one rigid
-//     block with the whole file: nothing is entered), only two coincidents added; findLoops (the page's own #core module on the page's state) returns the plate as a loop;
+//     block with the whole file: nothing is entered), no constraint added (TASK 1045: the line SHARES the two free end points); findLoops (the page's own #core module on the page's state) returns the plate as a loop;
 //  3. PREPARE AFTER: a click inside the plate picks the region; the type menu's Inside is enabled; picking it makes the card's type Inside (screenshot).
 import assert from 'node:assert';
 import { openClosePathPage, HOSTS, IMPORTED } from './helpers/close-path-live.js';
@@ -65,7 +65,7 @@ else {
       added: st.constraints.slice(${nCons}).map((c) => c.type), blocks: st.groups.length };`);
     assert.strictEqual(out.after.shapes, base + IMPORTED + 1, '2: one closing line');
     assert.deepStrictEqual(out.after.line, { type: 'line', construction: false, group: groupBefore }, '2: a normal line in the plate\'s own group (' + groupBefore + ')');
-    assert.deepStrictEqual(out.after.added, ['coincident', 'coincident'], '2: only two coincidents added');
+    assert.deepStrictEqual(out.after.added, [], '2: no constraint added (TASK 1045: the closing line shares the two free end points)');
     out.loops = await evalJs(`import('/packages/core/loop-finder.js').then((m) => m.findLoops(window.__designController.state).map((l) => l.edges.length))`);
     assert.deepStrictEqual(out.loops, [5], '2: findLoops returns the plate (its 4 lines + the closing line)');
     out.blockRigid = await evalJs(`import('/packages/core/group-model.js').then((m) => { const st = window.__designController.state; const b = m.rigidBlocks(st).find((x) => x.shapes.some((s) => s.id === st.shapes[st.shapes.length - 1].id)); return b ? b.shapes.length : 0; })`);

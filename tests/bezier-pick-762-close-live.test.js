@@ -1,7 +1,7 @@
 // tests/bezier-pick-762-close-live.test.js — TASK 762, the BEZIER tool closes on its first anchor, Shaper desktop 1280 x 800, real mouse
 // (tests/helpers/bezier-pick-live.js bezierToolFacts): a corner, a corner, a dragged smooth anchor, then the pointer 6 / 5 px off the FIRST anchor:
 //  the snap marker is on the first anchor (state.snapTarget, the Line tool's snap; screenshot .evidence/762/shaper-closing-snap-marker.png); the click
-//  there: the anchor lands ON the first one (two joints there), ONE coincident ties them, the path ends, the page's findLoops returns ONE loop of the three
+//  there: the anchor IS the first one (TASK 1045, Fusion measured 2026-11-27: one shared point, no coincident), the path ends, the page's findLoops returns ONE loop of the three
 //  beziers; Enter afterwards changes nothing;
 //  Prepare: a click inside picks the region and the type menu (TASK S3: the operations toolbar) offers Inside, Outside and Pocket.
 import assert from 'node:assert';
@@ -17,8 +17,8 @@ try {
   out.snapShown = f.snapShown; out.afterClose = f.afterClose; out.final = f.final;
   const first = await t.evalJs(`${ST}.shapes[0].joints[0]`);
   assert.strictEqual(f.snapShown, 'joint@' + first, 'the snap marker is on the first anchor');
-  assert.deepStrictEqual(f.afterClose, { shapes: ['bezier', 'bezier', 'bezier'], jointsAtFirst: 2, constraints: ['coincident'], loops: [3], drawing: false, tool: 'bezier' }, 'the click closed the outline and ended the path: ' + JSON.stringify(f.afterClose));
-  assert.deepStrictEqual(f.final, { shapes: 3, loops: [3], constraints: ['coincident'], drawing: false }, 'Enter afterwards changes nothing');
+  assert.deepStrictEqual(f.afterClose, { shapes: ['bezier', 'bezier', 'bezier'], jointsAtFirst: 1, constraints: [], loops: [3], drawing: false, tool: 'bezier' }, 'the click closed the outline and ended the path: ' + JSON.stringify(f.afterClose));
+  assert.deepStrictEqual(f.final, { shapes: 3, loops: [3], constraints: [], drawing: false }, 'Enter afterwards changes nothing');
   // Prepare: the region
   await t.evalJs(`document.querySelector('.sk-header-tab[data-tab="prepare"]').click()`);
   await t.waitFor(`!!document.getElementById('prepare-canvas').getScreenCTM() && document.querySelectorAll('#prepare-world-group path[data-shape-id]').length === 3`, 'Prepare draws the three bezier edges');

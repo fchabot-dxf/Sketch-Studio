@@ -33,7 +33,7 @@ try {
   out.drawn = await evalJs(`${ST}.shapes.map((s) => s.type)`);
   assert.deepStrictEqual(out.drawn, ['bezier', 'bezier', 'bezier'], '1: three beziers drawn by touch');
   out.added = await evalJs(`${ST}.constraints.map((k) => k.type)`);
-  assert.deepStrictEqual(out.added, ['coincident'], '1: the tap back on the first anchor closed the outline (TASK 762): the two ends coincident');
+  assert.deepStrictEqual(out.added, [], '1: the tap back on the first anchor closed the outline (TASK 762; TASK 1045: the two ends are ONE shared point, no coincident)');
   const L = await evalJs(`Promise.all([import('/packages/core/loop-finder.js'), import('/packages/core/loop-geometry.js')]).then(([F, G]) => { const st = ${ST}, by = new Map(st.shapes.map((s) => [s.id, s]));
     return F.findLoops(st).map((l) => { const p = G.loopPolygon(l, st, by); const cx = p.reduce((s, q) => s + q.x, 0) / p.length, cy = p.reduce((s, q) => s + q.y, 0) / p.length; return { kinds: l.edges.map((e) => by.get(e).type), inner: G.pointInPolygon(p, { x: cx, y: cy }) ? { x: cx, y: cy } : null, box: p.reduce((b, q) => [Math.min(b[0], q.x), Math.min(b[1], q.y), Math.max(b[2], q.x), Math.max(b[3], q.y)], [Infinity, Infinity, -Infinity, -Infinity]) }; }); })`);
   out.loops = L.map((l) => l.kinds);

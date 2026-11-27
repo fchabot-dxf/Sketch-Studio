@@ -12,6 +12,7 @@ import { undoRedoKeyAction } from '#ui/history-control.js';
 import { findSnap, snapBoostFor, findCoincidentCluster } from '#ui/snap-detection.js';
 import { gridSpacing } from '#ui/canvas-grid.js';
 import { deleteSelection } from '#core/delete-manager.js';
+import { joinsAt } from '#core/shared-point.js'; // TASK 1041: a point's "Delete Coincident" (its joins: shared-point glyphs + glue coincidents)
 import { deactivateLineTool } from '#ui/input-handlers/line-tool.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
@@ -1462,6 +1463,10 @@ function openContextMenuFor(e, svg, state, { touch = false } = {}) {
             }
         },
         deleteSelection: () => handleDelete(state),
+        // TASK 1041 (Fusion, owner-checked: a joined corner point's menu "Delete Coincident" = the same split as deleting its glyph): the point's
+        // joins (#core/shared-point.js joinsAt) become the selection and go through the ONE Delete (one undo step)
+        hasJoin: (jointId) => joinsAt(state, jointId).length > 0,
+        deleteCoincident: (jointId) => { const joins = joinsAt(state, jointId); replaceSelection(); joins.forEach((c) => sel.c.add(c)); handleDelete(state); },
         toggleLock: () => toggleFixedSelection(state),
         lockState: () => selectionLockState(state),
         sketchTargets: () => moveTargets(state), // TASK 577: sketches as layers

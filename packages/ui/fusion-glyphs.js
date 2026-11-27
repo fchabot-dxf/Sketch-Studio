@@ -9,6 +9,7 @@ import { getGlyph, loadGlyphSheet } from '#ui/glyph-sheet.js';
 export const CONSTRAINT_GLYPH = {
   horizontal: 'glyph-horizontal', vertical: 'glyph-vertical', parallel: 'glyph-parallel',
   perpendicular: 'glyph-perpendicular', coincident: 'glyph-coincident', pointOnLine: 'glyph-coincident',
+  sharedPointCoincident: 'glyph-coincident', // TASK 1041: Fusion's SharedPointCoincident (#core/shared-point.js) has the coincident's look
   collinear: 'glyph-collinear', tangent: 'glyph-tangent', equal: 'glyph-equal', midpoint: 'glyph-midpoint',
   concentric: 'glyph-concentric', polygon: 'glyph-polygon', symmetric: 'glyph-symmetric',
 };

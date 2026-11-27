@@ -153,7 +153,7 @@ function buildShapeKinds() {
     { kind: 'line', where: must('packages/ui/input-handlers/line-tool.js', /type: 'line'/) },
     { kind: 'construction line', where: must('packages/ui/input-handlers/line-tool.js', /isConstruction: !!state\.isConstructionMode/) },
     { kind: 'circle', where: must('packages/ui/input-handlers/circle-tool.js', /type: 'circle'/) },
-    { kind: 'arc (centre, start, end)', where: must('packages/core/shapes.js', /type: 'arc'/), note: 'makeArc(subType CENTER); both ARC_MODES (arc-cse, TASK 1022 arc-3pt) make it through the Arc tool's one commit' },
+    { kind: 'arc (centre, start, end)', where: must('packages/core/shapes.js', /type: 'arc'/), note: 'makeArc(subType CENTER); both ARC_MODES (arc-cse, TASK 1022 arc-3pt) make it through the one commit of the Arc tool' },
     { kind: 'fillet arc', where: must('packages/core/fillet.js', /filletSharp/) },
     { kind: 'polygon side', where: must('packages/core/shapes.js', /type: 'line', joints: \[corners\[i\]/) },
     { kind: 'rect side', where: must('packages/core/shapes.js', /type: 'line', joints: \[j1A, j2A\]/) },

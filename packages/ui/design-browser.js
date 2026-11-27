@@ -123,7 +123,7 @@ export function mountDesignBrowser({ container, state, engine, label = 'Sketches
       constructBtn.style.backgroundColor = on ? '#f97316' : '#fed7aa'; // dark orange when active, light orange when idle
       constructBtn.style.color = on ? 'white' : '#9a3412';
       constructBtn.setAttribute('aria-pressed', String(on));
-      constructBtn.title = titleWithShortcut(on ? 'Construction: ON' : 'Construction: OFF', 'sketch.construction'); // TASK 747: its key from the table ("(K)")
+      constructBtn.title = titleWithShortcut(on ? 'Construction: ON' : 'Construction: OFF', 'sketch.construction'); // TASK 747: its key from the table ("(X)")
     };
     constructBtn.addEventListener('click', (e) => {
       e.stopPropagation();

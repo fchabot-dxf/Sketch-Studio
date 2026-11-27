@@ -528,7 +528,7 @@ export function evaluate(ast, lookup, ctx = {}) {
       if (unitless(q)) q = promote(q, target, env);
       if (!(target === 'length' ? isLength(q) : isAngle(q))) throw new Bail(fail('UNIT_MISMATCH', `${target === 'length' ? 'a length' : 'an angle'} cannot be ${kindName(q)}`, at));
     } else if (target === 'none') {
-      if (!unitless(q)) throw new Bail(fail('UNIT_MISMATCH', `a plain number cannot be ${kindName(q)}`, at));
+      if (!unitless(q)) throw new Bail(fail('UNIT_MISMATCH', `needs a plain number, not ${kindName(q)}`, at));   // R1-16: the box wants a plain number and got a length / an angle (the message read backwards)
     }
     return { ok: true, v: q.v, L: q.L, A: q.A, ast: q.node };
   } catch (e) {

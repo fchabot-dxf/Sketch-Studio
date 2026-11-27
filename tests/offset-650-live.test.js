@@ -107,6 +107,7 @@ await (async () => {
       assert.strictEqual(await overlay(), false, `[${kind}] Esc removes the preview`);
       assert.strictEqual((await lines()).length, 2, `[${kind}] Esc makes nothing`);
       assert.strictEqual(await hist(), h0, `[${kind}] Esc leaves no undo step`);
+      await tool('tool-offset'); // R2-07 (owner ruling BUG-105): ONE Esc left the tool, so the next pick starts from its button
 
       // ---- 2. tap, type 5, Enter: two lines 5 mm away, joined, one dimension; one undo step
       await P.tap(onA); await waitFor(`!!document.getElementById('offset-distance-input')`, `[${kind}] the box again`);

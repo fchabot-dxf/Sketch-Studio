@@ -2258,6 +2258,133 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 
 ---
 
+### BUG-220
+- **Date / turn:** 2026-11-26 (real-design audit `R2-04`)
+- **Reported by:** worker (audits 1016 / 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Line draw-time box: a typed length or formula + Enter drops the Horizontal/Vertical inference."
+- **What was wrong:** Typing only a length cleared the inferred H / V, so the segment stayed free to rotate.
+- **Cause:** `line-tool.js` `redrawLinePreview` and the pointer-move branch cleared `activeInference` whenever ANY size was typed (`hasLock()`), also when only `lockedLength` was set; a stale inference also survived a committed segment.
+- **Fix:** Only a typed ANGLE clears the inference; a typed length runs along the inferred (or cursor) direction (`redrawLinePreview`, `handleLinePointerMove`); both commit paths clear `activeInference` so the next segment infers afresh.
+- **Task id(s):** `1021` (audit `R2-04`)
+- **Fix merge sha:** pending (`agents/toolux-1021`)
+- **Guarding test file(s):** `tests/toolux-1021-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+
+### BUG-221
+- **Date / turn:** 2026-11-26 (real-design audit `R1-08`)
+- **Reported by:** worker (audits 1016 / 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Slot: a typed span drops the horizontal inference."
+- **What was wrong:** A slot drawn along an axis never got a Horizontal / Vertical constraint, typed span or clicked (the Slot tool had no inference at all).
+- **Cause:** `slot-tool.js` had no inference code (R1-08 as reported was wrong: it was not dropped, it never existed).
+- **Fix:** ADVISOR-APPROVED behaviour change: the straight slot's centreline infers H / V through the Line tool's `findInference` (`spanInference` / `resolveSpanEnd`, one place) and applies it through the Line tool's ONE `applyLineInference` (factored out of its two duplicated commit blocks). Clicked and typed spans alike. Fusion expectation (unverified).
+- **Task id(s):** `1021` (audit `R1-08`)
+- **Fix merge sha:** pending (`agents/toolux-1021`)
+- **Guarding test file(s):** `tests/toolux-1021-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+
+### BUG-222
+- **Date / turn:** 2026-11-26 (real-design audit `R2-06`)
+- **Reported by:** worker (audits 1016 / 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Offset: clicking to choose the side moves focus to the canvas, so typing the distance + Enter does nothing."
+- **What was wrong:** After the side click the distance box was no longer focused; the typed 8 + Enter was swallowed by the canvas.
+- **Cause:** `offset-tool.js` `handleOffsetPointerUp` set the side but never gave the focus back to the box (the press focuses `#svgCanvas`).
+- **Fix:** `handleOffsetPointerUp` refocuses and selects the box after `setSide`.
+- **Task id(s):** `1021` (audit `R2-06`)
+- **Fix merge sha:** pending (`agents/toolux-1021`)
+- **Guarding test file(s):** `tests/toolux-1021-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+
+### BUG-223
+- **Date / turn:** 2026-11-26 (real-design audit `R2-07` + `R1-09`)
+- **Reported by:** worker (audits 1016 / 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Offset and Fillet need TWO Esc presses to leave the tool."
+- **What was wrong:** The first Esc only closed the box / pending pick and stayed in the tool.
+- **Cause:** `handleOffsetKeyDown` / `handleFilletKeyDown` and the boxes' own Esc handlers cancelled their session and swallowed the key, so the shared `handleEscape` (which leaves to Select) never ran. Owner ruling BUG-105 (Fusion verified live 2026-11-26): ONE Esc cancels and leaves.
+- **Fix:** The per-tool Esc handlers are removed; the box Esc raises `liveDimensionCancelled` and `input-manager.js` runs the shared `handleEscape` for Offset and Fillet (the path of the drawing tools), which resets both tools and returns to Select through `switchToTool` / `leaveActiveTool`.
+- **Task id(s):** `1021` (audit `R2-07` + `R1-09`)
+- **Fix merge sha:** pending (`agents/toolux-1021`)
+- **Guarding test file(s):** `tests/toolux-1021-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-105
+
+### BUG-224
+- **Date / turn:** 2026-11-26 (real-design audit `R2-10`)
+- **Reported by:** worker (audits 1016 / 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Parameters window: the `ref` badge is squeezed into 3 stacked letters."
+- **What was wrong:** On a reference row the badge was crushed to one character wide.
+- **Cause:** `.pt-ref` (`parameter-table.js`) lacked the `flex: 0 0 auto; white-space: nowrap` that `.pt-fx` has, so the 100%-wide Name input squeezed it.
+- **Fix:** `.pt-ref` gets `flex: 0 0 auto; white-space: nowrap`.
+- **Task id(s):** `1021` (audit `R2-10`)
+- **Fix merge sha:** pending (`agents/toolux-1021`)
+- **Guarding test file(s):** `tests/toolux-1021-node.test.js`
+- **Status:** fixed
+- **Family:** `layout-overlap`
+
+### BUG-225
+- **Date / turn:** 2026-11-26 (real-design audit `R2-11`)
+- **Reported by:** worker (audits 1016 / 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Reference radius / diameter labels read `R (15)` / `Ø (5)`."
+- **What was wrong:** The parentheses wrapped only the number.
+- **Cause:** `svg-renderer.js` `constraintValueText` wrapped the number in `(...)` before prepending `R ` / `Ø `.
+- **Fix:** The whole label is wrapped: `(R 15)` / `(Ø 5)`.
+- **Task id(s):** `1021` (audit `R2-11`)
+- **Fix merge sha:** pending (`agents/toolux-1021`)
+- **Guarding test file(s):** `tests/toolux-1021-node.test.js`
+- **Status:** fixed
+- **Family:** `dimension-display`
+
+### BUG-226
+- **Date / turn:** 2026-11-26 (real-design audit `R1-15` + `R1-11`)
+- **Reported by:** worker (audits 1016 / 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Auto-placed labels pile up: concentric circles' Ø labels all at 0 degrees; d1 30 mm away; a hole's leader runs into the slot."
+- **What was wrong:** A dimension born with no placement of its own always took the one fixed offset (30) and angle 0.
+- **Cause:** `constraints.js` `createConstraint` gave every distance `offset: SolverConfig.DIMENSION_OFFSET` and the renderer angle 0, whatever was already there.
+- **Fix:** `defaultLabelPlacement` (`dim-label.js`, called once from `ConstraintManager.createConstraint` for a distance born without a placement): a circle's Ø label sits just outside its rim at the first of 0, +-45, +-90 ... degrees that keeps 40 degrees from the other diameter labels round the same centre, is 12 mm from every other label and whose leader touches no other shape; a linear label takes an offset of 0.2 x its length (10..30), stepped out until clear. Dimensions with a placement (the Dimension tool) are untouched. Live screenshots: see WORK-LOG TURN 1021.
+- **Task id(s):** `1021` (audit `R1-15` + `R1-11`)
+- **Fix merge sha:** pending (`agents/toolux-1021`)
+- **Guarding test file(s):** `tests/toolux-1021-node.test.js`
+- **Status:** fixed
+- **Family:** `layout-overlap`
+
+### BUG-227
+- **Date / turn:** 2026-11-26 (real-design audit `R1-16`)
+- **Reported by:** worker (audits 1016 / 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Parameters `+ Add`: the Unit can't be changed after creation, and a mm parameter in the Circular Pattern Quantity says 'a plain number cannot be a length' (backwards)."
+- **What was wrong:** A count made as mm had to be deleted and re-made; the refusal read backwards.
+- **Cause:** The Unit cell of a user row was text; `expression.js` evaluate (target `none`) said `a plain number cannot be <kind>`.
+- **Fix:** New `setUnit` change in `parameters.js` `planChange` (`planTableEdit` column `unit`; the row's Unit cell is a select): the same kind keeps the value (mm -> cm); a typed number changing kind keeps its NUMBER (6 mm -> 6); a formula asks to be retyped; an in-use parameter changing kind is refused naming the dimensions that read it and what they would read. The evaluator says `needs a plain number, not a length` and a count box prefixes its label: `Quantity needs a plain number, not a length`.
+- **Task id(s):** `1021` (audit `R1-16`)
+- **Fix merge sha:** pending (`agents/toolux-1021`)
+- **Guarding test file(s):** `tests/toolux-1021-node.test.js`
+- **Status:** fixed
+- **Family:** `notice-wording`
+
+### BUG-228
+- **Date / turn:** 2026-11-26 (real-design audit `R1-17`)
+- **Reported by:** worker (audits 1016 / 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "The construction toggle shortcut should be X like Fusion, not K."
+- **What was wrong:** Construction was K; X (Fusion's) was Coincident.
+- **Cause:** Divergence from Fusion (`shortcuts.js`).
+- **Fix:** OWNER RULING (turn 3830): `sketch.construction` = X; `tool.coincident` has NO default key (ribbon only; a key can still be set in Settings > Shortcuts). Tooltip and docs updated.
+- **Task id(s):** `1021` (audit `R1-17`)
+- **Fix merge sha:** pending (`agents/toolux-1021`)
+- **Guarding test file(s):** `tests/toolux-1021-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+
 ### BUG-240
 - **Date / turn:** 2026-11-26 (advisor turn ~3790)
 - **Reported by:** advisor, live Fusion check (audit ids `B-12b` / `EA-4`)
@@ -2393,18 +2520,18 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `export-svg` | BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19) |
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
-| `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
-| `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
+| `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
+| `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26) |
 | `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-146 (11-26), BUG-201 (11-26) |
-| `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26) |
+| `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
 | `storage-lifecycle` | BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-200 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 
 ---

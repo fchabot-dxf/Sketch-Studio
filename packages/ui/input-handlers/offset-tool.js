@@ -29,7 +29,6 @@ import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; /
 import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox, attachExternalCompletion } from '#ui/numeric-input-manager.js';
 import { applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
-import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 const OVERLAY_ID = 'offset-tool-overlay';
 export const OFFSET_INPUT_ID = 'offset-distance-input';
@@ -116,14 +115,10 @@ export function handleOffsetPointerUp(e, svg) {
   }
   if (!_press || !e || _press.pointerId !== e.pointerId) return false;
   const p = _press; _press = null;
-  if (!p.moved && _open) setSide(screenToWorld(svg, e.clientX, e.clientY));
+  if (!p.moved && _open) { setSide(screenToWorld(svg, e.clientX, e.clientY)); _open.el.focus(); _open.el.select(); } // the press took the focus to the canvas: the box gets it back, so the distance can be typed (R2-06)
   return false;
 }
 
-export function handleOffsetKeyDown(e) {
-  if (matchesShortcut(e, 'edit.cancel') && _open) { cancelAll(); return true; }
-  return false;
-}
 
 function pick(svg, state, shape, world) {
   const res = offsetChainOf(state, shape.id, pickRule(state));
@@ -219,7 +214,7 @@ function openInput(svg, state, chain, pickId, side, pickPt) {
     if (_open && _open.completion && _open.completion.handleKey(ev)) { ev.stopImmediatePropagation(); return; }
     if (handleBoxUndoKey(ev, el, defaultValue, () => { applyInputValue(); if (_open && _open.completion) _open.completion.close(); })) return;
     if (ev.key === 'Enter') { ev.preventDefault(); commitOffsetInput(); }
-    else if (ev.key === 'Escape') { ev.preventDefault(); cancelAll(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); window.dispatchEvent(new CustomEvent('liveDimensionCancelled')); }   // the canvas Esc (handleEscape) cancels and leaves the tool: ONE Esc
   });
   refresh();
   // the press that opened the box is still in flight: its pointerup / click would take the focus back to the canvas. Focus now and after it.

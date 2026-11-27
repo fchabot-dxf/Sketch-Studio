@@ -6,10 +6,11 @@
 // Dragging or projecting a legacy free `labelPos` maps world XY -> those parameters so the line / arc / leader follows.
 
 import { CONSTRAINT_TYPES } from './constants.js';
-import { getDist, getLineIntersection, isPointLineDistance } from './geometry.js';
+import { getDist, getLineIntersection, isPointLineDistance, arcSweepInfo, angleInArcSweep } from './geometry.js';
 import { angleSectorUnderLabel } from './angle-sector.js';
 import { sceneJoints, sceneShapes } from './reference-lines.js';
 import { offsetDimensionEnds } from './offset.js';
+import { SolverConfig } from './solver-config.js';
 
 function projectFoot(pt, a, b) {
   const dx = b.x - a.x, dy = b.y - a.y, det = dx * dx + dy * dy;
@@ -318,4 +319,93 @@ export function updateConstraintOffset(state, c, w) {
             }
         }
     }
+}
+
+// ── R1-15 / R1-11: the DEFAULT placement of a new dimension's label (one function; every dimension born without a placement of its own takes it) ──
+// A label is placed where it does not sit on another label or on the drawing: a CIRCLE's diameter label just outside its rim, at the first of the angles
+// 0, +45, -45, +90 ... degrees whose label point is clear of every other label and whose leader (rim -> label) touches no other shape (concentric
+// circles stagger around the centre instead of piling up on +X; a hole's leader turns away from a slot); a LINEAR dimension takes an offset scaled to the
+// length it measures (a long part is not given a 30 mm gap on an 80 mm edge), stepped outward until clear of the other labels.
+const LABEL_GAP = 12;          // world units: two label points closer than this overlap (a label is about this wide at the usual zoom)
+const RIM_GAP = 8;             // a circle's label sits this far outside its rim
+const SHAPE_CLEAR = 2;         // a label point / leader keeps this far from every other shape
+const RADIAL_TRIES = [0, 45, -45, 90, -90, 135, -135, 180].map((d) => d * Math.PI / 180);
+const LINEAR_STEP = 10;
+const SAME_CENTRE_ANGLE = 40 * Math.PI / 180;   // two diameter labels round one centre are at least this far apart in angle
+
+const centreOf = (shape, joints) => (shape && shape.joints && shape.joints[0] ? joints.get(shape.joints[0]) : null);
+
+/** where an existing dimension's label sits (a point), or null when it has none that is known here */
+function labelPointOf(c, joints, shapes) {
+  if (c.glyphPos && Number.isFinite(c.glyphPos.x)) return { x: c.glyphPos.x, y: c.glyphPos.y };
+  if (c.type !== CONSTRAINT_TYPES.DISTANCE) return null;
+  const { j1, j2 } = resolveDimEndpoints(c, joints, shapes);
+  if (!j1) return null;
+  const off = Number.isFinite(c.offset) ? c.offset : (SolverConfig.DIMENSION_OFFSET || 30);
+  if (c.isRadius && c.shape) {
+    const a = Number.isFinite(c.labelAngle) ? c.labelAngle : 0;
+    return { x: j1.x + Math.cos(a) * off, y: j1.y + Math.sin(a) * off };
+  }
+  if (!j2) return null;
+  return linearParamsToPoint(linearDimFrame(c, j1, j2), off, Number.isFinite(c.labelSlide) ? c.labelSlide : 0);
+}
+
+const segDist = (p, a, b) => {
+  const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+  const t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0;
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+};
+/** the distance from a point to a shape's drawn curve (line, circle, arc; any other kind: infinity) */
+function distToShape(p, s, joints) {
+  const j = (i) => (s.joints && s.joints[i] ? joints.get(s.joints[i]) : null);
+  if (s.type === 'line') { const a = j(0), b = j(1); return a && b ? segDist(p, a, b) : Infinity; }
+  if (s.type === 'circle') { const c = j(0); return c && Number.isFinite(s.radius) ? Math.abs(getDist(c, p) - s.radius) : Infinity; }
+  if (s.type === 'arc') {
+    const c = j(0), a = j(1), b = j(2);
+    if (!c || !a || !b) return Infinity;
+    const r = getDist(c, a);
+    const info = arcSweepInfo(c, a, b, { sweep: s.sweep });
+    return angleInArcSweep(info, Math.atan2(p.y - c.y, p.x - c.x)) ? Math.abs(getDist(c, p) - r) : Math.min(getDist(p, a), getDist(p, b));
+  }
+  return Infinity;
+}
+const clearOfShapes = (points, shapes, joints, except) => points.every((p) => shapes.every((s) => s.id === except || s.isConstruction || distToShape(p, s, joints) >= SHAPE_CLEAR));
+
+/**
+ * The default placement of the new DISTANCE dimension `c` (no placement of its own yet) among `state`'s joints, shapes and dimensions:
+ * { offset, labelAngle } for a circle's diameter, { offset } for a linear one, null for any other kind (it keeps the renderer's default).
+ */
+export function defaultLabelPlacement(c, state) {
+  if (!c || c.type !== CONSTRAINT_TYPES.DISTANCE || !state || !state.joints || !Array.isArray(state.shapes)) return null;
+  const others = (state.constraints || []).map((k) => (k === c ? null : labelPointOf(k, state.joints, state.shapes))).filter(Boolean);
+  const clearOfLabels = (p) => others.every((q) => getDist(p, q) >= LABEL_GAP);
+  if (c.isRadius && c.shape) {
+    const shape = state.shapes.find((s) => s.id === c.shape);
+    const centre = shape && shape.type === 'circle' ? centreOf(shape, state.joints) : null;
+    if (!centre || !(shape.radius > 0)) return null;
+    const offset = shape.radius + RIM_GAP;
+    // concentric circles stagger their ANGLE: a label keeps SAME_CENTRE_ANGLE away from the angle of every diameter label already round this centre
+    const roundCentre = state.constraints.filter((k) => k !== c && k.type === CONSTRAINT_TYPES.DISTANCE && k.isRadius && k.shape).map((k) => {
+      const s = state.shapes.find((x) => x.id === k.shape), o = s && s.type === 'circle' ? centreOf(s, state.joints) : null;
+      return o && getDist(o, centre) < 1e-6 ? (Number.isFinite(k.labelAngle) ? k.labelAngle : 0) : null;
+    }).filter((a) => a !== null);
+    const apartFromRound = (a) => roundCentre.every((b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) >= SAME_CENTRE_ANGLE);
+    for (const a of RADIAL_TRIES) {
+      if (!apartFromRound(a)) continue;
+      const rim = { x: centre.x + Math.cos(a) * shape.radius, y: centre.y + Math.sin(a) * shape.radius };
+      const label = { x: centre.x + Math.cos(a) * offset, y: centre.y + Math.sin(a) * offset };
+      const mid = { x: (rim.x + label.x) / 2, y: (rim.y + label.y) / 2 };
+      if (clearOfLabels(label) && clearOfShapes([label, mid], state.shapes, state.joints, shape.id)) return { offset, labelAngle: a };
+    }
+    return { offset, labelAngle: 0 };
+  }
+  const { j1, j2 } = resolveDimEndpoints(c, state.joints, state.shapes);
+  if (!j1 || !j2) return null;
+  const frame = linearDimFrame(c, j1, j2);
+  const base = Math.max(10, Math.min(SolverConfig.DIMENSION_OFFSET || 30, 0.2 * frame.len));
+  for (let i = 0; i < 4; i++) {
+    const offset = base + i * LINEAR_STEP;
+    if (clearOfLabels(linearParamsToPoint(frame, offset, 0))) return { offset };
+  }
+  return { offset: base };
 }

@@ -157,6 +157,8 @@ try {
   assert.strictEqual(doc.getElementById('fillet-radius-input'), null, 'Esc closes box');
   assert.strictEqual(st.shapes.filter((s) => s.type === 'arc').length, 0, 'Esc applies 0 fillets');
   assert.strictEqual(st.history.length, histBase, 'Esc adds 0 history steps');
+  assert.strictEqual(st.currentTool, 'select', 'R1-09: ONE Esc left the Fillet tool');
+  app.tool('fillet'); // the owner's ruling (BUG-105): Esc leaves the tool, so the next pick starts from the tool button again
 
   // Re-pick 3 corners while box open, type 4, press Enter -> 1 radius dim + 2 equal constraints in 1 undo step
   app.click(corners[0].x, corners[0].y);

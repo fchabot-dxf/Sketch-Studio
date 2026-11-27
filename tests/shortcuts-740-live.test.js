@@ -67,7 +67,7 @@ await (async () => {
 
       // ── A. titles ──
       const titles = await evalJs(`(${JSON.stringify(mine.map(btnId))}).map((id) => { const b = document.getElementById(id); return [id, b ? b.title : null]; })`);
-      const want = mine.map((t) => [btnId(t), `${t.title || t.label} (${shortcutHint(t.shortcut, { mac: false })})`]);
+      const want = mine.map((t) => { const hint = shortcutHint(t.shortcut, { mac: false }); return [btnId(t), hint ? `${t.title || t.label} (${hint})` : (t.title || t.label)]; });   // R1-17: Coincident has no key: its title shows none
       assert.deepStrictEqual(titles, want, name + ': every ribbon button title shows its key');
       assert.strictEqual(await evalJs(`document.getElementById('btn-parameters').title`), 'Parameters (Shift+P)', name + ': the Parameters button title');
       fs.writeFileSync(path.join(EVID, `${name}-titles.json`), JSON.stringify(titles, null, 1));
@@ -75,7 +75,7 @@ await (async () => {
       console.log(name, 'A ok:', titles.length, 'titles, e.g.', titles.slice(0, 3).map((x) => x[1]).join(' | '));
 
       // ── B. every tool / constraint key, from Select ──
-      const tools = mine.filter((t) => t.tool && t.tool !== 'select');
+      const tools = mine.filter((t) => t.tool && t.tool !== 'select' && shortcutById(t.shortcut).keys.length);   // R1-17: Coincident has no key
       for (const t of tools) {
         await toSelect();
         const k = keyOf(t.shortcut);
@@ -184,7 +184,7 @@ await (async () => {
       const rows = await evalJs(`Object.fromEntries([...document.querySelectorAll('.sk-shortcut-row')].map((r) => [r.dataset.id, { keys: [...r.querySelectorAll('kbd')].map((k) => k.textContent), label: r.querySelector('.sk-shortcut-label').textContent }]))`);
       for (const id of [...new Set(mine.map((t) => t.shortcut)), 'view.parameters']) {
         const s = shortcutById(id);
-        assert.deepStrictEqual(rows[id], { keys: comboCaps(s.keys[0], { mac: false }), label: s.label }, `${name}: the Shortcuts tab lists ${id}`);
+        assert.deepStrictEqual(rows[id], { keys: s.keys[0] ? comboCaps(s.keys[0], { mac: false }) : [], label: s.label }, `${name}: the Shortcuts tab lists ${id}`);
       }
       await shot(`${name}-shortcuts-tab.png`, '.sk-style-panel');
       await evalJs(`(() => { const b = document.querySelector('.sk-style-panel'); b.scrollTop = b.scrollHeight; })()`); await sleep(200);

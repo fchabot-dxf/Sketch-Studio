@@ -70,15 +70,9 @@ function constraintValueText(c, options) {
     const s = angleText(val, { show: 'deg' });
     return wrapParens ? `(${s})` : s;
   }
-  const lenStr = formatLenLabel(val);
-  const numStr = wrapParens ? `(${lenStr})` : lenStr;
-  if (c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter') {
-    return 'Ø ' + numStr;
-  }
-  if (c.isRadius || c.type === 'radius') {
-    return 'R ' + numStr;
-  }
-  return numStr;
+  const prefix = (c.isDiameter || c.dimMode === 'diameter' || c.type === 'diameter') ? 'Ø ' : (c.isRadius || c.type === 'radius') ? 'R ' : '';
+  const text = prefix + formatLenLabel(val);
+  return wrapParens ? `(${text})` : text;   // a reference reads (R 15) / (Ø 5): the whole label in the parentheses (R2-11)
 }
 
 

@@ -1,10 +1,10 @@
 // tests/shortcuts-747-live.test.js: TASK 747 (live headless, REAL mouse / touch / keys): the user changes a keyboard shortcut in Settings > Shortcuts.
 //  A. SketchStudio and Shaper, desktop 1280: draw a line, then in the Line row: a bare Shift waits, Ctrl+F is refused with its reason (still waiting),
 //     Ctrl+Z is a conflict with Undo (the line is NOT undone: no shortcut fires while capturing) -> Cancel; Esc cancels a capture and keeps Settings
-//     open; a click elsewhere cancels; K is a conflict with Construction (no tool switch, Construction not toggled) -> Swap: Line = K, Construction = L,
-//     both rows marked changed with Reset, the Line button says "Line (K)", the Construction button "(L)"; then K draws a line and L is no longer Line;
-//     a reload keeps K; x leaves Line with no key ("none", title "Line"), its Reset brings K's default back; Reset all (inline confirm) -> L again.
-//  B. Pen Plotter and Trace: a key changed in SketchStudio is theirs too (one setting): "Line (K)", K picks Line, the row shows K changed.
+//     open; a click elsewhere cancels; X is a conflict with Construction (no tool switch, Construction not toggled) -> Swap: Line = X, Construction = L,
+//     both rows marked changed with Reset, the Line button says "Line (X)", the Construction button "(L)"; then X draws a line and L is no longer Line;
+//     a reload keeps X; x leaves Line with no key ("none", title "Line"), its Reset brings X's default back; Reset all (inline confirm) -> L again.
+//  B. Pen Plotter and Trace: a key changed in SketchStudio is theirs too (one setting): "Line (X)", X picks Line, the row shows X changed.
 //  C. phone 390 (touch): the tab lays out with 44 px targets and nothing overflows; a tap on a key button waits for a key; a tap elsewhere cancels.
 // Screenshots: .evidence/747.
 import assert from 'node:assert';
@@ -128,36 +128,36 @@ await (async () => {
       assert.strictEqual(await panelOpen(), true, name + ': ... and does not close Settings');
       await clickSel(R('tool.line') + ' .sk-shortcut-keys'); await clickSel('.sk-style-title');
       assert.strictEqual((await row('tool.line')).capturing, false, name + ': a click elsewhere cancels');
-      // K: Construction's; the capture switches no tool and toggles nothing
+      // X: Construction's; the capture switches no tool and toggles nothing
       const cons0 = await construction();
-      await clickSel(R('tool.line') + ' .sk-shortcut-keys'); await press('k');
+      await clickSel(R('tool.line') + ' .sk-shortcut-keys'); await press('x');
       r = await row('tool.line');
-      assert(r.msg.startsWith('K is used by Construction on / off.') && r.swap, name + ': K: a conflict with Construction, Swap offered ' + JSON.stringify(r));
-      assert.deepStrictEqual(await construction(), cons0, name + ': the captured K did not toggle Construction');
+      assert(r.msg.startsWith('X is used by Construction on / off.') && r.swap, name + ': X: a conflict with Construction, Swap offered ' + JSON.stringify(r));
+      assert.deepStrictEqual(await construction(), cons0, name + ': the captured X did not toggle Construction');
       assert.strictEqual(await isActive('select'), true, name + ': and switched no tool');
       if (name === 'sketchstudio') await shot('conflict-row.png', '.sk-style-panel', 400);
       await clickSel(R('tool.line') + ' .sk-shortcut-swap');
-      assert.deepStrictEqual(await row('tool.line'), { keys: ['K'], none: false, changed: true, capturing: false, msg: '', reset: true, clear: true, swap: false }, name + ': Line = K, marked, Reset shown');
+      assert.deepStrictEqual(await row('tool.line'), { keys: ['X'], none: false, changed: true, capturing: false, msg: '', reset: true, clear: true, swap: false }, name + ': Line = X, marked, Reset shown');
       const consRow = await row('sketch.construction');
       assert(consRow.changed && consRow.reset && consRow.keys.join() === 'L', name + ': Construction took L ' + JSON.stringify(consRow));
-      assert.strictEqual(await title('tool-line'), 'Line (K)', name + ': the Line button says (K) at once');
+      assert.strictEqual(await title('tool-line'), 'Line (X)', name + ': the Line button says (X) at once');
       assert.strictEqual((await construction()).title, 'Construction: OFF (L)', name + ': the Construction button says (L) at once');
       assert.deepStrictEqual(Object.keys((await stored()).keys).sort(), ['sketch.construction', 'tool.line'], name + ': ONE setting, only the changed ids');
       assert.strictEqual(await evalJs(`document.querySelector('.sk-shortcuts-resetall').disabled`), false);
       if (name === 'sketchstudio') await shot('changed-row.png', '.sk-style-panel', 400);
       await closeSettings();
-      // K draws a line, L is no longer Line
+      // X draws a line, L is no longer Line
       await toSelect();
       await press('l'); assert.strictEqual(await isActive('line'), false, name + ': L no longer picks Line');
       assert.strictEqual((await construction()).on, String(cons0.on !== 'true'), name + ': L toggles Construction now');
       await press('l'); assert.deepStrictEqual((await construction()).on, cons0.on, name + ': (toggled back)');
-      await press('k'); assert.strictEqual(await isActive('line'), true, name + ': K picks Line');
+      await press('x'); assert.strictEqual(await isActive('line'), true, name + ': X picks Line');
       const b2 = await shapes(); await drawLine(60); await toSelect();
-      assert(await shapes() > b2, name + ': K drew a line');
-      // a reload keeps K
+      assert(await shapes() > b2, name + ': X drew a line');
+      // a reload keeps X
       await open(name);
-      assert.strictEqual(await title('tool-line'), 'Line (K)', name + ': after a reload: still (K)');
-      await toSelect(); await press('k'); assert.strictEqual(await isActive('line'), true, name + ': after a reload K picks Line');
+      assert.strictEqual(await title('tool-line'), 'Line (X)', name + ': after a reload: still (X)');
+      await toSelect(); await press('x'); assert.strictEqual(await isActive('line'), true, name + ': after a reload X picks Line');
       await toSelect();
       // x: no key; its Reset: the default back
       await openShortcuts();
@@ -177,28 +177,28 @@ await (async () => {
       if (name === 'sketchstudio') await shot('reset-confirm.png', '.sk-style-panel', 300);
       await clickSel('.sk-shortcuts-confirm-ok');
       assert.deepStrictEqual(await row('tool.line'), { keys: ['L'], none: false, changed: false, capturing: false, msg: '', reset: false, clear: true, swap: false }, name + ': Reset all: L, unmarked');
-      assert.deepStrictEqual((await row('sketch.construction')).keys, ['K'], name + ': Construction K again');
+      assert.deepStrictEqual((await row('sketch.construction')).keys, ['X'], name + ': Construction X again');
       assert.deepStrictEqual(await stored(), { v: 1, keys: {} }, name + ': nothing stored');
       assert.strictEqual(await title('tool-line'), 'Line (L)', name + ': the tooltip (L) at once');
       if (name === 'sketchstudio') await shot('reset.png', '.sk-style-panel', 400);
       await closeSettings();
       await toSelect(); await press('l'); assert.strictEqual(await isActive('line'), true, name + ': L picks Line again');
       await toSelect();
-      console.log(name, 'A ok: refused, conflict + Cancel, Esc / click-away cancel, Swap, K draws, reload, none, reset, Reset all');
+      console.log(name, 'A ok: refused, conflict + Cancel, Esc / click-away cancel, Swap, X draws, reload, none, reset, Reset all');
     }
 
     // ── B. one setting for all four apps: changed in SketchStudio, seen in Pen Plotter and Trace ──
     await open('sketchstudio');
     await openShortcuts();
-    await clickSel(R('tool.line') + ' .sk-shortcut-keys'); await press('k'); await clickSel(R('tool.line') + ' .sk-shortcut-swap');
-    assert.deepStrictEqual((await row('tool.line')).keys, ['K'], 'SketchStudio: Line = K');
+    await clickSel(R('tool.line') + ' .sk-shortcut-keys'); await press('x'); await clickSel(R('tool.line') + ' .sk-shortcut-swap');
+    assert.deepStrictEqual((await row('tool.line')).keys, ['X'], 'SketchStudio: Line = X');
     for (const name of ['penplotter', 'trace']) {
       await open(name);
-      assert.strictEqual(await title('tool-line'), 'Line (K)', name + ': "Line (K)"');
-      await toSelect(); await press('k'); assert.strictEqual(await isActive('line'), true, name + ': K picks Line'); await toSelect();
+      assert.strictEqual(await title('tool-line'), 'Line (X)', name + ': "Line (X)"');
+      await toSelect(); await press('x'); assert.strictEqual(await isActive('line'), true, name + ': X picks Line'); await toSelect();
       await openShortcuts();
       const r = await row('tool.line');
-      assert(r.changed && r.keys.join() === 'K', name + ': the row shows K, changed ' + JSON.stringify(r));
+      assert(r.changed && r.keys.join() === 'X', name + ': the row shows X, changed ' + JSON.stringify(r));
       await closeSettings();
       console.log(name, 'B ok: the key changed in SketchStudio is theirs too');
     }

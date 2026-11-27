@@ -9,6 +9,7 @@ import { SolverConfig } from './solver-config.js';
 import { isDimension, nextDimensionName } from './parameters.js';
 import { angleSectorOf } from './angle-sector.js';
 import { offsetConstraintRecord } from './offset.js';
+import { defaultLabelPlacement } from './dim-label.js';
 import { patternConstraintRecord, patternRefs } from './pattern.js';
 
 /**
@@ -532,6 +533,12 @@ export function addConstraint(state, type, params) {
     if (hasConstraint(state.constraints, type, params)) {
         dbg.log('constraints', '[addConstraint] Duplicate constraint rejected:', type, params);
         return false;
+    }
+    // R1-15 / R1-11: a distance CREATED with no placement of its own (a draw-time box, a tool's typed size) takes the default placement among the
+    // existing labels and shapes (#core/dim-label.js), HERE and not in pushConstraint (a restore puts back exactly what was saved, task 1019). A
+    // dimension a tool places itself (the Dimension tool) carries its offset and is untouched.
+    if (type === CONSTRAINT_TYPES.DISTANCE && params && !Number.isFinite(params.offset) && !params.glyphPos && !params.__pos && !params.labelPos && !Number.isFinite(params.labelAngle) && !Number.isFinite(params.labelSlide)) {
+        return pushConstraint(state, type, { ...params, ...(defaultLabelPlacement({ type, ...params }, state) || {}) });
     }
     return pushConstraint(state, type, params);
 }

@@ -175,8 +175,9 @@ await (async () => {
     assert.deepStrictEqual(await params(), [['length', '1500 mm'], ['width', '400 mm'], ['ply', '18 mm']], 'Tab out of the Name cell applied the rename');
     assert.strictEqual(await cellValue('d3', 'expression'), 'ply', 'the dimension formula follows the rename');
     assert.deepStrictEqual(await active(), { tag: 'INPUT', col: 'expression', row: 'ply', cls: 'pt-in' }, 'Tab moved Name -> Expression of the same row');
-    await Tab(); assert.deepStrictEqual((await active()).col, 'comment', 'Tab: Expression -> Comment');
-    await Tab(true); await Tab(true); assert.deepStrictEqual((await active()).col, 'name', 'Shift+Tab goes back to Name');
+    await Tab(); assert.deepStrictEqual((await active()).col, 'unit', 'Tab: Expression -> Unit (R1-16: the unit is a select now)');
+    await Tab(); assert.deepStrictEqual((await active()).col, 'comment', 'Tab: Unit -> Comment');
+    await Tab(true); await Tab(true); await Tab(true); assert.deepStrictEqual((await active()).col, 'name', 'Shift+Tab goes back to Name');
     await key('z', 'KeyZ', 90, 2); await sleep(400);
     assert.deepStrictEqual(await params(), [['length', '1500 mm'], ['width', '400 mm'], ['thickness', '18 mm']], 'one Ctrl+Z undoes the rename');
     assert.strictEqual(await cellValue('d3', 'expression'), 'thickness', 'and the formula reads thickness again');

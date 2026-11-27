@@ -143,6 +143,7 @@ await (async () => {
       assert.strictEqual(await evalJs(`!!document.querySelector('#offset-tool-overlay .offset-handle')`), false, `[${kind}] Esc removes the arrow`);
       assert.strictEqual((await lines()).length, n1, `[${kind}] Esc makes nothing`);
       assert.strictEqual(await hist(), h1, `[${kind}] Esc leaves no undo step`);
+      await tool('tool-offset'); // R2-07 (owner ruling BUG-105): ONE Esc left the tool, so the next pick starts from its button
 
       // ---- 3. dragging across the source flips the side
       await openOffset();

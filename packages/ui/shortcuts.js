@@ -57,7 +57,7 @@ export const SHORTCUTS = Object.freeze([
   tool('tool.polygon', 'p', 'Polygon', 'Tools', false), // Shift+P = Parameters
   tool('tool.arc', 'a', 'Arc'),
   tool('tool.bezier', 'b', 'Bezier', 'Tools', false),   // Shift+B = Break
-  // TASK 845: every letter is taken (T is Perpendicular, E Equal, X Coincident; and their Shift+ forms with them): F8, Inkscape's Text tool key
+  // TASK 845: every letter is taken (T is Perpendicular, E Equal; X is Construction, Coincident has no key; and their Shift+ forms with them): F8, Inkscape's Text tool key
   { id: 'tool.text', label: 'Text', group: 'Tools', hosts: ALL, scope: 'canvas', keys: [{ key: 'F8', mod: false, alt: false }] },
   tool('tool.trim', 'w', 'Trim'),            // Fusion's T is our Perpendicular; no free letter in the name
   tool('tool.break', 'b', 'Break', 'Tools', true),      // B is Bezier
@@ -69,7 +69,7 @@ export const SHORTCUTS = Object.freeze([
   tool('tool.offset', 'z', 'Offset'),        // Fusion's O is our Tangent; no free letter in the name
   tool('tool.dimension', 'd', 'Dimension'),
   // ── Constrain ──
-  tool('tool.coincident', 'x', 'Coincident', 'Constrain'),
+  { id: 'tool.coincident', label: 'Coincident', group: 'Constrain', hosts: ALL, scope: 'canvas', keys: [] },   // R1-17 (owner ruling turn 3830): X is Construction, like Fusion; Coincident is reached from the ribbon (or a key set in Settings > Shortcuts)
   tool('tool.horizontalVertical', 'h', 'Horizontal / Vertical', 'Constrain'),
   tool('tool.parallel', 'q', 'Parallel', 'Constrain'),
   tool('tool.perpendicular', 't', 'Perpendicular', 'Constrain'),
@@ -93,7 +93,7 @@ export const SHORTCUTS = Object.freeze([
     fixed: 'Esc is the one Cancel everywhere (it also cancels a key change here)' },
   { id: 'file.save', label: 'Save', group: 'Edit', hosts: ALL, scope: 'app', keys: [{ key: 's', mod: true, shift: false, alt: false }], inOverlay: true }, // sidebar-projects.js
   // ── Sketch ──
-  { id: 'sketch.construction', label: 'Construction on / off', group: 'Sketch', hosts: ALL, scope: 'app', keys: [{ key: 'k', mod: false, alt: false }] }, // design-browser.js
+  { id: 'sketch.construction', label: 'Construction on / off', group: 'Sketch', hosts: ALL, scope: 'app', keys: [{ key: 'x', mod: false, alt: false }] }, // design-browser.js; R1-17: X like Fusion (was K)
   // TASK 756: every app (user groups are part of the shared Design tab): input-manager.js runs #ui/group-actions.js
   { id: 'sketch.group', label: 'Group', group: 'Sketch', hosts: ALL, scope: 'canvas', keys: [{ key: 'g', mod: true, shift: false }] },
   { id: 'sketch.ungroup', label: 'Ungroup', group: 'Sketch', hosts: ALL, scope: 'canvas', keys: [{ key: 'g', mod: true, shift: true }] },

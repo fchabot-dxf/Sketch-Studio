@@ -41,9 +41,9 @@ assert(combosOverlap({ key: 'l', mod: false, alt: false }, k('L', { shift: true 
 assert(!combosOverlap({ key: 'b', mod: false, alt: false, shift: false }, k('b', { shift: true })), 'Shift+B is not the plain B (Bezier forbids Shift)');
 assert(combosOverlap({ code: 'Space' }, k(' ')) && combosOverlap({ chars: '0123456789.' }, k('7')), 'Space by code = the space key; a chars set = each char');
 assert.deepStrictEqual(shortcutConflicts('tool.line', k('r')), ['tool.rect'], 'same scope (canvas): R is Rectangle; Fillet\'s R (tool:fillet) shadows it by design, no conflict');
-assert.deepStrictEqual(shortcutConflicts('tool.line', k('k')), ['sketch.construction'], "'app' meets 'canvas': K is Construction");
+assert.deepStrictEqual(shortcutConflicts('tool.line', k('x')), ['sketch.construction'], "'app' meets 'canvas': X is Construction");
 assert.deepStrictEqual(shortcutConflicts('fillet.radius', k('l')), [], 'a tool scope does not meet the canvas letters (Fillet radius on L: free)');
-assert.deepStrictEqual(shortcutConflicts('fillet.radius', k('k')), ['sketch.construction'], "but it meets 'app'");
+assert.deepStrictEqual(shortcutConflicts('fillet.radius', k('x')), ['sketch.construction'], "but it meets 'app'");
 assert.deepStrictEqual(shortcutConflicts('edit.undo', k(' ')), ['view.panHold'], "Undo ('app', every app) on Space meets Pen Plotter's Hold to pan");
 assert.deepStrictEqual(shortcutConflicts('sketch.group', k(' ')), [], 'Shaper\'s Group on Space: Hold to pan is Pen Plotter\'s only (different apps): no conflict');
 assert.deepStrictEqual(shortcutConflicts('tool.line', k('g', { mod: true })), ['sketch.group'], 'Ctrl+G on Line meets Shaper\'s Group (Line is in Shaper too)');
@@ -53,10 +53,13 @@ assert.deepStrictEqual(shortcutConflicts('sketch.construction', k('s', { mod: tr
 // TASK 748: each letter the retired Pen Plotter art keys held (V T S L R E P F X N), taken bare by an 'app' shortcut, meets only the canvas tool / constraint
 // of that letter (and Fillet's R while Fillet draws); Swap is offered exactly where there is ONE changeable conflict
 const LETTER_OWNER = { v: ['tool.pan'], t: ['tool.perpendicular'], s: ['tool.select'], l: ['tool.line'], r: ['tool.rect', 'fillet.radius'], e: ['tool.equal'],
-  p: ['tool.polygon'], f: ['sketch.fix'], x: ['tool.coincident'], n: ['tool.fillet'] };
+  p: ['tool.polygon'], f: ['sketch.fix'], n: ['tool.fillet'] };   // R1-17: X is Construction itself, Coincident has no key
 for (const id of ['sketch.construction', 'edit.undo', 'file.save', 'view.parameters']) for (const [ch, owners] of Object.entries(LETTER_OWNER)) {
   assert.deepStrictEqual(shortcutConflicts(id, k(ch)), owners, `${id} on a bare ${ch.toUpperCase()}: only ${owners.join(', ')}, no retired Pen Plotter key`);
 }
+assert.deepStrictEqual(shortcutById('tool.coincident').keys, [], 'R1-17: Coincident has no default key (ribbon only)');
+assert.deepStrictEqual(shortcutById('sketch.construction').keys, [{ key: 'x', mod: false, alt: false }], 'R1-17: Construction is X, like Fusion');
+assert.deepStrictEqual(shortcutConflicts('edit.undo', k('x')), ['sketch.construction'], 'a bare X meets only Construction');
 assert.deepStrictEqual(assignShortcut('sketch.construction', k('l')), { conflicts: ['tool.line'], keys: [k('l')] }, 'a bare L on Construction: one conflict, Swap is offered');
 assert.deepStrictEqual(assignShortcut('file.save', k('r')).conflicts, ['tool.rect', 'fillet.radius'], 'a bare R on Save: two conflicts (no Swap)');
 assert(!SHORTCUTS.some((s) => s.id.startsWith('plotter.')), 'no Pen Plotter art-tool / finishPolyline shortcut is declared any more (TASK 748)');
@@ -99,17 +102,17 @@ assert.strictEqual(changes, c0, 'and tells no one');
 assert.deepStrictEqual(assignShortcut('tool.line', k('l')), { done: true }, 'L captured again: no conflict (the art L is Pen Plotter Toolpath\'s, never the canvas\')');
 assert(isShortcutChanged('tool.line') && !matchesShortcut(ev('L', { shift: true }), 'tool.line'), 'but it is exactly L now (Shift released): a change, marked');
 resetAllShortcuts();
-assert.deepStrictEqual(assignShortcut('tool.line', k('k')), { conflicts: ['sketch.construction'], keys: [k('k')] }, 'Line on K: Construction has it');
+assert.deepStrictEqual(assignShortcut('tool.line', k('x')), { conflicts: ['sketch.construction'], keys: [k('x')] }, 'Line on X: Construction has it');
 assert(!isShortcutChanged('tool.line') && matchesShortcut(ev('l'), 'tool.line'), 'a conflict changes nothing');
-swapShortcut('tool.line', [k('k')], 'sketch.construction');
+swapShortcut('tool.line', [k('x')], 'sketch.construction');
 assert(changes > c0, 'onShortcutsChange fired');
-assert.deepStrictEqual(shortcutById('tool.line').keys, [k('k')], 'Line = K');
+assert.deepStrictEqual(shortcutById('tool.line').keys, [k('x')], 'Line = X');
 assert.deepStrictEqual(shortcutById('sketch.construction').keys, defaultKeys('tool.line'), 'Construction takes Line\'s old key (L)');
-assert.strictEqual(matchShortcut(ev('k'), ['tool.line', 'sketch.construction']), 'tool.line', 'K = Line');
+assert.strictEqual(matchShortcut(ev('x'), ['tool.line', 'sketch.construction']), 'tool.line', 'X = Line');
 assert.strictEqual(matchShortcut(ev('l'), ['tool.line', 'sketch.construction']), 'sketch.construction', 'L = Construction');
-assert(!matchesShortcut(ev('K', { shift: true }), 'tool.line'), 'the captured K is exactly K (Shift released)');
-assert.deepStrictEqual(listKeys('shaper', 'tool.line'), [k('k')], 'the list shows K');
-assert.strictEqual(shortcutHint('tool.line', { mac: false }), 'K'); assert.strictEqual(titleWithShortcut('Line', 'tool.line', { mac: false }), 'Line (K)', 'the tooltip says (K)');
+assert(!matchesShortcut(ev('X', { shift: true }), 'tool.line'), 'the captured X is exactly X (Shift released)');
+assert.deepStrictEqual(listKeys('shaper', 'tool.line'), [k('x')], 'the list shows X');
+assert.strictEqual(shortcutHint('tool.line', { mac: false }), 'X'); assert.strictEqual(titleWithShortcut('Line', 'tool.line', { mac: false }), 'Line (X)', 'the tooltip says (X)');
 assert.strictEqual(titleWithShortcut('Construction', 'sketch.construction', { mac: false }), 'Construction (L)');
 assert.deepStrictEqual(defaultShortcut('tool.line').keys, [{ key: 'l', mod: false, alt: false }], 'SHORTCUTS keeps the default');
 assert(isShortcutChanged('tool.line') && isShortcutChanged('sketch.construction') && !isShortcutChanged('tool.rect'));

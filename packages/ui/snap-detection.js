@@ -1,5 +1,5 @@
 ﻿﻿import { worldToScreen, screenToWorld, getZoomFactor } from '#ui/coords.js';
-import { projectPointOnSegment, projectPointOnLine, getDist, getArcParams, resolveJoints, arcSweepInfo, angleInArcSweep, arcSweepMidpoint } from '#core/geometry.js';
+import { projectPointOnSegment, projectPointOnLine, getDist, resolveJoints, arcSweepInfo, angleInArcSweep, arcSweepMidpoint } from '#core/geometry.js';
 import { SNAP, AXIS_SNAP_TARGETS, ORIGIN_JOINT_ID } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { findInference } from '#core/inference-engine.js';

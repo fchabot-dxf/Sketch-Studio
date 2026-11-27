@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// DRAWING TOOLS - Handles line, rectangle, slot, polygon and arc drawing (TASK 1034: Circle runs in the tool session, #ui/tool-session.js)
+// DRAWING TOOLS - Handles line, rectangle, slot and polygon drawing (TASK 1034 / 1039: Circle and Arc run in the tool session, #ui/tool-session.js)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { dbg } from '#core/debug.js';
-import { TOOL_MODES, RECT_MODES, SLOT_MODES, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';
+import { TOOL_MODES, RECT_MODES, SLOT_MODES, ARC_MODES, SNAP, CONSTRAINT_TYPES } from '#core/constants.js';
 import { addConstraint } from '#core/constraints.js';
 import { findNearbyJoint } from '#core/joints.js';
 import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '#core/shapes.js';
@@ -12,7 +12,6 @@ import { clearPreview } from '#ui/preview-manager.js';
 import { setupRectTool, handleRectPointerDown, handleRectPointerMove, handleRectPointerUp, resetRectState } from '#ui/input-handlers/rect-tool.js';
 import { setupSlotTool, handleSlotPointerDown, handleSlotPointerMove, handleSlotPointerUp, resetSlotState } from '#ui/input-handlers/slot-tool.js';
 import { setupPolygonTool, handlePolygonPointerDown, handlePolygonPointerMove, handlePolygonPointerUp, resetPolygonState } from '#ui/input-handlers/polygon-tool.js'; // TASK 483
-import { setupArcTool, handleArcPointerDown, handleArcPointerMove, handleArcPointerUp, resetArcState } from '#ui/input-handlers/arc-tool.js';
 import { setHoverFromSnap } from '#ui/hover-manager.js';
 import { refuseLiveInputClick } from '#ui/numeric-input-manager.js';
 
@@ -38,12 +37,14 @@ export function setupDrawingTools(svg, state) {
     if (!state.slotMode) {
         state.slotMode = SLOT_MODES.CENTER_TO_CENTER;
     }
-    // Initialize line, rect, slot, polygon and arc tools
+    if (!state.arcMode) {
+        state.arcMode = ARC_MODES.CENTER_START_END;   // TASK 1039: the Arc tool's variant (its session reads it: #ui/input-handlers/arc-tool.js ARC)
+    }
+    // Initialize line, rect, slot and polygon tools
     setupLineTool(svg, state);
     setupRectTool(svg, state);
     setupSlotTool(svg, state);
     setupPolygonTool(svg, state);
-    setupArcTool(svg, state);
 }
 
 /**
@@ -56,7 +57,7 @@ export function setupDrawingTools(svg, state) {
  * @returns {boolean} True if event was handled
  */
 export function handleDrawingPointerDown(e, svg, state, hitSnap, w) {
-    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) {
+    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.POLYGON].includes(state.currentTool)) {
         return false;
     }
     
@@ -78,8 +79,6 @@ export function handleDrawingPointerDown(e, svg, state, hitSnap, w) {
             return handleSlotPointerDown(e, svg, state, hitSnap, w);
         case TOOL_MODES.POLYGON:
             return handlePolygonPointerDown(e, svg, state, hitSnap, w);
-        case TOOL_MODES.ARC:
-            return handleArcPointerDown(e, svg, state, hitSnap, w);
     }
     
     return false;
@@ -96,7 +95,7 @@ export function handleDrawingPointerDown(e, svg, state, hitSnap, w) {
  * @returns {boolean} True if event was handled
  */
 export function handleDrawingPointerMove(e, svg, state, w) {
-    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) return false;
+    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.POLYGON].includes(state.currentTool)) return false;
 
     // Debug: show active snap while moving (guarded; enable with `window.ug.debug.verboseDrawingLogs = true`)
     try{
@@ -123,8 +122,6 @@ export function handleDrawingPointerMove(e, svg, state, w) {
             return handleSlotPointerMove(e, svg, state, w);
         case TOOL_MODES.POLYGON:
             return handlePolygonPointerMove(e, svg, state, w);
-        case TOOL_MODES.ARC:
-            return handleArcPointerMove(e, svg, state, w);
         default:
             return false;
     }
@@ -141,7 +138,7 @@ export function handleDrawingPointerMove(e, svg, state, w) {
  * @returns {boolean} True if event was handled
  */
 export function handleDrawingPointerUp(e, svg, state, hitSnap, w, wasDragging) {
-    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.POLYGON, TOOL_MODES.ARC].includes(state.currentTool)) {
+    if (![TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.POLYGON].includes(state.currentTool)) {
         return false;
     }
     try{ dbg.log('drawing', '[drawing-tools] pointerUp', { tool: state.currentTool, hitSnap, activeSnap: state.activeSnap, w, wasDragging }); }catch(_){ }
@@ -157,8 +154,6 @@ export function handleDrawingPointerUp(e, svg, state, hitSnap, w, wasDragging) {
             return handleSlotPointerUp(e, svg, state, hitSnap, w, wasDragging);
         case TOOL_MODES.POLYGON:
             return handlePolygonPointerUp(e, svg, state, hitSnap, w);
-        case TOOL_MODES.ARC:
-            return handleArcPointerUp(e, svg, state, hitSnap, w, wasDragging);
     }
     
     return false;
@@ -180,6 +175,5 @@ export function resetDrawingState(state) {
     try { resetRectState(state); } catch(_) {}
     try { resetSlotState(state); } catch(_) {}
     try { resetPolygonState(state); } catch(_) {}
-    try { resetArcState(state); } catch(_) {}
     try { clearPreview(state); } catch(_) {}
 }

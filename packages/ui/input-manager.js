@@ -43,6 +43,7 @@ import { handleMirrorPointerDown, mirrorDone, mirrorStep, beginMirror } from '#u
 import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
 import { handleSlotKeyDown, isSlotActive, finishSlotStep, slotAnchorPoint } from '#ui/input-handlers/slot-tool.js';
 import { CIRCLE } from '#ui/input-handlers/circle-tool.js'; // TASK 1034: the Circle tool's description (it runs in the tool session)
+import { ARC } from '#ui/input-handlers/arc-tool.js'; // TASK 1039: the Arc tool's description (both variants run in the tool session)
 import { toolSession, cancelToolSessions } from '#ui/tool-session.js';
 import { desktopTranslator } from '#ui/input-translate-desktop.js';
 import { touchTranslator } from '#ui/input-translate-touch.js';
@@ -395,7 +396,7 @@ function nearestGridPoint(svg, e) {
 // pointer, key and box input reaches them only through the translators (#ui/input-translate-*.js); the routing in front of them (pinch, middle
 // button, menu target, the ignored right press, the snap, the pattern session, the transform box, the curve refusal) is the same as for every tool.
 // The list grows by one tool per migration merge.
-const SESSION_TOOLS = Object.freeze({ [TOOL_MODES.CIRCLE]: CIRCLE });
+const SESSION_TOOLS = Object.freeze({ [TOOL_MODES.CIRCLE]: CIRCLE, [TOOL_MODES.ARC]: ARC });
 const activeSession = (state) => (SESSION_TOOLS[state.currentTool] ? toolSession(state, SESSION_TOOLS[state.currentTool]) : null);
 const pointerTranslator = (e) => (e.pointerType === 'touch' ? touchTranslator : desktopTranslator);   // the device's translator
 
@@ -710,7 +711,6 @@ function handlePointerDown(e, svg, state) {
         case TOOL_MODES.LINE:
         case TOOL_MODES.RECT:
         case TOOL_MODES.SLOT:
-        case TOOL_MODES.ARC:
         case TOOL_MODES.POLYGON:
             // Use fresh clickSnap (from findSnap) instead of possibly-stale state.snapTarget
             handled = handleDrawingPointerDown(e, svg, state, clickSnap || state.snapTarget, w);
@@ -851,7 +851,6 @@ function handlePointerMove(e, svg, state) {
         case TOOL_MODES.LINE:
         case TOOL_MODES.RECT:
         case TOOL_MODES.SLOT:
-        case TOOL_MODES.ARC:
         case TOOL_MODES.POLYGON: 
             handled = handleDrawingPointerMove(e, svg, state, w); 
             if (state.currentTool === TOOL_MODES.RECT) {
@@ -939,7 +938,6 @@ function handlePointerUp(e, svg, state) {
         case TOOL_MODES.LINE:
         case TOOL_MODES.RECT:
         case TOOL_MODES.SLOT:
-        case TOOL_MODES.ARC:
         case TOOL_MODES.POLYGON:
             if (state.currentTool === TOOL_MODES.LINE) dbg.log('input', '[input-manager] Line Tool PointerUp', { snap: state.snapTarget, isLocked: state.snapTarget && state.snapTarget.isLocked });
             const prevShapeCount = state.shapes ? state.shapes.length : 0;
@@ -1164,7 +1162,7 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
                 try { updateSnapTarget({ clientX: sx, clientY: sy }, svg, state); } catch(_) { state.snapTarget = null; }
                 state.lastMouse = { x: sx, y: sy };
                 const w = screenToWorld(svg, sx, sy);
-                const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.POLYGON, TOOL_MODES.ARC];
+                const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.POLYGON];
                 const session = activeSession(state);
                 if (session) desktopTranslator.hover(state, session, { x: sx, y: sy }, w); // TASK 1034: the re-preview after a pan is a hover
                 else if (drawingTools.includes(state.currentTool)) {
@@ -1225,7 +1223,7 @@ function handleWheel(e, svg, state) {
             const sx = state.lastMouse.x, sy = state.lastMouse.y;
             try { updateSnapTarget({ clientX: sx, clientY: sy }, svg, state); } catch(_) { state.snapTarget = null; }
             const w = screenToWorld(svg, sx, sy);
-            const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.POLYGON, TOOL_MODES.ARC];
+            const drawingTools = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.POLYGON];
             const session = activeSession(state);
             if (session) desktopTranslator.hover(state, session, { x: sx, y: sy }, w); // TASK 1034: the re-preview after a zoom is a hover
             else if (drawingTools.includes(state.currentTool)) {
@@ -1251,7 +1249,7 @@ export function updateViewBox(svg, view) {
 // TASK 618: the history key mapping moved to #ui/history-control.js (one mapping for every host); re-exported here for its callers.
 export { undoRedoKeyAction };
 
-const DRAWING_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.ARC, TOOL_MODES.POLYGON, TOOL_MODES.BEZIER];
+const DRAWING_TOOLS = [TOOL_MODES.LINE, TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.POLYGON, TOOL_MODES.BEZIER];
 const sketchHistories = new WeakMap();
 /** TASK 618: the sketch state as a history source (history-control.js): THE Undo / Redo of the Design surface, called by the Ctrl+Z / Ctrl+Y keys
  *  below and by the header buttons. TASK 549 (Fusion, measured): undo while a drawing tool is mid-draw removes NOTHING committed (the

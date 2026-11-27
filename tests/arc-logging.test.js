@@ -1,6 +1,16 @@
+// TASK 1039: the Arc tool runs in the tool session (#ui/tool-session.js). Its old debug buffer (window.__arcLog: a hidden global written by the
+// pointer handlers) is gone with the handlers; THE record of what the tool did is the session's step log (session.log: every step picked or
+// ignored, every build). Rewritten from setupDrawingTools + handleDrawingPointer* to the shared desktop translator with the same pointer sequence
+// (a drag from the centre whose release sets the start, then a press + release for the end). The old assertions, read from the step log:
+//   'pointerDown' / 'active-set' (the tool engaged)        -> the centre step was picked
+//   'create-start-point'                                    -> the start step was picked
+//   'pointerUp-result shapes 1' (TASK 1033 A-1, BUG-351)    -> the second release built the arc (one build), and one arc is drawn
 (async () => {
   const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'Assertion failed'); };
-  const { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp } = await import('#ui/input-handlers/drawing-tools.js');
+  const { setupDrawingTools } = await import('#ui/input-handlers/drawing-tools.js');
+  const { toolSession } = await import('#ui/tool-session.js');
+  const { ARC } = await import('#ui/input-handlers/arc-tool.js');
+  const { desktopTranslator: T } = await import('#ui/input-translate-desktop.js');
   const { TOOL_MODES } = await import('#core/constants.js');
 
   // Minimal app state
@@ -16,43 +26,29 @@
     saveState: () => {}
   };
 
-  // Ensure global log exists for tests
-  global.__arcLog = [];
-  // Provide a minimal `window` shim for Node test environment so tools can register listeners
-  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
-    global.window = global.window || { addEventListener: () => {}, __arcLog: global.__arcLog };
-  } else {
-    window.__arcLog = window.__arcLog || global.__arcLog;
-  }
-
   // Setup tools and select arc tool
   setupDrawingTools(null, state);
   state.currentTool = TOOL_MODES.ARC;
+  const session = toolSession(state, ARC);
+  const ev = (x, y) => ({ clientX: x, clientY: y });
 
-  // Simulate creating a 3-pt arc via drag sequence
-  handleDrawingPointerDown({ clientX: 100, clientY: 100 }, null, state, null, { x: 100, y: 100 });
-  handleDrawingPointerMove({ clientX: 160, clientY: 100 }, null, state, { x: 160, y: 100 });
-  handleDrawingPointerUp({ clientX: 160, clientY: 100 }, null, state, null, { x: 160, y: 100 }, true);
+  // A drag from the centre: its release sets the start
+  T.down(ev(100, 100), state, session, null, { x: 100, y: 100 });
+  T.move(ev(160, 100), state, session, { x: 160, y: 100 });
+  T.up(ev(160, 100), state, session, null, { x: 160, y: 100 });
 
-  // Continue arc (second press for third point)
-  handleDrawingPointerDown({ clientX: 180, clientY: 140 }, null, state, null, { x: 180, y: 140 });
-  handleDrawingPointerMove({ clientX: 180, clientY: 140 }, null, state, { x: 180, y: 140 });
-  handleDrawingPointerUp({ clientX: 180, clientY: 140 }, null, state, null, { x: 180, y: 140 }, true);
+  // Continue arc (second press for the end)
+  T.down(ev(180, 140), state, session, null, { x: 180, y: 140 });
+  T.move(ev(180, 140), state, session, { x: 180, y: 140 });
+  T.up(ev(180, 140), state, session, null, { x: 180, y: 140 });
 
-  // We expect logged events indicating progress and finalize
-  // Collect logs from either global (Node) or window (browser) shims
-  const collected = [];
-  if (global.__arcLog && Array.isArray(global.__arcLog)) collected.push(...global.__arcLog);
-  if (typeof window !== 'undefined' && window.__arcLog && Array.isArray(window.__arcLog)) collected.push(...window.__arcLog);
-  const msgs = collected.map(e => e.msg);
+  const picked = session.log.filter((e) => e.result === 'picked').map((e) => e.step);
   // Ensure we saw something
-  assert(msgs.length > 0, 'No arc log entries found');
-  // Accept pointerDown or active-set or clickIgnored as evidence the tool engaged
-  assert(msgs.includes('pointerDown') || msgs.includes('active-set') || msgs.includes('clickIgnored'), 'pointerDown, active-set or clickIgnored should be logged');
-  assert(msgs.includes('create-second-point') || msgs.includes('create-start-point'), 'create-second-point or create-start-point should be logged');
-  // TASK 1033 (A-1, BUG-351): after the drag set the start, the second press-release places the arc (it was swallowed: 'clickIgnored', the only
-  // outcome these lines used to see; no 'finalize-success' / 'create-third-point' is logged by the tool)
-  assert(collected.some((e) => e.msg === 'pointerUp-result' && e.payload && e.payload.shapes === 1), 'the second release placed the arc (pointerUp-result shapes 1)');
+  assert(session.log.length > 0, 'No arc log entries found');
+  assert(picked.includes('centre'), 'the centre step should be logged (the tool engaged)');
+  assert(picked.includes('start'), 'the start step should be logged');
+  // TASK 1033 (A-1, BUG-351): after the drag set the start, the second press-release places the arc (it was swallowed before 1033)
+  assert(session.log.some((e) => e.build === TOOL_MODES.ARC) && session.builds === 1, 'the second release built the arc (one build)');
   assert(state.shapes.length === 1 && state.shapes[0].type === 'arc', 'one arc is drawn');
 
   console.log('arc-logging tests passed ✅');

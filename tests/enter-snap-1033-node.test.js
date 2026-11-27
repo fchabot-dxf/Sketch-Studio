@@ -7,6 +7,12 @@
 import assert from 'node:assert';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { RECT_MODES, SLOT_MODES, ARC_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
+import { toolSession } from '#ui/tool-session.js';
+import { ARC } from '#ui/input-handlers/arc-tool.js';
+// TASK 1039: the Arc runs in the tool session. The step its next pick makes replaces the old phase (Center Point Arc 'center' -> 'start',
+// 'start' -> 'end'; 3-Point Arc 'chord' -> 'end', 'bulge' -> 'onArc'); a placed point is a held pick (state.active.held.picks), not a joint yet.
+const arcStep = (app) => (app.state.active ? toolSession(app.state, ARC).stepId() : null);
+const heldAt = (app, id) => app.state.active.held.picks[id].at;
 
 const failures = [];
 let passed = 0;
@@ -126,7 +132,7 @@ await run('A-1 Arc (centre): radius set by a drag from the centre, then one end 
   try {
     app.tool('arc'); app.state.arcMode = ARC_MODES.CENTER_START_END;
     app.drag(W(app, -20, -10), W(app, 5, -10));
-    assert.strictEqual(app.state.active && app.state.active.phase, 'start', 'the drag placed the start point');
+    assert.strictEqual(arcStep(app), 'end', 'the drag placed the start point');
     const s0 = app.state.shapes.length;
     moveW(app, -5, 5); moveW(app, -20, 15); clickW(app, -20, 15);
     assert.strictEqual(app.state.shapes.length - s0, 1, 'the first end click placed the arc');
@@ -139,7 +145,7 @@ await run('A-1 Arc (3-point): the end set by a drag from the start, then one cli
   try {
     app.tool('arc'); app.state.arcMode = ARC_MODES.THREE_POINT;
     app.drag(W(app, -20, -10), W(app, 10, -10));
-    assert.strictEqual(app.state.active && app.state.active.phase, 'bulge', 'the drag placed the end point');
+    assert.strictEqual(arcStep(app), 'onArc', 'the drag placed the end point');
     const s0 = app.state.shapes.length;
     moveW(app, -5, 5); clickW(app, -5, 5);
     assert.strictEqual(app.state.shapes.filter((s) => s.type === 'arc').length, 1, 'the first click placed the arc');
@@ -161,11 +167,11 @@ await run('A-1 Arc (centre): a drag back onto the centre = a centre click: the r
   try {
     app.tool('arc'); app.state.arcMode = ARC_MODES.CENTER_START_END;
     dragBack(app, [-20, -10], [0, -10]);
-    assert.strictEqual(app.state.active && app.state.active.phase, 'center', 'the centre is placed, the start still to come');
+    assert.strictEqual(arcStep(app), 'start', 'the centre is placed, the start still to come');
     assert(singleBox(app), 'the box is open');
     app.type('15'); moveW(app, 5, -10); app.enter();
-    assert.strictEqual(app.state.active && app.state.active.phase, 'start', 'Enter in that box placed the start');
-    const c = app.state.joints.get(app.state.active.center), st = app.state.joints.get(app.state.active.start);
+    assert.strictEqual(arcStep(app), 'end', 'Enter in that box placed the start');
+    const c = heldAt(app, 'centre'), st = heldAt(app, 'start');
     assert(Math.abs(Math.hypot(st.x - c.x, st.y - c.y) - 15) < 1e-6, `it is the RADIUS box: the start is at the typed 15 (${Math.hypot(st.x - c.x, st.y - c.y)})`);
   } finally { app.esc(); app.esc(); await app.close(); }
 });
@@ -175,7 +181,7 @@ await run('A-1 Arc (centre): a drag back onto the centre, then a click places th
     app.tool('arc'); app.state.arcMode = ARC_MODES.CENTER_START_END;
     dragBack(app, [-20, -10], [0, -10]);
     moveW(app, 5, -10); clickW(app, 5, -10);
-    assert.strictEqual(app.state.active && app.state.active.phase, 'start', 'the click placed the start');
+    assert.strictEqual(arcStep(app), 'end', 'the click placed the start');
     assert(singleBox(app), 'the sweep box is open');
     moveW(app, -5, 5); moveW(app, -20, 15); clickW(app, -20, 15);
     assert.strictEqual(app.state.shapes.filter((x) => x.type === 'arc').length, 1, 'the next click placed the arc');
@@ -187,10 +193,10 @@ await run('A-1 Arc (3-point): a drag back onto the start = a start click: the ch
   try {
     app.tool('arc'); app.state.arcMode = ARC_MODES.THREE_POINT;
     dragBack(app, [-20, -10], [0, -10]);
-    assert.strictEqual(app.state.active && app.state.active.phase, 'chord', 'the start is placed, the end still to come');
+    assert.strictEqual(arcStep(app), 'end', 'the start is placed, the end still to come');
     assert(singleBox(app), 'the chord box is open');
     moveW(app, 10, -10); clickW(app, 10, -10);
-    assert.strictEqual(app.state.active && app.state.active.phase, 'bulge', 'the click placed the end');
+    assert.strictEqual(arcStep(app), 'onArc', 'the click placed the end');
     moveW(app, -5, 5); clickW(app, -5, 5);
     assert.strictEqual(app.state.shapes.filter((x) => x.type === 'arc').length, 1, 'the next click placed the arc');
   } finally { app.esc(); app.esc(); await app.close(); }

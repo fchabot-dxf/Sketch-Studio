@@ -20,17 +20,18 @@ const fieldValues = (d) => {
     return { value, typed, expression: typed ? liveExpression(d, 0) : null, name: typed ? liveName(d, 0) : null, assign: typed ? liveAssign(d, 0) : null };
 };
 
-/** open `box` (a step's declared box) for `session`, beside the pointer at `screen` */
-export function openStepBox(session, box, { screen, value, focus, initialKey = null }) {
+/** open `box` (a step's declared box) for `session`, beside the pointer at `screen`; `refuse` = the box's own value rule (task 1028), bound to the draw's picks */
+export function openStepBox(session, box, { screen, value, focus, initialKey = null, refuse = null }) {
     const owner = {
         values: (detail) => session.values(box.id, fieldValues(detail)),
         // Enter: the values the box reads now, then THE step at the last hover; the box stays open unless the step built the shape
-        enter: (detail) => { session.values(box.id, fieldValues(detail)); return session.step({ ...session.lastHover, via: 'enter' }) !== 'built'; },
+        // (a box opened by that step takes the focus: the keyboard is the user's already)
+        enter: (detail) => { session.values(box.id, fieldValues(detail)); return session.step({ ...session.lastHover, via: 'enter', focus: true }) !== 'built'; },
     };
-    openCreationBoxesAt(screen, { single: { field: box.id, quantity: box.quantity, refuse: box.refuse || null } }, [value], { focus, initialKey, owner });
+    openCreationBoxesAt(screen, { single: { field: box.id, quantity: box.quantity, refuse } }, [value], { focus, initialKey, owner });
 }
-/** the open box follows the pointer and shows the live value (a typed field keeps its text) */
-export const followStepBox = (screen, value) => { if (screen) followCreationBoxesAt(screen, [value]); };
+/** the open box follows the pointer and shows the live value (a typed field keeps its text; a step with no live value now keeps the last one shown) */
+export const followStepBox = (screen, value) => { if (screen) followCreationBoxesAt(screen, Number.isFinite(value) ? [value] : []); };
 export const closeStepBox = () => hideInput();
 /** the box refusal gate of every step (task 782): a typed value the box refuses refuses the step, from any device */
 export const boxRefuses = () => refuseLiveInputClick();

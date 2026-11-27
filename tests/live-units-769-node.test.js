@@ -110,7 +110,7 @@ try {
     app.tool('arc');
     const ac = S(250, -40), as = S(275, -40);
     app.click(ac.x, ac.y); app.move(as.x, as.y);
-    const acw = st.joints.get(st.active.center), cur = st.preview.cursorPoint;
+    const acw = st.active.held.picks.centre.at, cur = st.preview.cursorPoint;   // TASK 1039: the centre is a held pick of the Arc's tool session
     eq(boxes(), [want(Math.hypot(cur.x - acw.x, cur.y - acw.y))], `${tag} arc: the radius box`);
     n0 = st.shapes.length;
     app.type('2'); app.enter();

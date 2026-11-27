@@ -11,6 +11,8 @@
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
 import { arcSweepInfo } from '#core/geometry.js';
+import { toolSession } from '#ui/tool-session.js';
+import { ARC } from '#ui/input-handlers/arc-tool.js';
 
 const app = await open({ host: 'sketchstudio' });
 let failed = null;
@@ -243,12 +245,12 @@ try {
   assert(parseFloat(ab.value) > 0.4, 'arc: the radius follows the cursor: ' + ab.value);
   app.type('30');
   assert.strictEqual(ab.value, '30', 'arc: the first typed digit is kept');
-  const ac = { ...world(st.active.center) };
+  const ac = { ...st.active.held.picks.centre.at };   // TASK 1039: the Arc's points are held picks of its tool session until the build
   app.move(P(90, 20).x, P(90, 20).y);
   assert(Math.abs(Math.hypot(st.active.preview.pt.x - ac.x, st.active.preview.pt.y - ac.y) - 30) < 1e-9, 'arc: the typed radius holds the start point while the cursor moves');
   app.click(P(90, 20).x, P(90, 20).y);   // the start click
-  assert(st.active && st.active.phase === 'start', 'arc: the click set the start point');
-  const sj = world(st.active.start);
+  assert(st.active && toolSession(st, ARC).stepId() === 'end', 'arc: the click set the start point');
+  const sj = st.active.held.picks.start.at;
   assert(Math.abs(Math.hypot(sj.x - ac.x, sj.y - ac.y) - 30) < 1e-9, 'arc: the start point is exactly 30 from the centre');
   ab = dimBox();
   assert(ab, 'arc: after the start click the sweep box shows'); assert.strictEqual(doc.activeElement, ab, 'arc: the sweep box has the focus');
@@ -274,7 +276,7 @@ try {
   app.undo(); assert.strictEqual(hist(), base);
   // Enter with no radius: a no-op, the box stays
   app.tool('arc'); clickAt(P(0, 0)); app.enter();
-  assert(dimBox() && st.active && st.active.phase === 'center', 'arc: Enter with no radius keeps the box open');
+  assert(dimBox() && st.active && toolSession(st, ARC).stepId() === 'start', 'arc: Enter with no radius keeps the box open');
   app.esc();
   // Esc: in the radius box, in the sweep box, on the canvas: all the same
   const arcEsc = () => JSON.stringify({ tool: st.currentTool, active: st.active, hist: hist(), boxes: !idleBoxes() });

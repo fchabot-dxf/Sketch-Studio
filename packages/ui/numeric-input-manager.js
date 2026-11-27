@@ -1005,7 +1005,9 @@ function readLiveField(index) {
 export const SIZE_REFUSAL_HINT = SIZE_REFUSAL[0].toUpperCase() + SIZE_REFUSAL.slice(1) + '.';
 // TASK 876: a TYPED field whose text does not read (a name nothing defines, a syntax error: the edit box's own message) is refused the same way.
 // TASK 1028 (B-07 / B-18): the rule is boxRefusal, exported: the Fillet and Offset boxes refuse by it too, and a box may declare its own value rule.
-const QUANTITY_REFUSE = { length: (v) => (sizeRefusal(v) ? SIZE_REFUSAL_HINT : '') };
+/** THE length rule of a box (more than 0), exported for a tool box that declares its value rule (#ui/tool-session.js: a refused value holds nothing) */
+export const refuseLength = (v) => (sizeRefusal(v) ? SIZE_REFUSAL_HINT : '');
+const QUANTITY_REFUSE = { length: refuseLength };
 /** THE refusal of a value box's text: '' when it reads as a value the field takes, else why: the parser's own message (a syntax error, an unknown name, ...)
  *  or the field's value rule: `refuse(v)` when the box declares one (an arc's sweep, an offset's distance), else its quantity's (a length must be more than 0). */
 export function boxRefusal(text, quantity = 'length', { state = uiState.appState, refuse = null } = {}) {

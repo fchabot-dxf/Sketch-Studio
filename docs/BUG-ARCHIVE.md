@@ -3339,7 +3339,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/enter-snap-1033-node.test.js` (`A-1`: Center Point and 3-Point, drag then one click places the arc; a drag back onto the first point waits with the radius / chord box); `tests/arc-logging.test.js` (it accepted the swallowed click, `clickIgnored`, as the outcome: it now asserts the second release places the arc)
 - **Status:** fixed
 - **Family:** `ui-input`
-- **History:** found by plan `1031` -> fixed in task `1033`. Probe before: `after drag-release: phase start _tempStart true` / `after end click: shapes 0 phase start`. After: `after drag-release: phase start _tempStart false` / `after end click: shapes 1 phase null`.
+- **History:** found by plan `1031` -> fixed in task `1033`. Probe before: `after drag-release: phase start _tempStart true` / `after end click: shapes 0 phase start`. After: `after drag-release: phase start _tempStart false` / `after end click: shapes 1 phase null`. Task `1039`: the Arc runs in the tool session, there is no `_tempStart` (THE gesture rule of `#ui/input-translate-desktop.js`; a press-step dragged back onto its point is a click there, for every session tool); `tests/arc-logging.test.js` reads the session's step log now, `tests/arc-session-1039-node.test.js` guards both rules.
 
 ### BUG-352
 - **Date / turn:** 2026-11-27 (plan ID `S-1`; fixed in task `1033`)
@@ -3510,6 +3510,51 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **History:** found in audit `1035` -> fixed in task `1034`. Before (node, the test run on the old renderer): `A1 mouse: click centre, type 60, Enter: ... previewR=20 builtR=30`. After: `A1 ... previewR=30 builtR=30`.
 
+### BUG-390
+- **Date / turn:** 2026-11-27 (plan ID `A-3`; fixed in task `1039`)
+- **Reported by:** input plan `1031` (`docs/INPUT-UNIFY-PLAN-1031.md` 1.3, "open (read, not run)"); probed in task `1039`
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `A-3`: Center Point Arc, an end with no sweep (the end click on the start's own ray, the pointer moved and back): Enter refused it and kept the sweep box, but a CLICK placed an arc whose end is its start (a zero-length arc nobody can see).
+- **What was wrong:** two paths for the end step: Enter checked `|totalSweep| > 1e-9`, the click checked nothing.
+- **Cause:** `packages/ui/input-handlers/arc-tool.js` `handleCenterArc` (phase `start`: no size check) vs the `liveDimensionApplied` sweep branch.
+- **Fix:** the Arc runs in the tool session (task `1039`): ONE end step for click, release, tap and Enter, with ONE `tooSmall` (the arc's length, radius x the swept angle): an end with no sweep is ignored and the tool keeps waiting with the sweep box (advisor ruling Q1).
+- **Task id(s):** `1039`
+- **Fix merge sha:** open (`agents/arc-session-1039`, awaiting merge)
+- **Guarding test file(s):** `tests/arc-session-1039-node.test.js` (`A-3: an end with no sweep is too small for a click and for Enter alike`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found by plan `1031` -> fixed in task `1039`. Probe `.evidence/1039/probe-arc-scenarios.mjs` `C15`, before: `afterZeroClick: box=closed shapes=2 active=false` and the arc's end joint `{"id":"#6","x":10,"y":10}` = its start `{"id":"#5","x":10,"y":10}`. After: `afterZeroClick: box=open[0] shapes=1 active=true`, no arc.
+
+### BUG-391
+- **Date / turn:** 2026-11-27 (found in task `1039`)
+- **Reported by:** task `1039` (the before / after scenario probe; advisor: a real phone bug)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab), on a phone (touch)
+- **Report:** Center Point Arc on a phone: tap the centre, tap the start, tap the end. The arc came out the LONG way round (here 280 deg) where three mouse clicks on the same points make the short 80 deg arc.
+- **What was wrong:** the winding direction came only from the pointer MOVES round the centre (`totalSweep`, accumulated in `handleArcPointerMove`). A finger does not hover between taps, so the winding stayed 0 and the arc was given `sweep: false` (the negative direction) whatever side the end was on.
+- **Cause:** `packages/ui/input-handlers/arc-tool.js` `handleArcPointerMove` (the only place the winding was counted) and `handleCenterArc` (`sweep: totalSweep > 0`).
+- **Fix:** the end step declares its winding as a `path` (`WINDING` in `arc-tool.js`): the session adds every hover AND the step's own point to it (`#ui/tool-session.js`, one rule), so a tap with no hover before it winds the short way, as a hovered click does.
+- **Task id(s):** `1039`
+- **Fix merge sha:** open (`agents/arc-session-1039`, awaiting merge)
+- **Guarding test file(s):** `tests/arc-session-1039-node.test.js` (`CB3 touch: tap centre, start, p` = `CB1 mouse: click centre, start, wind, click p`: the same document, `sweep:true`), `tests/arc-session-1039-live.test.js` (phone `centre-tap-x3` / `centre-finger-drag-tap`: the short way round)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in task `1039` -> fixed in task `1039`. Probe `C04 tap-tap-tap`, before: `"sweep":false,"type":"arc"` (end `{"x":-14.8889,"y":39.5614}`, the clicks' `C01` `"sweep":true`); after: `"sweep":true,"type":"arc"`.
+
+### BUG-392
+- **Date / turn:** 2026-11-27 (found in task `1039`)
+- **Reported by:** task `1039` (scenario probe: `afterCentre: ... preview={none}`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** Center Point Arc: after the centre click, while the start is picked, no radius line is drawn (the 3-Point Arc draws its chord line at the same moment). A typed radius had nothing on the canvas to show it.
+- **What was wrong:** the tool made a `line` preview from the centre, but the renderer anchors a line preview on `active.start` / `active.startPt`, and the old Arc state had neither while the centre was its only point.
+- **Cause:** `packages/ui/input-handlers/arc-tool.js` (`state.active` with `center` only, phase `center`) vs `packages/ui/svg-renderer.js` (the preview anchor `a`).
+- **Fix:** in the tool session the first pick is `state.active.startPt`; the start step declares its preview, the line from the centre to the start the step will place (a typed radius holds its length). Advisor ruling Q4: draw it. (Fusion's Center Point Arc radius line: unverified, not measured.)
+- **Task id(s):** `1039`
+- **Fix merge sha:** open (`agents/arc-session-1039`, awaiting merge)
+- **Guarding test file(s):** `tests/creation-boxes.test.js` (`arc: the typed radius holds the start point while the cursor moves`, read from that preview)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in task `1039` -> fixed in task `1039`. Probe `C01`, before: `afterCentre: box=open[30]F shapes=1 active=true preview={none}`; after: `preview={line -20,10,10,10}`. Screenshots `.evidence/1039/middraw-centre-{before,after}-{desktop,phone}.png`.
+
 ---
 
 ## Family index
@@ -3533,7 +3578,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22), BUG-374 (11-27, open) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-370 (11-27), BUG-361 (11-27) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-370 (11-27), BUG-361 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 

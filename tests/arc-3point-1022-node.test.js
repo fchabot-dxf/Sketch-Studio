@@ -13,6 +13,12 @@ import { makeSlotThreePointArc } from '#core/slot.js';
 import { screenToWorld } from '#ui/coords.js';
 import { SIZE_REFUSAL_HINT } from '#ui/numeric-input-manager.js';
 import { COLLINEAR_ARC_HINT, radiusTooSmallText } from '#ui/input-handlers/arc-tool.js';
+import { toolSession } from '#ui/tool-session.js';
+import { ARC } from '#ui/input-handlers/arc-tool.js';
+// TASK 1039: the Arc runs in the tool session. The step its next pick makes replaces the old phase (Center Point Arc 'center' -> 'start',
+// 'start' -> 'end'; 3-Point Arc 'chord' -> 'end', 'bulge' -> 'onArc'); a placed point is a held pick (state.active.held.picks), not a joint yet.
+const arcStep = (app) => (app.state.active ? toolSession(app.state, ARC).stepId() : null);
+const heldAt = (app, id) => app.state.active.held.picks[id].at;
 
 const failures = [];
 let passed = 0;
@@ -129,7 +135,7 @@ await run('3 the third point on the line through the ends: no arc, a hint; anoth
     moveW(app, 60, 10); clickW(app, 60, 10);
     assert.strictEqual(arcs(app).length, 0, 'no arc');
     assert(toasts(app).some((t) => t.includes(COLLINEAR_ARC_HINT)), `the hint says why (${JSON.stringify(toasts(app))})`);
-    assert(app.state.active && app.state.active.phase === 'bulge', 'the draw waits for another third point');
+    assert(app.state.active && arcStep(app) === 'onArc', 'the draw waits for another third point');
     moveW(app, 0, 40); const p = clickW(app, 0, 40);
     assert.strictEqual(arcs(app).length, 1, 'a point off the line makes the arc');
     near(arcGeom(app, arcs(app)[0], p).rp, arcGeom(app, arcs(app)[0], p).rs, 1e-6, 'through the third point');
@@ -165,7 +171,7 @@ await run('5a typed chord 40: the end at 40 from the start, a driving distance d
     clickW(app, -20, 0); moveW(app, 10, 0);
     assert(single(app), 'the chord box is open after the start click');
     app.type('40'); app.enter();
-    assert(app.state.active && app.state.active.phase === 'bulge', 'Enter places the end');
+    assert(app.state.active && arcStep(app) === 'onArc', 'Enter places the end');
     moveW(app, 0, 25); const p = clickW(app, 0, 25);
     const arc = arcs(app)[0];
     assert(arc, 'an arc');
@@ -301,17 +307,17 @@ await run('9 a right press places nothing in either Arc mode (empty canvas, afte
       assert.strictEqual(app.state.active, null, `${mode}: a right press on empty canvas starts nothing`);
       assert.strictEqual(app.state.joints.size, j0, `${mode}: no joint`);
       clickW(app, -20, 0); moveW(app, 20, 0);
-      const phase1 = app.state.active && app.state.active.phase, j1 = app.state.joints.size;
+      const phase1 = arcStep(app), j1 = app.state.joints.size;
       right(20, 0);
-      assert.strictEqual(app.state.active && app.state.active.phase, phase1, `${mode}: a right press after one click places no point`);
+      assert.strictEqual(arcStep(app), phase1, `${mode}: a right press after one click places no point`);
       assert.strictEqual(app.state.joints.size, j1, `${mode}: no joint after one click`);
       app.tool('arc');   // re-clicking the tool's own button: nothing (TASK 1030)
-      assert.strictEqual(app.state.active && app.state.active.phase, phase1, `${mode}: re-clicking Arc keeps the draw`);
+      assert.strictEqual(arcStep(app), phase1, `${mode}: re-clicking Arc keeps the draw`);
       clickW(app, 20, 0); moveW(app, 0, 20);
-      const phase2 = app.state.active && app.state.active.phase, j2 = app.state.joints.size;
+      const phase2 = arcStep(app), j2 = app.state.joints.size;
       right(0, 20);
       assert.strictEqual(arcs(app).length, 0, `${mode}: a right press after two clicks makes no arc`);
-      assert.strictEqual(app.state.active && app.state.active.phase, phase2, `${mode}: the draw still waits`);
+      assert.strictEqual(arcStep(app), phase2, `${mode}: the draw still waits`);
       assert.strictEqual(app.state.joints.size, j2, `${mode}: no joint after two clicks`);
       clickW(app, 0, 20);
       assert.strictEqual(arcs(app).length, 1, `${mode}: the left click makes the arc`);

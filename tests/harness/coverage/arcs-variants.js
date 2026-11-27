@@ -1,10 +1,11 @@
-// TASK 531 -- extreme arcs, part A: the arc VARIANTS as data, the builders (the REAL arc tool handlers, the REAL fillet), and the measurements of an
+// TASK 531 -- extreme arcs, part A: the arc VARIANTS as data, the builders (the REAL arc tool (its tool session, task 1039), the REAL fillet), and the measurements of an
 // arc (radius, signed sweep, flag coherence, what the renderer's path draws). Nothing here changes anything under packages/.
 //
 // Sign convention (the app's, Y-down world): sweep > 0 = the arc runs in the POSITIVE ANGLE direction (the stored `sweep` flag true, clockwise on
 // screen); sweep < 0 = negative angle direction (flag false, counter-clockwise on screen). Written 'cw' / 'ccw' (on screen) in the ids.
 import * as L from '../audit/lib.js';
-import { handleArcPointerDown, handleArcPointerMove, handleArcPointerUp } from '#ui/input-handlers/arc-tool.js';
+import { ARC } from '#ui/input-handlers/arc-tool.js';
+import { toolSession } from '#ui/tool-session.js';
 import { arcSweepInfo, calculateArcPath } from '#core/geometry.js';
 import { svgCircularArcCentre } from '#core/import-arcs.js';
 import { svgStub } from './matrix-run.js';
@@ -45,28 +46,25 @@ export const FILLET_CONTROL = 'f90r10';
 export const variant = (id) => VARIANTS.find(v => v.id === id);
 
 // ------------------------------------------------------------------------------------------------------------------ building
-// quiet the arc tool's console.debug chatter (it logs every pointer event)
-function quiet(fn) { const d = console.debug; console.debug = () => {}; try { return fn(); } finally { console.debug = d; } }
-const ev = (x, y) => ({ clientX: x, clientY: y, pointerType: 'mouse', pointerId: 1, target: { closest: () => null } });
-
-// the arc tool, driven by its own handlers (pointer down/up on the centre, down/up on the start, moves round the centre, up on the end)
+// the arc tool, driven through its tool session's shared events (TASK 1039: the tool has no pointer handlers any more; these are the steps the
+// translators make from a click / a hover): the centre step, a hover on the start then the start step, hovers round the centre in <= 30 degree steps
+// (the winding), the end step
+const SCREEN = { x: 0, y: 0 };   // where a box would open (a state with no DOM opens none)
 export function arcByTool(S, cx, cy, R, sweepDeg, startRad = 0) {
   const st = S.state;
   st.currentTool = 'arc'; st.arcMode = 'arc-cse'; st.activeSnap = null; st.snapTarget = null;
   const at = (a) => ({ x: cx + R * Math.cos(a + startRad), y: cy + R * Math.sin(a + startRad) });
   const n0 = st.shapes.length;
-  quiet(() => {
-    const c = { x: cx, y: cy };
-    handleArcPointerDown(ev(c.x, c.y), svgStub, st, null, c);
-    handleArcPointerUp(ev(c.x, c.y), svgStub, st, null, c, false);        // the first click only arms the tool (_tempStart)
-    const p0 = at(0);
-    handleArcPointerMove(ev(p0.x, p0.y), svgStub, st, p0);
-    handleArcPointerUp(ev(p0.x, p0.y), svgStub, st, null, p0, true);      // the start point
-    const total = sweepDeg * Math.PI / 180, n = Math.max(1, Math.ceil(Math.abs(total) / (Math.PI / 6)));
-    for (let i = 1; i <= n; i++) { const p = at(total * i / n); handleArcPointerMove(ev(p.x, p.y), svgStub, st, p); }
-    const pe = at(total);
-    handleArcPointerUp(ev(pe.x, pe.y), svgStub, st, null, pe, true);      // the end point
-  });
+  const s = toolSession(st, ARC);
+  const c = { x: cx, y: cy };
+  s.step({ at: c, screen: SCREEN, via: 'click' });                                        // the centre
+  const p0 = at(0);
+  s.hover({ at: p0, snap: null, screen: SCREEN });
+  s.step({ at: p0, screen: SCREEN, via: 'release' });                                     // the start point
+  const total = sweepDeg * Math.PI / 180, n = Math.max(1, Math.ceil(Math.abs(total) / (Math.PI / 6)));
+  for (let i = 1; i <= n; i++) s.hover({ at: at(total * i / n), snap: null, screen: SCREEN });
+  const pe = at(total);
+  s.step({ at: pe, screen: SCREEN, via: 'release' });                                     // the end point
   if (st.shapes.length !== n0 + 1) throw new Error(`the arc tool did not create the arc (R ${R}, sweep ${sweepDeg})`);
   const sh = st.shapes[st.shapes.length - 1];
   return { k: 'A', shape: sh.id, joints: sh.joints.slice(), jn: sh.joints[1] };

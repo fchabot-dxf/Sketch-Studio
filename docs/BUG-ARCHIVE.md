@@ -2385,6 +2385,97 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Status:** fixed
 - **Family:** `ui-input`
 
+### BUG-240
+- **Date / turn:** 2026-11-26 (advisor turn ~3790)
+- **Reported by:** advisor, live Fusion check (audit ids `B-12b` / `EA-4`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** Dragging a short free arc's end past its start makes our arc wrap the long way round.
+- **What was wrong:** Fusion (verified live 2026-11-26: a free 10° arc, end dragged past its start, stays short at 6.97°, centre and radius re-solve) keeps the arc short; ours wraps.
+- **Cause:** unknown
+- **Task id(s):** unknown
+- **Fix merge sha:** none
+- **Guarding test file(s):** none yet
+- **Status:** open
+- **Related:** `SOLVER-UX-AUDIT-1000B.md` B-12b
+- **History:** found by the advisor in a live Fusion comparison; not yet assigned.
+
+---
+### BUG-241
+- **Date / turn:** 2026-11-26 (advisor review of task 1008)
+- **Reported by:** advisor, code review
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `startShapeDimension` (packages/ui/input-handlers/dimension-tool.js) falls back to `c = res || state.constraints[last]` when nothing was created, so the code can treat an unrelated existing constraint as the new dimension.
+- **What was wrong:** Task 1008 guards the discard path (only `__newlyPlaced` dims are removed), but the fallback itself still returns an arbitrary last constraint.
+- **Cause:** unknown
+- **Task id(s):** unknown
+- **Fix merge sha:** none
+- **Guarding test file(s):** none yet
+- **Status:** open
+- **Related:** BUG-147
+- **History:** found in review of task 1008; the 1008 guard limits the damage, the fallback remains.
+
+---
+### BUG-242
+- **Date / turn:** 2026-11-26 (advisor live Fusion check, turn ~3790)
+- **Reported by:** advisor, live Fusion check
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** A circle's Ø dimension: Fusion draws a full-width leader across the circle and offers a right-click Radius/Diameter switch; ours draws a one-sided leader and has no switch.
+- **What was wrong:** Display and menu differ from Fusion (task 1008 made circles Ø but left these two out).
+- **Cause:** unknown
+- **Task id(s):** unknown
+- **Fix merge sha:** none
+- **Guarding test file(s):** none yet
+- **Status:** open
+- **Related:** BUG-140..147 (task 1008)
+- **History:** found in the advisor's live Fusion check; left out of task 1008 by scope.
+
+---
+### BUG-243
+- **Date / turn:** 2026-11-26 (merge gates)
+- **Reported by:** advisor, merge gate
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `tests/ui-fixes-774-live.test.js` fails intermittently under gate load and passes alone.
+- **What was wrong:** Flaky live test: a red merge gate that is not a product bug.
+- **Cause:** unknown
+- **Task id(s):** unknown
+- **Fix merge sha:** none
+- **Guarding test file(s):** none yet
+- **Status:** open
+- **Related:** unknown
+- **History:** seen in several merge gates on 2026-11-26.
+
+---
+### BUG-244
+- **Date / turn:** 2026-11-26 (merge gate of task 1008)
+- **Reported by:** advisor, merge gate
+- **App(s) & host:** Shaper
+- **Report:** `tests/op-paths-817-live.test.js` (already `// gate: exclusive`) fails its "no main-thread long task over 100 ms" check at 101-107 ms, even when run alone (1 pass / 1 fail on rerun).
+- **What was wrong:** A timing limit at the edge of what the machine does under the shared CPU lock's other projects; it turned one merge gate red.
+- **Cause:** unknown
+- **Task id(s):** unknown
+- **Fix merge sha:** none
+- **Guarding test file(s):** none yet
+- **Status:** open
+- **Related:** unknown
+- **History:** seen in the 1004, 1006, 1007 and 1008 merge gates.
+
+---
+### BUG-245
+- **Date / turn:** 2026-11-26 (audit `UX-20`, advisor watch)
+- **Reported by:** audit `1000` (UX-20), advisor
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** A dimension flashes red (conflict colour) for a frame mid-drag when nothing conflicts.
+- **What was wrong:** Task 1010 changed the conflict colour token but the mid-drag flash itself was not confirmed fixed.
+- **Cause:** unknown
+- **Task id(s):** unknown
+- **Fix merge sha:** none
+- **Guarding test file(s):** none yet
+- **Status:** open
+- **Related:** `SOLVER-UX-AUDIT-1000.md` UX-20, BUG-130..138
+- **History:** kept open to watch after task 1010.
+
+---
+
 ## Family index
 
 Entries in each family are listed in chronological date order (`MM-DD`, oldest first) so recurring patterns read as a timeline.
@@ -2418,3 +2509,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
 - [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-150..BUG-154 fixed in task `1011`; BUG-160..BUG-161 fixed in task `1012`; BUG-170..BUG-174 fixed in task `1014`; BUG-180..BUG-183 fixed in task `1013`; BUG-140..BUG-147 fixed in task `1008`).
+- [docs/DESIGN-RUN-AUDIT-1016.md](DESIGN-RUN-AUDIT-1016.md), [docs/DESIGN-RUN-AUDIT-1017.md](DESIGN-RUN-AUDIT-1017.md) — Real-design audits, parts A-D (tasks `1016`, `1017`; rows `R1-*` / `R2-*`; fixes in tasks `1018`-`1021`).

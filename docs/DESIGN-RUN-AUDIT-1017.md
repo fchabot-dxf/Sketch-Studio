@@ -160,7 +160,7 @@
 2. **Fusion 360 expectation:** With both legs already driving (`150`, `100`), an angle dimension is redundant (Fusion prompts/creates driven; SketchStudio auto-creates Reference per `BUG-126`). Once `100` is flipped to Reference, promoting `(33.7°)` to Driving and editing to `40°` drives the hypotenuse angle cleanly `(unverified; BUG-122/126)`.
 3. **SketchStudio result:**
    - `ROW D-04b | hypotenuse angle dim: boxOpenedOnDrop=false ... dof=0(free:0,blue:0,full:true) dims=["150","fx: 100","(33.7°)"] toasts=[]` — cleanly auto-born Reference `(33.7°)` (`BUG-126` held!). Screenshot `.evidence/1017/part-d-04-triangle.png` (`md5=8f7dbb00073b8904a02ee5a84edcf8e9`).
-   - `ROW E-03.refFormatAndAngDrive | ... promotedAng="33.7°" afterEdit40=["150","(125.865)","40°","R (15)"] dof=0 toasts=[]` — promoting and editing angle to `40°` drove the vertical leg to `150 * tan(40°) = 125.865 mm` with `DOF = 0`!
+   - `ROW E-03.refFormatAndAngDrive | labelsStart=["150","(100)","(33.7°)","R (15)"] R15_as_ref="R (15)" promotedAng="33.7°" afterEdit40=["150","(125.865)","40°","R (14.969)"] dof=2 toasts=[]` — promoting and editing angle to `40°` drove the vertical leg to `150 * tan(40°) = 125.865 mm` (2 DOF remaining on the driven `R (14.969)` arc).
 4. **Verdict:** **OK**
 
 #### Step D-05 — 3-Point Arc relief at the right-angle corner & trim corner stubs
@@ -208,10 +208,10 @@
 3. **SketchStudio result:**
    - **Break does not snap to `H2` (`R2-05`):**
      - `ROW D-10a.afterBreak | midHole={"cx":"90","cy":"-60"} solidLines:3->4 diagHalves=[{"x1":"180","y1":"0","x2":"89.97","y2":"-60.02","len":"108.2"},{"id":"Lbrk_j19_...","x1":"89.97","y1":"-60.02","x2":"0","y2":"-120","len":"108.13"}] dof=1`. Screenshot `.evidence/1017/part-d-10a-break.png` (`md5=5abafdfafa1ec149ff3403ddc12f993c`).
-     - `ROW E-02a.breakSolidHyp | before=[L:3,dof:0] -> after=[L:4,dof:1,profiles:1] diagHalves=[{"x1":"150","y1":"0","x2":"74.94","y2":"-50.04"},{"id":"Lbrk_j14_...","x1":"74.94","y1":"-50.04","x2":"0","y2":"-100"}]` (`.evidence/1017/extra-e02-break-solid-hyp.png`, `md5=5a7026ff3ec6ac475196b6a654d3e13d`).
+     - `ROW E-02a.breakSolidHyp | before=[L:3,dof:0,dims:["150","100","(180.278)","Ø 5"]] -> after=[L:4,dof:1,dims:["150","100","(180.278)","Ø 5"],profiles:2] diagHalves=[{"id":"s1795748016840_2","x1":"150","y1":"0","x2":"74.94","y2":"-50.04","len":"90.21"},{"id":"Lbrk_j8_1795748022204_j3_1795748016840","x1":"74.94","y1":"-50.04","x2":"0","y2":"-100","len":"90.07"}]` (`.evidence/1017/extra-e02-break-solid-hyp.png`, `md5=5a7026ff3ec6ac475196b6a654d3e13d`).
      - `ROW E-02b.dragAfterBreak | dof=1 diagAfterDrag=[{"x1":"150","y1":"0","x2":"76.09","y2":"-49.27"},{"x1":"76.09","y1":"-49.27","x2":"0","y2":"-100"}] circle=[{"cx":"75","cy":"-50"}]` — dragging the break joint slid it off the hole center while the hole stayed at `(75, -50)` (`.evidence/1017/extra-e02b-drag-after-break.png`, `md5=dcd50057d898f10f3c549dceda70cd1a`). Cause: `packages/ui/input-handlers/break-tool.js:63, 78-100` projects raw pointer without snapping to existing joints, and `packages/core/break.js:58-59` unconditionally mints `state.genJ()`.
    - **Overlapping construction line hijack (`R2-08`):** `ROW D-10c.afterRejoin | ... toasts=["[warning] ⚠️Pick a second line, a different one."]` — clicking both broken hypotenuse halves in Collinear hit the overlapping middle construction line twice! (And in run `task-613`, Break at `(90, -60)` split the construction line instead of the solid hypotenuse: `solidLines:3->3, constr: 3->4`.)
-   - **No Join / Merge command (`R2-13`):** `ROW E-02c.rejoinCollinear | dof=1 toasts=[{"level":"warning","text":"⚠️Sketch geometry over constrained"}]` — Break already added `collinear` (`BUG-091`), and there is no Merge/Join tool to combine the two halves back into a single line.
+   - **No Join / Merge command (`R2-13`):** `ROW E-02c.rejoinCollinear | dof=1 toasts=[{"level":"overconstrained","text":"Sketch geometry over constrained"}]` — Break already added `collinear` (`BUG-091`), and there is no Merge/Join tool to combine the two halves back into a single line.
 4. **Verdict:** **BUG** (`R2-05`, `R2-08`) + **FRICTION** (`R2-13`)
 
 #### Step D-11 & E-01 — End-of-part Undo all to empty & Redo all forward (+ isolated auto-ref Undo/Redo check)

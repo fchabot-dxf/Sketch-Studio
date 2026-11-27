@@ -4,6 +4,8 @@ import SettingsManager from '#core/settings-manager.js';
 import { arcSweepInfo } from '#core/geometry.js';
 import { CURVE_KINDS, bezierPoints, exportedShapes } from '#core/curve-kinds.js'; // TASK 761: a bezier's control points / sampled points, declared once; TASK 1036: what is exported (BUG-300's rule, moved there)
 import { track } from '#ui/analytics.js'; // TASK 738
+import { findLoops, findOpenChains, buildNodeMap, curveEnds } from '#core/loop-finder.js'; // TASK 1040: the closed outlines and open chains an SVG writes (the finder Shaper reads)
+import { chainWalk } from '#core/loop-geometry.js'; // TASK 1040: an open chain's walk, end to end (the one chainToPathD writes)
 
 // Task 614: the stroke width of an export when the caller passes none. A DECLARED export constant (was the LINE_STROKE display knob, whose
 // factory value was 1): a display look never changes what is exported.
@@ -54,17 +56,13 @@ export function buildSVG(state, opts = {}) {
   const arcSeg = parseInt(opts.arcSeg || 32, 10) || 32;
   const lineCap = opts.lineCap || SettingsManager.get('LINE_CAP') || 'round';
   const lineJoin = opts.lineJoin || SettingsManager.get('LINE_JOIN') || 'round';
-  const closeTolerance = (typeof opts.tolerance === 'number') ? opts.tolerance : 1e-6;
+  const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
 
   const shapes = exportedShapes(state);
   if (shapes.length === 0) return null;
 
-  // Compute bounds
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  const elems = [];
-
-  // TASK 1036 (BUG-371, N-3): THE Y flip of the SVG export: every point written (a closed loop's corners, a line's ends, an arc's centre / start / end,
-  // a circle's centre, a bezier's points, a sampled curve's points) goes through it; a mirror also turns an arc's direction round (`turn`).
+  // TASK 1036 (BUG-371, N-3): THE Y flip of the SVG export: every point written (an outline's / a path's points, an arc's end, a circle's centre, a
+  // bezier's control points, a sampled curve's points) goes through it; a mirror also turns an arc's direction round (`turn`).
   const transform = (p) => {
     let x = p.x * scale;
     let y = p.y * scale;
@@ -72,157 +70,94 @@ export function buildSVG(state, opts = {}) {
     return { x, y };
   };
   const turn = invertY ? -1 : 1;
+  const xy = (q) => `${formatNum(q.x, precision)} ${formatNum(q.y, precision)}`;
+  const J = (jid) => state.joints.get(jid);
 
-  // Build mapping of joint positions and cluster by coordinate to handle double joints
-  const coordKey = (p) => `${p.x.toFixed(6)},${p.y.toFixed(6)}`;
-  const jointPos = new Map();
-  for (const [jid, j] of state.joints) jointPos.set(jid, { x: j.x, y: j.y, key: coordKey(j) });
-
-  // Build adjacency of coordinate keys for line segments
-  const lineShapes = shapes.filter(s => s.type === 'line');
-  const coordAdj = new Map();
-  const edgeToLines = new Map();
-  for (const s of lineShapes) {
-    const a = jointPos.get(s.joints[0]);
-    const b = jointPos.get(s.joints[1]);
-    if (!a || !b) continue;
-    const ka = a.key, kb = b.key;
-    if (!coordAdj.has(ka)) coordAdj.set(ka, new Set());
-    if (!coordAdj.has(kb)) coordAdj.set(kb, new Set());
-    coordAdj.get(ka).add(kb); coordAdj.get(kb).add(ka);
-    const pair = (ka < kb) ? `${ka}|${kb}` : `${kb}|${ka}`;
-    if (!edgeToLines.has(pair)) edgeToLines.set(pair, []);
-    edgeToLines.get(pair).push(s);
-  }
-
-  // Detect simple cycles (all nodes degree==2, nodeCount>=3) and emit polygons
-  const emittedEdgePairs = new Set();
-  const emitPolygonFromCycle = (cycleKeys) => {
-    const pts = cycleKeys.map(k => { const [x,y] = k.split(','); return transform({ x: Number(x), y: Number(y) }); });
-    const pointsAttr = pts.map(p => `${formatNum(p.x, precision)},${formatNum(p.y, precision)}`).join(' ');
-    const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
-    // Update bounds from polygon points
-    for (const p of pts) { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); }
-    elems.push(`<polygon points="${pointsAttr}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
-  };
-
-  const visited = new Set();
-  for (const [key, neighbors] of coordAdj.entries()) {
-    if (visited.has(key)) continue;
-    // collect component
-    const comp = new Set(); const q = [key]; comp.add(key);
-    while (q.length) {
-      const cur = q.shift();
-      for (const n of coordAdj.get(cur) || []) { if (!comp.has(n)) { comp.add(n); q.push(n); } }
-    }
-
-    // check simple cycle
-    let allDeg2 = true; let nodeCount = 0;
-    for (const k of comp) { nodeCount++; if ((coordAdj.get(k) || new Set()).size !== 2) { allDeg2 = false; break; } }
-    if (allDeg2 && nodeCount >= 3) {
-      // walk cycle
-      const cycle = []; let start = comp.values().next().value; let prev = null; let cur = start;
-      do {
-        cycle.push(cur); visited.add(cur);
-        const nbrs = Array.from(coordAdj.get(cur));
-        const next = (nbrs[0] === prev) ? nbrs[1] : nbrs[0];
-        // mark edge
-        const pair = (cur < next) ? `${cur}|${next}` : `${next}|${cur}`;
-        emittedEdgePairs.add(pair);
-        prev = cur; cur = next;
-      } while (cur !== start && cycle.length <= comp.size + 2);
-
-      if (cur === start) {
-        emitPolygonFromCycle(cycle);
-        continue;
-      }
-    }
-
-    for (const k of comp) visited.add(k);
-  }
-
-  // Emit remaining lines and arcs (skip edges part of emitted polygons)
+  // The page (viewBox): each exported shape by its points as written: a line's ends, an arc's / a circle's centre +- its radius, a bezier's control
+  // points (with arcApprox its sampled points)
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const grow = (q) => { minX = Math.min(minX, q.x); minY = Math.min(minY, q.y); maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y); };
+  const growRound = (c, r0) => { const q = transform(c), r = r0 * scale; grow({ x: q.x - r, y: q.y - r }); grow({ x: q.x + r, y: q.y + r }); };
   for (const s of shapes) {
-    if (s.type === 'line') {
-      const a0 = getJointPos(state, s.joints[0]);
-      const b0 = getJointPos(state, s.joints[1]);
-      if (!a0 || !b0) continue;
-      const ka = coordKey(a0), kb = coordKey(b0);
-      const pair = (ka < kb) ? `${ka}|${kb}` : `${kb}|${ka}`;
-      if (emittedEdgePairs.has(pair)) continue; // already emitted as polygon edge
+    if (s.type === 'line') { const a = J(s.joints[0]), b = J(s.joints[1]); if (a && b) { grow(transform(a)); grow(transform(b)); } }
+    else if (s.type === 'arc') { const c = J(s.joints[0]), st = J(s.joints[1]), en = J(s.joints[2]); if (c && st && en) growRound(c, Math.hypot(st.x - c.x, st.y - c.y)); }
+    else if (s.type === 'circle') { const c = J(s.joints[0]); if (c && s.radius > 0) growRound(c, s.radius); }
+    else if (s.type === 'bezier') { const P = bezierPoints(s, state.joints); if (P) (arcApprox ? CURVE_KINDS.bezier.points(s, state) : P).map(transform).forEach(grow); }
+  }
+  if (minX === Infinity) return null;
 
-      const a = transform(a0); const b = transform(b0);
-      minX = Math.min(minX, a.x, b.x); minY = Math.min(minY, a.y, b.y);
-      maxX = Math.max(maxX, a.x, b.x); maxY = Math.max(maxY, a.y, b.y);
-      const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
-      elems.push(`<line x1="${formatNum(a.x, precision)}" y1="${formatNum(a.y, precision)}" x2="${formatNum(b.x, precision)}" y2="${formatNum(b.y, precision)}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
-    } else if (s.type === 'arc') {
-      const c0 = getJointPos(state, s.joints[0]);
-      const st0 = getJointPos(state, s.joints[1]);
-      const en0 = getJointPos(state, s.joints[2]);
-      if (!c0 || !st0 || !en0) continue;
-      const r0 = Math.hypot(st0.x - c0.x, st0.y - c0.y);
-      const startAngle = Math.atan2(st0.y - c0.y, st0.x - c0.x);
-      const endAngle = Math.atan2(en0.y - c0.y, en0.x - c0.x);
-      // TASK 550: direction and large-arc from the one arc-sweep function (a stored largeArc is ignored; a fillet arc has no flags)
+  // ONE curve as path text from `fromP` to `toP` (no M), walked `forward` (from its kind's start end) or back: a line `L`; an arc `A` turning the way
+  // it is walked (TASK 550: the direction and large-arc from the one arc-sweep function), with arcApprox its sampled points as `L`s; a bezier `C`
+  // (its control points in the walk's order), with arcApprox its sampled points.
+  const seg = (s, fromP, toP, forward) => {
+    if (s.type === 'arc') {
+      const c0 = J(s.joints[0]), st0 = J(s.joints[1]), en0 = J(s.joints[2]);
       const info = arcSweepInfo(c0, st0, en0, { sweep: s.sweep });
-      const largeArc = info.large; const sweep = info.dir > 0;   // the arc's own direction (the sampled points below walk it)
-
-      // Transform center and radius
-      const center = transform(c0);
-      const r = r0 * scale;
-      minX = Math.min(minX, center.x - r); minY = Math.min(minY, center.y - r);
-      maxX = Math.max(maxX, center.x + r); maxY = Math.max(maxY, center.y + r);
-
+      const dir = forward ? info.dir : -info.dir;   // the direction the walk turns
+      const r0 = Math.hypot(st0.x - c0.x, st0.y - c0.y);
       if (arcApprox) {
-        const pts = sampleArcPoints(c0.x, c0.y, r0, startAngle, endAngle, sweep, arcSeg).map(p => transform(p));
-        const pointsAttr = pts.map(p => `${formatNum(p.x, precision)},${formatNum(p.y, precision)}`).join(' ');
-        const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
-        elems.push(`<polyline points="${pointsAttr}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
-      } else {
-        const onCircle = (a) => transform({ x: c0.x + r0 * Math.cos(a), y: c0.y + r0 * Math.sin(a) });
-        const { x: startX, y: startY } = onCircle(startAngle);
-        const { x: endX, y: endY } = onCircle(endAngle);
-        const la = largeArc ? 1 : 0;
-        const sw = info.dir * turn > 0 ? 1 : 0;   // as written: mirrored, the arc turns the other way
-        const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
-        elems.push(`<path d="M ${formatNum(startX, precision)} ${formatNum(startY, precision)} A ${formatNum(r, precision)} ${formatNum(r, precision)} 0 ${la} ${sw} ${formatNum(endX, precision)} ${formatNum(endY, precision)}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
+        const a0 = Math.atan2(fromP.y - c0.y, fromP.x - c0.x), a1 = Math.atan2(toP.y - c0.y, toP.x - c0.x);
+        return sampleArcPoints(c0.x, c0.y, r0, a0, a1, dir > 0, arcSeg).slice(1).map((p) => `L ${xy(transform(p))}`).join(' ');
       }
+      const r = formatNum(r0 * scale, precision);
+      return `A ${r} ${r} 0 ${info.large ? 1 : 0} ${dir * turn > 0 ? 1 : 0} ${xy(transform(toP))}`;   // as written: mirrored, the arc turns the other way
     }
-  }
-
-  // BUG-300 (F-81): each circle as a <circle> (or, with arcApprox, its sampled closed polyline like an arc)
-  for (const s of shapes) {
-    if (s.type !== 'circle') continue;
-    const c0 = getJointPos(state, s.joints[0]);
-    if (!c0 || !(s.radius > 0)) continue;
-    const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
-    const center = transform(c0); const r = s.radius * scale;
-    minX = Math.min(minX, center.x - r); minY = Math.min(minY, center.y - r);
-    maxX = Math.max(maxX, center.x + r); maxY = Math.max(maxY, center.y + r);
-    if (arcApprox) {
-      const pts = sampleCirclePoints(c0.x, c0.y, s.radius, arcSeg).map(p => transform(p));
-      elems.push(`<polyline points="${pts.map(p => `${formatNum(p.x, precision)},${formatNum(p.y, precision)}`).join(' ')}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
-    } else {
-      elems.push(`<circle cx="${formatNum(center.x, precision)}" cy="${formatNum(center.y, precision)}" r="${formatNum(r, precision)}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" fill="none" />`);
+    if (s.type === 'bezier') {
+      if (arcApprox) { const pts = CURVE_KINDS.bezier.points(s, state); return (forward ? pts : pts.slice().reverse()).slice(1).map((p) => `L ${xy(transform(p))}`).join(' '); }
+      const P = bezierPoints(s, state.joints);
+      const [c1, c2] = forward ? [P[1], P[2]] : [P[2], P[1]];
+      return `C ${xy(transform(c1))} ${xy(transform(c2))} ${xy(transform(toP))}`;
     }
-  }
+    return `L ${xy(transform(toP))}`;
+  };
+  const elems = [];
+  const pathEl = (d) => elems.push(`<path d="${d}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
 
-  // TASK 761: each bezier as its cubic (`M p0 C c1 c2 p3`, #core/curve-kinds bezierPoints), or with arcApprox its sampled points (the kind's points)
-  for (const s of shapes) {
-    if (s.type !== 'bezier') continue;
-    const P = bezierPoints(s, state.joints);
-    if (!P) continue;
-    const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
-    const pts = (arcApprox ? CURVE_KINDS.bezier.points(s, state) : P).map(transform);
-    for (const q of pts) { minX = Math.min(minX, q.x); minY = Math.min(minY, q.y); maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y); } // the control points bound the curve
-    const f = (q) => `${formatNum(q.x, precision)} ${formatNum(q.y, precision)}`;
-    const d = arcApprox ? `M ${pts.map(f).join(' L ')}` : `M ${f(pts[0])} C ${f(pts[1])} ${f(pts[2])} ${f(pts[3])}`;
-    elems.push(`<path d="${d}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
+  // TASK 1040 (BUG-401): WHAT is written is read from the app's ONE closed-shape finder (#core/loop-finder.js, the one Shaper's Prepare and cut file read),
+  // on the exported shapes only: every closed outline (findLoops: lines, arcs, beziers, mixed) is ONE closed <path ... Z>, a circle stays a <circle>, and
+  // every other curve is in an open chain (findOpenChains), each chain ONE <path> (its walk, #core/loop-geometry.js chainWalk). EVERY CURVE IS WRITTEN
+  // ONCE: an outline is written closed only when none of its curves is written yet (the finder's order); a loop that shares a curve with one written
+  // before (a rectangle with a divider: the two halves share it) leaves its other curves to the open chains.
+  const view = { joints: state.joints, shapes, constraints: state.constraints || [] };
+  const node = buildNodeMap(view);
+  const byId = new Map(shapes.map((s) => [s.id, s]));
+  const written = new Set();
+  const closed = [];
+  for (const loop of findLoops(view)) {
+    if (new Set(loop.edges).size !== loop.edges.length || loop.edges.some((id) => written.has(id))) continue;
+    closed.push(loop);
+    for (const id of loop.edges) written.add(id);
+  }
+  for (const loop of closed) {
+    const first = byId.get(loop.edges[0]);
+    if (first.type === 'circle') { // BUG-300 (F-81): a circle as a <circle> (or, with arcApprox, its sampled closed polyline)
+      const c0 = J(first.joints[0]);
+      if (!(first.radius > 0)) continue;
+      if (arcApprox) {
+        const pts = sampleCirclePoints(c0.x, c0.y, first.radius, arcSeg).map(transform);
+        elems.push(`<polyline points="${pts.map((p) => `${formatNum(p.x, precision)},${formatNum(p.y, precision)}`).join(' ')}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
+      } else {
+        const center = transform(c0);
+        elems.push(`<circle cx="${formatNum(center.x, precision)}" cy="${formatNum(center.y, precision)}" r="${formatNum(first.radius * scale, precision)}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" fill="none" />`);
+      }
+      continue;
+    }
+    // the loop's walk: edge k joins joint k to joint k + 1 (the last one closes back to joint 0); a line closing it is left to Z
+    const n = loop.joints.length;
+    let d = `M ${xy(transform(J(loop.joints[0])))}`;
+    loop.edges.forEach((id, k) => {
+      const s = byId.get(id), from = loop.joints[k], to = loop.joints[(k + 1) % n];
+      if (k === n - 1 && s.type === 'line') return;
+      d += ' ' + seg(s, J(from), J(to), node(curveEnds(s)[0]) === from);
+    });
+    pathEl(d + ' Z');
+  }
+  for (const chain of findOpenChains(view, closed)) {
+    const d = chainWalk(chain, view).map((stroke) => `M ${xy(transform(stroke[0].fromP))} ` + stroke.map((st) => seg(st.shape, st.fromP, st.toP, st.forward)).join(' ')).join(' ');
+    if (d) pathEl(d);
   }
 
   // Default viewBox padding
-  if (minX === Infinity) return null;
   const pad = Math.max((maxX - minX), (maxY - minY)) * 0.05 || 10;
   minX -= pad; minY -= pad; maxX += pad; maxY += pad;
   const width = maxX - minX, height = maxY - minY;

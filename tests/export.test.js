@@ -5,7 +5,7 @@ function makeStateLine() {
   const joints = new Map();
   joints.set('j1', { x: 0, y: 0 });
   joints.set('j2', { x: 10, y: 0 });
-  const shapes = [{ type: 'line', joints: ['j1', 'j2'] }];
+  const shapes = [{ id: 'l1', type: 'line', joints: ['j1', 'j2'] }]; // TASK 1040: an id, as every shape of the app has (the loop finder names chains by their shapes' ids)
   return { joints, shapes };
 }
 
@@ -15,7 +15,7 @@ function makeStateArc() {
   joints.set('c', { x: 0, y: 0 });
   joints.set('s', { x: 10, y: 0 });
   joints.set('e', { x: 0, y: 10 });
-  const shapes = [{ type: 'arc', joints: ['c', 's', 'e'], largeArc: false, sweep: true }];
+  const shapes = [{ id: 'a1', type: 'arc', joints: ['c', 's', 'e'], largeArc: false, sweep: true }]; // TASK 1040: an id (as above)
   return { joints, shapes };
 }
 
@@ -23,8 +23,8 @@ function makeStateArc() {
 {
   const state = makeStateLine();
   const svg = buildSVG(state, { precision: 3 });
-  assert.ok(svg && svg.includes('<line'), 'SVG should contain a line element');
-  assert.ok(svg.includes('x1="0.000"') || svg.includes('x1="0"'), 'Precision should be applied');
+  // TASK 1040: an open line is an open chain: ONE <path> (was a <line>)
+  assert.ok(svg && svg.includes('<path d="M 0.000 0.000 L 10.000 0.000"'), 'SVG should contain the line as an open path, precision applied');
   // Cap/Join attributes respect settings
   assert.ok(svg.includes('stroke-linecap="') && svg.includes('stroke-linejoin="'), 'SVG should include stroke-linecap and stroke-linejoin attributes on lines');
 }
@@ -54,12 +54,10 @@ function makeStateArc() {
   const state = makeStateArc();
   const arcSeg = 8;
   const svg = buildSVG(state, { precision: 2, arcApprox: true, arcSeg });
-  assert.ok(svg && svg.includes('<polyline'), 'SVG should contain a polyline when arcApprox is true');
-  // Count points roughly by commas in points attribute
-  const m = svg.match(/points="([^"]+)"/);
-  assert.ok(m, 'polyline points attribute found');
-  const pts = m[1].trim().split(/\s+/);
-  assert.ok(pts.length === arcSeg + 1, 'polyline should have arcSeg+1 points');
+  // TASK 1040: the open arc is an open chain: ONE <path>, its sampled points as M + L (was a <polyline>)
+  const m = svg && svg.match(/<path d="([^"]+)"/);
+  assert.ok(m && !/ A /.test(m[1]), 'SVG should contain the arc as a sampled path when arcApprox is true');
+  assert.ok((m[1].match(/[ML] /g) || []).length === arcSeg + 1, 'the sampled path should have arcSeg+1 points');
 }
 
 // DXF Line test

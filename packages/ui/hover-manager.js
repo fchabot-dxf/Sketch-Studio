@@ -2,6 +2,7 @@
 // HOVER MANAGER - Single source of truth for hover state
 // ═══════════════════════════════════════════════════════════════════════════════
 import { findSnap } from '#ui/snap-detection.js';
+import { constraintToolPicks } from '#ui/input-handlers/constraint-tools.js'; // TASK 1020: the hover lights what the click takes
 import { screenToWorld, getZoomFactor } from '#ui/coords.js';
 import { glyphPickHit } from '#ui/fusion-glyphs.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -115,7 +116,7 @@ export function updateHover(svg, screenX, screenY, state) {
     // Find potential targets via snap system (task 675: active-sketch tools narrow to activeSketchScene so non-active curves neither highlight nor shadow)
     const picked = pickScene(state, pickableShapes(state));
     const scene = ACTIVE_SKETCH_HOVER_TOOLS.includes(state.currentTool) ? activeSketchScene(state, picked) : picked;
-    const hoverSnapResult = findSnap(scene.joints, scene.shapes, svg, {x: screenX, y: screenY}, [], false, false, 1.0);
+    const hoverSnapResult = findSnap(scene.joints, scene.shapes, svg, {x: screenX, y: screenY}, [], false, false, 1.0, constraintToolPicks(state));
     
     // Extract hits
     let hitJoint = null;

@@ -184,6 +184,12 @@ export const CURVE_KINDS = Object.freeze({
   },
 });
 
+/** BUG-300 (F-81 / F-81b): what a drawing EXPORTS, declared once: the drawn kinds (circles included) and never construction geometry (a helper, not part
+ *  of the design: Fusion leaves it out of its export too). A text's letters are lines and beziers (exported); the text record itself is not. Read by the
+ *  SketchStudio SVG / DXF writer and (TASK 1036, BUG-372) the design thumbnail, so the thumbnail draws what the export draws. */
+export const EXPORTED_TYPES = Object.freeze(['line', 'arc', 'bezier', 'circle']);
+export const exportedShapes = (state) => state.shapes.filter((s) => s && EXPORTED_TYPES.includes(s.type) && !s.isConstruction);
+
 /** The kind declaration of shape s (CURVE_KINDS), or null when it is no curve between two ends (a circle, an unknown kind, too few joints). */
 export function curveKind(s) {
   const k = s && CURVE_KINDS[s.type];

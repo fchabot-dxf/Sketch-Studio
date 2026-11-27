@@ -54,8 +54,10 @@ export function updatePreview(state, toolType, fixedPoints, cursorPoint, propert
                         state.active.preview = { type: 'polygon', sides: properties.sides, pt: cursorPoint };
                         break;
                     case 'arc':
-                        // Only center-start-end arc preview supported; centre is a resolved {x,y} (validated above)
-                        const obj = { type: 'arc', center: properties && properties.center, radius: properties && properties.radius, startAngle: properties && properties.startAngle, endAngle: properties && properties.endAngle, pt: cursorPoint };
+                        // Only center-start-end arc preview supported; centre is a resolved {x,y} (validated above).
+                        // TASK 1036 (BUG-370, N-1): the tool's winding (largeArc, sweep) goes with the angles; without it the renderer guessed it from the
+                        // raw atan2 angles and drew a sweep across 180 deg the other way round from the arc the commit makes.
+                        const obj = { type: 'arc', center: properties && properties.center, radius: properties && properties.radius, startAngle: properties && properties.startAngle, endAngle: properties && properties.endAngle, largeArc: properties && properties.largeArc, sweep: properties && properties.sweep, pt: cursorPoint };
                         state.active.preview = obj;
                         break;
                     case 'slot':

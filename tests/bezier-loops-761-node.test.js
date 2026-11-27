@@ -245,7 +245,7 @@ const parseD = (d) => [...d.matchAll(/([MLCAZ])([^MLCAZ]*)/g)].map((m) => ({ c: 
   ok(dx.includes('SPLINE'), '3: SketchStudio DXF writes a SPLINE');
   let n = 0;
   const back = importDxf(dx.replace(/\r\n/g, '\n'), { genJ: () => 'k' + (n++), idPrefix: 'r' }).shapes.filter((x) => x.type === 'bezier');
-  eq(back.map((b) => [b.c1, b.c2]), [[[70, -90], [30, -90]]], '3: and the DXF import reads it back as one bezier (its control points; the import flips y)');
+  eq(back.map((b) => [b.c1, b.c2]), [[[70, 90], [30, 90]]], '3: and the DXF import reads it back as one bezier, the same way up (BUG-301: the export writes Y-up, the import flips it back)');
 }
 { // pocket clearing (Spiral, Loop on) and hold part (tabs) on the bezier outline
   const loops = findLoops(S1), loopPolys = Object.fromEntries(loops.map((l) => [l.id, loopPolygon(l, S1, byIdOf(S1))]));

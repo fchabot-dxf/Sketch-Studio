@@ -21,6 +21,10 @@ const FLATTEN_STEPS = 16;                                 // de Casteljau subdiv
 
 function num(v) { const n = parseFloat(v); return isFinite(n) ? n : 0; }
 
+// BUG-302 (F-47a): a COORDINATE attribute: absent or empty = 0 (SVG's own default), a number = itself, anything else (NaN, text, Infinity) = null,
+// so the shape that holds it is skipped and counted instead of drawn through a made-up 0.
+function coord(v) { if (v == null || String(v).trim() === '') return 0; const n = parseFloat(v); return Number.isFinite(n) ? n : null; }
+
 // parseLength('100mm') → { value:100, unit:'mm' }; '50' → { value:50, unit:'' }; malformed → null.
 export function parseLength(str) {
   if (str == null) return null;
@@ -81,7 +85,8 @@ export function computeImportSize({ width, height, viewBox } = {}) {
 // parsePoints('0,0 10,0 10,10') → [{x,y}, …] (commas and/or whitespace separated).
 export function parsePoints(str) {
   if (!str) return [];
-  const nums = String(str).trim().split(/[\s,]+/).map(Number).filter((n) => isFinite(n));
+  const nums = String(str).trim().split(/[\s,]+/).filter(Boolean).map(Number);
+  if (nums.some((n) => !isFinite(n))) return null; // BUG-302 (F-47a): a non-numeric coordinate; dropping it would pair the others wrongly
   const pts = [];
   for (let i = 0; i + 1 < nums.length; i += 2) pts.push({ x: nums[i], y: nums[i + 1] });
   return pts;
@@ -293,16 +298,35 @@ export function importSvgGeometry(descriptors, { genJ, scale = 1, idPrefix = 'im
     curCtm = d.ctm || IDENTITY_MATRIX; // GRIEVANCE-2: bake the host-composed group/element transform per descriptor
     curDescId = d.descId || d.sourceId || null;
     switch (d.tag) {
-      case 'line': { const a = J(num(d.x1), num(d.y1)), b = J(num(d.x2), num(d.y2)); pushShape({ id: SID(), type: 'line', joints: [a, b] }); break; }
+      case 'line': {
+        const v = [coord(d.x1), coord(d.y1), coord(d.x2), coord(d.y2)];
+        if (v.includes(null)) { bump('line', 'non-numeric coordinate, not imported'); break; }
+        const a = J(v[0], v[1]), b = J(v[2], v[3]); pushShape({ id: SID(), type: 'line', joints: [a, b] }); break;
+      }
       case 'rect': {
-        const x = num(d.x), y = num(d.y), w = num(d.width), h = num(d.height);
+        const v = [coord(d.x), coord(d.y), coord(d.width), coord(d.height)];
+        if (v.includes(null)) { bump('rect', 'non-numeric coordinate, not imported'); break; }
+        const [x, y, w, h] = v;
         if (d.rx || d.ry) bump('rect', 'rounded corners squared off');
         polyline([{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }], true);
         break;
       }
-      case 'circle': { const c = J(num(d.cx), num(d.cy)); pushShape({ id: SID(), type: 'circle', joints: [c], radius: num(d.r) * scale * linearScaleOf(curCtm) }); break; }
-      case 'polyline': polyline(parsePoints(d.points), false); break;
-      case 'polygon': polyline(parsePoints(d.points), true); break;
+      case 'circle': {
+        const v = [coord(d.cx), coord(d.cy), coord(d.r)];
+        if (v.includes(null)) { bump('circle', 'non-numeric coordinate, not imported'); break; }
+        if (!(v[2] > 0)) { bump('circle', 'radius zero or negative, not imported'); break; } // BUG-303 (F-47b)
+        // BUG-304 (F-58): under a non-uniform scale or a skew the circle is an ELLIPSE: it comes in like an <ellipse> (the flattened ring, the CTM
+        // applied to every point), not as one circle of a made-up radius
+        if (!isSimilarity(curCtm)) { polyline(ellipsePoints(v[0], v[1], v[2], v[2]), true); break; }
+        pushShape({ id: SID(), type: 'circle', joints: [J(v[0], v[1])], radius: v[2] * scale * linearScaleOf(curCtm) });
+        break;
+      }
+      case 'polyline': case 'polygon': {
+        const pts = parsePoints(d.points);
+        if (!pts) { bump(d.tag, 'non-numeric coordinate, not imported'); break; }
+        polyline(pts, d.tag === 'polygon');
+        break;
+      }
       case 'path': { const { subpaths, skipped: sk } = parsePathSubpaths(d.d); for (const sp of subpaths) subpath(sp); for (const r of sk) bump('path', r.reason, r.count); break; }
       // IMPORT-2B-2: <ellipse> → a closed polyline ring. #core has no ellipse SHAPE, so this is the audit's [R]
       // route: flatten at the pipeline's own curve density (arcSteps). SVG2 rx/ry="auto" = "use the other radius";
@@ -311,8 +335,10 @@ export function importSvgGeometry(descriptors, { genJ, scale = 1, idPrefix = 'im
         let rx = num(d.rx), ry = num(d.ry);
         if (!(rx > 0) && ry > 0) rx = ry;
         if (!(ry > 0) && rx > 0) ry = rx;
+        const c = [coord(d.cx), coord(d.cy)];
+        if (c.includes(null)) { bump('ellipse', 'non-numeric coordinate, not imported'); break; }
         if (!(rx > 0) || !(ry > 0)) { bump('ellipse', 'zero radius (not rendered)'); break; }
-        polyline(ellipsePoints(num(d.cx), num(d.cy), rx, ry), true);
+        polyline(ellipsePoints(c[0], c[1], rx, ry), true);
         break;
       }
       default: bump(d.tag, 'element not supported in v1'); break;

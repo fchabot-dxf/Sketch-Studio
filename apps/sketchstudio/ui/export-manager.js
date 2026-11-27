@@ -9,6 +9,11 @@ import { track } from '#ui/analytics.js'; // TASK 738
 // factory value was 1): a display look never changes what is exported.
 export const EXPORT_STROKE_WIDTH = 1;
 
+// BUG-300 (F-81 / F-81b): what an export writes, declared once for the SVG and the DXF writer: the drawn kinds (circles included) and never
+// construction geometry (a helper, not part of the design: Fusion leaves it out of its export too).
+const EXPORTED_TYPES = ['line', 'arc', 'bezier', 'circle'];
+const exportedShapes = (state) => state.shapes.filter(s => s && EXPORTED_TYPES.includes(s.type) && !s.isConstruction);
+
 function getJointPos(state, jid) {
   const j = state.joints.get(jid);
   return j ? { x: j.x, y: j.y } : null;
@@ -37,6 +42,12 @@ function sampleArcPoints(cx, cy, r, startAngle, endAngle, sweep, segments) {
   return pts;
 }
 
+function sampleCirclePoints(cx, cy, r, segments) {
+  const pts = [];
+  for (let i = 0; i <= segments; i++) { const a = 2 * Math.PI * i / segments; pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }); }
+  return pts;
+}
+
 export function buildSVG(state, opts = {}) {
   const precision = (typeof opts.precision === 'number') ? opts.precision : 6;
   const scale = (typeof opts.scale === 'number') ? opts.scale : 1;
@@ -47,7 +58,7 @@ export function buildSVG(state, opts = {}) {
   const lineJoin = opts.lineJoin || SettingsManager.get('LINE_JOIN') || 'round';
   const closeTolerance = (typeof opts.tolerance === 'number') ? opts.tolerance : 1e-6;
 
-  const shapes = state.shapes.filter(s => s && (s.type === 'line' || s.type === 'arc' || s.type === 'bezier'));
+  const shapes = exportedShapes(state);
   if (shapes.length === 0) return null;
 
   // Compute bounds
@@ -180,6 +191,23 @@ export function buildSVG(state, opts = {}) {
     }
   }
 
+  // BUG-300 (F-81): each circle as a <circle> (or, with arcApprox, its sampled closed polyline like an arc)
+  for (const s of shapes) {
+    if (s.type !== 'circle') continue;
+    const c0 = getJointPos(state, s.joints[0]);
+    if (!c0 || !(s.radius > 0)) continue;
+    const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
+    const center = transform(c0); const r = s.radius * scale;
+    minX = Math.min(minX, center.x - r); minY = Math.min(minY, center.y - r);
+    maxX = Math.max(maxX, center.x + r); maxY = Math.max(maxY, center.y + r);
+    if (arcApprox) {
+      const pts = sampleCirclePoints(c0.x, c0.y, s.radius, arcSeg).map(p => transform(p));
+      elems.push(`<polyline points="${pts.map(p => `${formatNum(p.x, precision)},${formatNum(p.y, precision)}`).join(' ')}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
+    } else {
+      elems.push(`<circle cx="${formatNum(center.x, precision)}" cy="${formatNum(center.y, precision)}" r="${formatNum(r, precision)}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" fill="none" />`);
+    }
+  }
+
   // TASK 761: each bezier as its cubic (`M p0 C c1 c2 p3`, #core/curve-kinds bezierPoints), or with arcApprox its sampled points (the kind's points)
   for (const s of shapes) {
     if (s.type !== 'bezier') continue;
@@ -208,16 +236,17 @@ function deg(v) { return (v * 180 / Math.PI); }
 export function buildDXF(state, opts = {}) {
   const precision = (typeof opts.precision === 'number') ? opts.precision : 6;
   const scale = (typeof opts.scale === 'number') ? opts.scale : 1;
-  const invertY = !!opts.invertY;
   const arcApprox = !!opts.arcApprox;
   const arcSeg = parseInt(opts.arcSeg || 32, 10) || 32;
 
-  const shapes = state.shapes.filter(s => s && (s.type === 'line' || s.type === 'arc' || s.type === 'bezier'));
+  const shapes = exportedShapes(state);
   if (shapes.length === 0) return null;
 
-  const to = (p) => {
-    let x = p.x * scale; let y = p.y * scale; if (invertY) y = -y; return { x, y };
-  };
+  // BUG-301 (F-84): DXF is Y-up and the world is Y-down, so the DXF writer ALWAYS negates Y (the importer, #core/dxf-import, negates it back); the
+  // Export view's "Invert Y axis" box is for SVG only and does not reach a DXF. Everything below is computed from the points AS WRITTEN (`to`), so an
+  // arc's angles and direction are the ones of the DXF's own plane.
+  const flip = true;
+  const to = (p) => ({ x: p.x * scale, y: (flip ? -p.y : p.y) * scale });
 
   const lines = [];
   lines.push('0','SECTION','2','ENTITIES');
@@ -233,24 +262,37 @@ export function buildDXF(state, opts = {}) {
       const st0 = getJointPos(state, s.joints[1]);
       const en0 = getJointPos(state, s.joints[2]);
       if (!c0 || !st0 || !en0) continue;
-      const r0 = Math.hypot(st0.x - c0.x, st0.y - c0.y);
-      let startAngle = deg(Math.atan2(st0.y - c0.y, st0.x - c0.x));
-      let endAngle = deg(Math.atan2(en0.y - c0.y, en0.x - c0.x));
+      const c = to(c0), st = to(st0), en = to(en0);
+      const r = Math.hypot(st.x - c.x, st.y - c.y);
+      let startAngle = deg(Math.atan2(st.y - c.y, st.x - c.x));
+      let endAngle = deg(Math.atan2(en.y - c.y, en.x - c.x));
       if (startAngle < 0) startAngle += 360; if (endAngle < 0) endAngle += 360;
       // a DXF ARC runs counter-clockwise (increasing angle) from 50 to 51: an arc in the decreasing direction is written end -> start
-      // (TASK 550: the direction from the one arc-sweep function, so a fillet arc without a stored flag is written the way it is drawn)
-      if (arcSweepInfo(c0, st0, en0, { sweep: s.sweep }).dir < 0) { const tmp = startAngle; startAngle = endAngle; endAngle = tmp; }
+      // (TASK 550: the direction from the one arc-sweep function, so a fillet arc without a stored flag is written the way it is drawn;
+      // negating Y turns the direction round)
+      const dir = arcSweepInfo(c0, st0, en0, { sweep: s.sweep }).dir * (flip ? -1 : 1);
+      if (dir < 0) { const tmp = startAngle; startAngle = endAngle; endAngle = tmp; }
 
       if (arcApprox) {
         // approximate arc using line segments (always increasing angle from startAngle to endAngle, as the ARC entity)
-        const pts = sampleArcPoints(c0.x, c0.y, r0, startAngle * Math.PI/180, endAngle * Math.PI/180, true, arcSeg).map(p => to(p));
+        const pts = sampleArcPoints(c.x, c.y, r, startAngle * Math.PI/180, endAngle * Math.PI/180, true, arcSeg);
         for (let i = 0; i < pts.length - 1; i++) {
           const p1 = pts[i], p2 = pts[i+1];
           lines.push('0','LINE','8','0','10',formatNum(p1.x, precision),'20',formatNum(p1.y, precision),'11',formatNum(p2.x, precision),'21',formatNum(p2.y, precision));
         }
       } else {
-        const c = to(c0); const r = r0 * scale;
         lines.push('0','ARC','8','0','10',formatNum(c.x, precision),'20',formatNum(c.y, precision),'40',formatNum(r, precision),'50',formatNum(startAngle, precision),'51',formatNum(endAngle, precision));
+      }
+    } else if (s.type === 'circle') {
+      // BUG-300 (F-81): a circle is a CIRCLE entity (a DXF has no winding to keep), or with arcApprox its sampled points as LINEs
+      const c0 = getJointPos(state, s.joints[0]);
+      if (!c0 || !(s.radius > 0)) continue;
+      if (arcApprox) {
+        const pts = sampleCirclePoints(c0.x, c0.y, s.radius, arcSeg).map(to);
+        for (let i = 0; i < pts.length - 1; i++) lines.push('0','LINE','8','0','10',formatNum(pts[i].x, precision),'20',formatNum(pts[i].y, precision),'11',formatNum(pts[i+1].x, precision),'21',formatNum(pts[i+1].y, precision));
+      } else {
+        const c = to(c0);
+        lines.push('0','CIRCLE','8','0','10',formatNum(c.x, precision),'20',formatNum(c.y, precision),'40',formatNum(s.radius * scale, precision));
       }
     } else if (s.type === 'bezier') {
       // TASK 761: a bezier is a cubic SPLINE (degree 3, its four control points, knots 0 0 0 0 1 1 1 1: what #core/dxf-import reads back as one

@@ -84,8 +84,8 @@ function bodyDrag(S, shapeId, from, to) {
     assert.ok(svgArc.sw === drawn.sw && svgArc.la === drawn.la, `fillet arc (${name} the short way): the SVG export's flags ${svgArc.la} ${svgArc.sw} = the renderer's ${drawn.la} ${drawn.sw}`);
     const t = muted(() => buildDXF(state, { precision: 6 })).split('\r\n'), i = t.indexOf('ARC');
     const a50 = +t[t.indexOf('50', i) + 1], a51 = +t[t.indexOf('51', i) + 1];
-    const mid = (aS + aE) / 2, ccw = (x) => ((x - a50) % 360 + 360) % 360;
-    assert.ok(ccw(mid) < ccw(a51), `fillet arc (${name}): the DXF ARC (counter-clockwise ${a50} -> ${a51}) contains the drawn arc's middle ${mid} (the 90 degree arc, not the 270)`);
+    const mid = -(aS + aE) / 2 /* BUG-301 (F-84): a DXF is Y-up, so its angles are the negated world angles */, ccw = (x) => ((x - a50) % 360 + 360) % 360;
+    assert.ok(ccw(mid) < ccw(a51), `fillet arc (${name}): the DXF ARC (counter-clockwise ${a50} -> ${a51}) contains the drawn arc's middle (Y-up) ${mid} (the 90 degree arc, not the 270)`);
   }
   console.log('1c fillet arcs (no stored direction): SVG and DXF exports = what the renderer draws');
 }

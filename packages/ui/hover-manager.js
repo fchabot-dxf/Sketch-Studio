@@ -10,6 +10,7 @@ import { ACTIVE_SKETCH_HOVER_TOOLS, TOOL_MODES } from '#core/constants.js';
 import { pickOwner, hoveredUnit } from '#core/group-model.js'; // TASK 756: the Select tool's hover lights the user group a click selects
 import { pickableShapes } from '#core/reference-lines.js';
 import { pickScene, pickableConstraints, activeSketchScene } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not hovered; TASK 675: active-sketch tools hover only active sketch
+import { sharedPointCoincidents } from '#core/shared-point.js'; // TASK 1041: the SharedPointCoincident glyphs (derived from the shapes) are picked like any glyph
 
 // CRITICAL: This is the ONLY file that modifies hoveredJoint/hoveredShape/hoveredConstraint
 // All other files must call functions from this module instead of touching state directly
@@ -23,7 +24,8 @@ export function glyphAt(svg, state, screenX, screenY, touch = false) {
     const symbolPx = Number(settings.GLYPH_SYMBOL_SIZE_PX || 20), outlinePx = Number(settings.GLYPH_OUTLINE_PX ?? 1);
     const mouseW = screenToWorld(svg, screenX, screenY);
     const zoomFactor = getZoomFactor(svg);
-    for (const c of pickableConstraints(state) || []) {
+    const scene = pickScene(state);
+    for (const c of [...(pickableConstraints(state) || []), ...sharedPointCoincidents(scene.joints, scene.shapes)]) {
         if (c.__visible === false || !c.glyphPos) continue;
         for (const pos of Array.isArray(c.glyphPos) ? c.glyphPos : [c.glyphPos]) {
             if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') continue;

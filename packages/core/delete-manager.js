@@ -7,6 +7,7 @@ import { dimensionValuesOf, reconcileKeptDimensions } from './parameters.js';
 import { docUnit } from './settings-manager.js';
 import { inertEntities, isConstraintInert, isJointInert, isShapeInert, sketchOf, recordUndo, constraintSketch, DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from './sketch-model.js'; // TASK 577/619
 import { dropEmptyGroups } from './group-model.js'; // TASK 756: a group whose shapes all went goes too
+import { isSharedPointCoincident, sharedPointCoincidents, detachFromSharedPoint } from './shared-point.js'; // TASK 1041: Delete on a SharedPointCoincident splits the point
 
 // A fillet's virtual-sharp joint V (joint.virtualSharp) is a deliberate exception to "a joint goes when no
 // surviving shape uses it": the overall dimensions at a filleted corner stay attached to V as a standalone point
@@ -76,6 +77,24 @@ export function deleteConstraints(state, constraintsOrIds) {
   try { if (typeof state.endUndoGroup === 'function') state.endUndoGroup(); } catch (_) {}
 
   return removed;
+}
+
+/**
+ * TASK 1041: Delete on SharedPointCoincident glyphs (#core/shared-point.js): each detaches its curve from the shared point (detachFromSharedPoint,
+ * THE split), all in ONE undo step (Undo puts the shared joint back, ids included). A glyph that is not one of the scene's live glyphs (a stale
+ * selection: the point is no longer shared) changes nothing and leaves no step. Returns how many curves were detached.
+ */
+export function deleteSharedPointCoincidents(state, glyphs) {
+  const live = new Set(sharedPointCoincidents(state.joints, state.shapes));
+  const valid = glyphs.filter((g) => live.has(g));
+  if (!valid.length) return 0;
+  state.beginUndoGroup('split point');
+  let detached = 0;
+  for (const g of valid) if (detachFromSharedPoint(state, g.joints[0], g.shape).ok) detached++;
+  state.selectedConstraints.clear();
+  state.engine.solve(SolverConfig.QUICK_SOLVE || 8);
+  state.endUndoGroup();
+  return detached;
 }
 
 // TASK 709: the constraint fields that name a SHAPE / a POINT (a sketch pattern's sources, copies, centre and direction lines are followed by
@@ -199,7 +218,11 @@ export function deleteSelection(state) {
   // 1. Identify explicit selections
   // TASK 577: nothing of a LOCKED sketch is deleted (a pick cannot select it; this is the same rule for a selection made some other way)
   const inert = inertEntities(state);
-  const constraintsToDelete = state.selectedConstraints ? Array.from(state.selectedConstraints).filter((c) => !isConstraintInert(inert, c)) : [];
+  const pickedConstraints = state.selectedConstraints ? Array.from(state.selectedConstraints).filter((c) => !isConstraintInert(inert, c)) : [];
+  // TASK 1041: a selected SharedPointCoincident glyph (#core/shared-point.js, derived, never stored) is a curve's membership of a shared point:
+  // its Delete detaches that curve (deleteSharedPointCoincidents); every other selected constraint is deleted as before
+  const pointSplits = pickedConstraints.filter(isSharedPointCoincident);
+  const constraintsToDelete = pickedConstraints.filter((c) => !isSharedPointCoincident(c));
   const explicitShapes = state.selectedShapes ? Array.from(state.selectedShapes).filter((id) => !isShapeInert(inert, id)) : [];
   const explicitJoints = state.selectedJoints ? Array.from(state.selectedJoints).filter((id) => !isJointInert(inert, id)) : [];
 
@@ -251,11 +274,12 @@ export function deleteSelection(state) {
   }
 
   const safeToDelete = finalJointsToDelete.filter(id => id !== 'j_origin');
-  if (constraintsToDelete.length === 0 && explicitShapes.length === 0 && safeToDelete.length === 0) return;
+  if (pointSplits.length === 0 && constraintsToDelete.length === 0 && explicitShapes.length === 0 && safeToDelete.length === 0) return;
 
   try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete selection'); } catch (_) {}
 
   // 3. Execute Deletions
+  if (pointSplits.length > 0) deleteSharedPointCoincidents(state, pointSplits);
   if (constraintsToDelete.length > 0) deleteConstraints(state, constraintsToDelete);
   if (explicitShapes.length > 0) deleteShapes(state, explicitShapes);
   if (safeToDelete.length > 0) deleteJoints(state, safeToDelete);

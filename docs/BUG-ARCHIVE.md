@@ -3618,6 +3618,36 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **History:** found in task `1039` -> fixed in task `1039`. Probe `C01`, before: `afterCentre: box=open[30]F shapes=1 active=true preview={none}`; after: `preview={line -20,10,10,10}`. Screenshots `.evidence/1039/middraw-centre-{before,after}-{desktop,phone}.png`.
 
+### BUG-410
+- **Date / turn:** 2026-11-27 (found in task `1041`)
+- **Reported by:** owner (raised through the advisor during task `1041`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** 3+ ends glued at one spot by the Coincident tool (A-B, B-C, or A-B A-C): selecting the spot (which picks ONE of the stacked points) shows only the coincident / point-on-line glyphs that name that point, not every constraint at the spot.
+- **What was wrong:** the show-on-select rule of a point glyph read only the glyph's own joints: `selectedJoints.has(a|b)` / `hoveredJoint === a|b`. It computed `clusterSelected` (the coincident cluster at the spot) and then ignored it.
+- **Cause:** `packages/ui/svg-renderer.js` `drawConstraintGlyph` (the coincident / point-on-line visibility, ~2186-2204 before the fix).
+- **Fix:** ONE rule in that place: a coincident, point-on-line (and, task 1041, SharedPointCoincident) glyph is visible while the glyph is hovered / selected, or while ANY point of the coincident cluster at its spot is hovered / selected (`getClusterLeader` / `isClusterSelected`, the renderer's existing cluster union). The dead `clusterSelected` lines are gone.
+- **Task id(s):** `1041`
+- **Fix merge sha:** open (`agents/split-point-1041`, awaiting merge)
+- **Guarding test file(s):** `tests/split-shared-point-1041-node.test.js` (part `J`: chain / star gluing of 3 and 4 ends plus a point-on-line on one stacked joint, each point selected and hovered, and a real click at the spot; part `L`: Fusion's mixed stack, both glyphs whichever stacked point is picked), `tests/split-shared-point-1041-live.test.js` (desktop + phone: the 2 shared-point glyphs and the glued line's coincident all show after a press on the corner)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in task `1041` -> fixed in task `1041`. Fail-first probe (part `J` alone on `origin/main`'s renderer): `.evidence/1041/probe-bug410-before.txt` `FAILS 32` (e.g. `FAIL J chain 3: e0 selected: every glyph at the spot shows (1/3)`); after: `.evidence/1041/probe-bug410-after.txt` `FAILS 0`.
+
+### BUG-411
+- **Date / turn:** 2026-11-27 (found in task `1041`)
+- **Reported by:** task `1041` (probe `.evidence/1041/probe-pattern-copy.mjs`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** a pattern copy whose corner was split (the copy curve got its own point; Fusion, measured by the advisor 2026-11-27: a COPY split keeps the CircularPattern constraint, points +1), then the pattern's quantity cut so that instance goes: the copy curves go but the split-off point stays, a lone point used by no shape.
+- **What was wrong:** removing an instance deleted only the points the instance lists (`inst.joints`, one per source point), never another point its copy shapes used.
+- **Cause:** `packages/core/pattern.js` `removeInstance`.
+- **Fix:** `removeInstance` takes every point its removed copy shapes used, plus the instance's listed points, and deletes those no surviving shape uses (the delete rule's "a point goes only when no surviving shape uses it"); the constraints on them go as before.
+- **Task id(s):** `1041`
+- **Fix merge sha:** open (`agents/split-point-1041`, awaiting merge)
+- **Guarding test file(s):** `tests/split-shared-point-1041-node.test.js` (part `H2`)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in task `1041` -> fixed in task `1041`. Probe before: `.evidence/1041/probe-pattern-copy-before.txt` `new joint still there: true used by a shape: false`; after: `.evidence/1041/probe-pattern-copy-after.txt` `new joint still there: false used by a shape: false`.
+
 ---
 
 ## Family index
@@ -3633,7 +3663,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27), BUG-350 (11-27), BUG-352 (11-27), BUG-360 (11-27) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27), BUG-411 (11-27) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -3641,7 +3671,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22), BUG-374 (11-27, open) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27), BUG-410 (11-27) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 

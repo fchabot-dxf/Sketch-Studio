@@ -147,6 +147,55 @@ await run('A-1 Arc (3-point): the end set by a drag from the start, then one cli
   } finally { app.esc(); app.esc(); await app.close(); }
 });
 
+// a drag that comes back onto the centre places nothing: the tool waits as after a centre CLICK, with the radius box (advisor ruling, task 1033)
+const singleBox = (app) => { const d = app.document.getElementById('dimInput'); return !!d && !d.classList.contains('hidden') && d.style.display !== 'none'; };
+const dragBack = (app, at, away) => {
+  const a = W(app, ...at), b = W(app, ...away);
+  app.move(a.x, a.y); app.down(a.x, a.y);
+  for (let i = 1; i <= 4; i++) app.move(a.x + (b.x - a.x) * i / 4, a.y + (b.y - a.y) * i / 4, { buttons: 1 });
+  for (let i = 3; i >= 0; i--) app.move(a.x + (b.x - a.x) * i / 4, a.y + (b.y - a.y) * i / 4, { buttons: 1 });
+  app.up(a.x, a.y);
+};
+await run('A-1 Arc (centre): a drag back onto the centre = a centre click: the radius box waits; a typed 15 + Enter places the start at 15', async () => {
+  const app = await openDoc();
+  try {
+    app.tool('arc'); app.state.arcMode = ARC_MODES.CENTER_START_END;
+    dragBack(app, [-20, -10], [0, -10]);
+    assert.strictEqual(app.state.active && app.state.active.phase, 'center', 'the centre is placed, the start still to come');
+    assert(singleBox(app), 'the box is open');
+    app.type('15'); moveW(app, 5, -10); app.enter();
+    assert.strictEqual(app.state.active && app.state.active.phase, 'start', 'Enter in that box placed the start');
+    const c = app.state.joints.get(app.state.active.center), st = app.state.joints.get(app.state.active.start);
+    assert(Math.abs(Math.hypot(st.x - c.x, st.y - c.y) - 15) < 1e-6, `it is the RADIUS box: the start is at the typed 15 (${Math.hypot(st.x - c.x, st.y - c.y)})`);
+  } finally { app.esc(); app.esc(); await app.close(); }
+});
+await run('A-1 Arc (centre): a drag back onto the centre, then a click places the start (sweep box), then a click places the arc', async () => {
+  const app = await openDoc();
+  try {
+    app.tool('arc'); app.state.arcMode = ARC_MODES.CENTER_START_END;
+    dragBack(app, [-20, -10], [0, -10]);
+    moveW(app, 5, -10); clickW(app, 5, -10);
+    assert.strictEqual(app.state.active && app.state.active.phase, 'start', 'the click placed the start');
+    assert(singleBox(app), 'the sweep box is open');
+    moveW(app, -5, 5); moveW(app, -20, 15); clickW(app, -20, 15);
+    assert.strictEqual(app.state.shapes.filter((x) => x.type === 'arc').length, 1, 'the next click placed the arc');
+    assert.strictEqual(app.state.active, null, 'the draw is done');
+  } finally { app.esc(); app.esc(); await app.close(); }
+});
+await run('A-1 Arc (3-point): a drag back onto the start = a start click: the chord box waits; the next clicks place the end and the arc', async () => {
+  const app = await openDoc();
+  try {
+    app.tool('arc'); app.state.arcMode = ARC_MODES.THREE_POINT;
+    dragBack(app, [-20, -10], [0, -10]);
+    assert.strictEqual(app.state.active && app.state.active.phase, 'chord', 'the start is placed, the end still to come');
+    assert(singleBox(app), 'the chord box is open');
+    moveW(app, 10, -10); clickW(app, 10, -10);
+    assert.strictEqual(app.state.active && app.state.active.phase, 'bulge', 'the click placed the end');
+    moveW(app, -5, 5); clickW(app, -5, 5);
+    assert.strictEqual(app.state.shapes.filter((x) => x.type === 'arc').length, 1, 'the next click placed the arc');
+  } finally { app.esc(); app.esc(); await app.close(); }
+});
+
 // ── S-1: Slot: a typed span holds the end; the snap the span click was on is dropped, so the slot stays where it was clicked ──
 await run('S-1 Slot (centre to centre): typed span 20, span click on L2: no point-on-line, the first centre stays at x 10', async () => {
   const app = await openDoc();

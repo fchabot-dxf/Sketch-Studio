@@ -3333,10 +3333,10 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** `A-1`: Arc (Center Point): after the radius is set by DRAGGING from the centre, the end click is swallowed and the sweep box becomes a radius box. The 3-Point Arc had the same on its drag (start -> end): the third click was swallowed.
 - **What was wrong:** `_tempStart` (the press placed the first point, its release is still to come) was cleared only on the click release; after a drag release it stayed set, so the NEXT release was taken for the first one: ignored, and the first step's box opened again.
 - **Cause:** `packages/ui/input-handlers/arc-tool.js` `handleArcPointerUp` (the `_tempStart` branch).
-- **Fix:** the same function: the first release consumes `_tempStart`, a click's or a drag's (`firstRelease`); only a click release opens the first box and places nothing.
+- **Fix:** the same function: the first release consumes `_tempStart`, a click's or a drag's (`firstRelease`). A click release, and (advisor ruling) a first drag whose release placed nothing (back onto the first point: too small), leave the tool waiting with the first step's box (`waitWithFirstBox`: the radius box, the 3-Point Arc's chord box), as after a click on the first point.
 - **Task id(s):** `1033`
 - **Fix merge sha:** open (`agents/enter-snap-1033`, awaiting merge)
-- **Guarding test file(s):** `tests/enter-snap-1033-node.test.js` (`A-1`: Center Point and 3-Point, drag then one click places the arc)
+- **Guarding test file(s):** `tests/enter-snap-1033-node.test.js` (`A-1`: Center Point and 3-Point, drag then one click places the arc; a drag back onto the first point waits with the radius / chord box); `tests/arc-logging.test.js` (it accepted the swallowed click, `clickIgnored`, as the outcome: it now asserts the second release places the arc)
 - **Status:** fixed
 - **Family:** `ui-input`
 - **History:** found by plan `1031` -> fixed in task `1033`. Probe before: `after drag-release: phase start _tempStart true` / `after end click: shapes 0 phase start`. After: `after drag-release: phase start _tempStart false` / `after end click: shapes 1 phase null`.

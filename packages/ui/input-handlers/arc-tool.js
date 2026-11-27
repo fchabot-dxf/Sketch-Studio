@@ -352,16 +352,20 @@ export function handleArcPointerUp(e, svg, state, hitSnap, w, wasDragging) {
   // (a drag's release places the next point below): left set, the NEXT click was taken for the first release and swallowed.
   const firstRelease = state.active._tempStart;
   state.active._tempStart = false;
+  const firstPhase = state.active.phase;
+  // the tool waits for the second point with the first step's box: after the first click, and after a first drag whose release placed nothing (too small)
+  const waitWithFirstBox = () => { localState.isDragging = false; localState.dragStartScreen = null; openArcBox(e, isThreePoint(state) ? 'chord' : 'radius'); return true; };   // TASK 597: the radius shows now, after the centre click (TASK 1022: a 3-point arc's chord, after its start click)
   if (firstRelease && !localState.isDragging) {
-    arcLog('clickIgnored', { phase: state.active.phase, reason: '_tempStart_click' }); localState.dragStartScreen = null;
-    openArcBox(e, isThreePoint(state) ? 'chord' : 'radius');   // TASK 597: the radius shows now, after the centre click (TASK 1022: a 3-point arc's chord, after its start click)
-    return true;
+    arcLog('clickIgnored', { phase: state.active.phase, reason: '_tempStart_click' });
+    return waitWithFirstBox();
   }
+  const placedNothing = () => firstRelease && !!state.active && state.active.phase === firstPhase;   // TASK 1033: a drag back onto the first point = a click there
 
   const snap = state.activeSnap || hitSnap;
   let pt = (snap && snap.isLocked && snap.pt) ? snap.pt : w;
   if (isThreePoint(state)) {   // TASK 1022
     const res3 = handleThreePointArc(state, snap, pt, e);
+    if (placedNothing()) return waitWithFirstBox();
     if (!state.active) clearPreview(state);   // placed: no preview left (mid-draw the preview stays on the point just placed)
     localState.isDragging = false; localState.dragStartScreen = null;
     return res3;
@@ -372,6 +376,7 @@ export function handleArcPointerUp(e, svg, state, hitSnap, w, wasDragging) {
   }
 
   const res = handleCenterArc(state, snap, pt, w, e);
+  if (placedNothing()) return waitWithFirstBox();
   try { clearPreview(state); } catch (_) { }
   localState.isDragging = false; localState.dragStartScreen = null;
   arcLog('pointerUp-result', { res, shapes: (state.shapes || []).length });

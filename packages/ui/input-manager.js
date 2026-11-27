@@ -28,7 +28,7 @@ import { watchTextOutlines } from '#ui/text-fonts.js'; // TASK 845: a text's let
 import { transformBoxPointerDown, transformBoxPointerMove, transformBoxPointerUp, cancelTransformGesture } from '#ui/transform-box.js'; // TASK 753: a group's transform box, every app
 import { updateHover, clearHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
-import { setupConstraintTools, activateConstraintTool, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState } from '#ui/input-handlers/constraint-tools.js';
+import { setupConstraintTools, activateConstraintTool, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState, constraintToolPicks } from '#ui/input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState, handlePanZoomWheel } from '#ui/input-handlers/pan-zoom.js';
 import { setupDimensionTool, handleDimensionPointerDown, handleDimensionPointerMove, handleDimensionPointerUp, startDimensionFromSelection, anchorPlacingDimension, isDimensionPlacing, getPlacingConstraint, resetDimensionState } from '#ui/input-handlers/dimension-tool.js';
 import { setupNumericInput, showEditInput } from '#ui/numeric-input-manager.js';
@@ -394,7 +394,7 @@ function toolSnap(state, svg, pt, excludeIds, boost, otherSketch = false) {
     const shapes = pickableShapes(state);
     const picked = pickScene(state, shapes);
     const scene = otherSketch ? otherSketchScene(state, picked) : (ACTIVE_SKETCH_SNAP_TOOLS.includes(state.currentTool) ? activeSketchScene(state, picked) : picked);
-    if (!DRAW_SNAP_TOOLS.includes(state.currentTool)) return findSnap(scene.joints, scene.shapes, svg, pt, excludeIds, false, false, boost);
+    if (!DRAW_SNAP_TOOLS.includes(state.currentTool)) return findSnap(scene.joints, scene.shapes, svg, pt, excludeIds, false, false, boost, constraintToolPicks(state)); // TASK 1020: what the tool takes
     const snap = findSnap(state.joints, shapes, svg, pt, excludeIds, false, false, boost);
     return snapIsInert(scene.inert, snap) || onTextLetter(state, snap) ? asPositionSnap(snap) : snap;
 }

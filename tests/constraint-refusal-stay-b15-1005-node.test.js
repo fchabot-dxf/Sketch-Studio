@@ -34,7 +34,7 @@ function addCircle(app, cx, cy, r) {
   const id = 'C_' + c;
   st.shapes.push({ id, type: 'circle', joints: [c], radius: r, sketchId: st.activeSketchId });
   app.frames(2);
-  return { id, c, rim: [cx + r, cy] };
+  return { id, c, rim: [cx, cy - r] }; // TASK 1020: the top of the rim (its right end sat on Shaper's X axis, which Parallel / Perpendicular / Collinear now take there)
 }
 
 let checks = 0;

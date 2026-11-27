@@ -7,6 +7,7 @@ import { breakAt, applyBreak } from '#core/break.js';
 import { curveGeom, curveDistance } from '#core/curve-cuts.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { SNAP, TOOL_MODES } from '#core/constants.js';
+import { pickRank, OVERLAP_PX } from '#ui/snap-detection.js'; // TASK 1020 (R2-08): THE overlap rule of the shared pick
 import { resolveCanvasSvg, setCanvasCursor } from '#ui/cursor-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's line warns
 import { inertEntities, activeSketchPick, otherSketchPick } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not broken; TASK 659: only the active sketch is
@@ -80,11 +81,12 @@ export function handleBreakPointerUp() {
 }
 
 // the break at the nearest line, arc or circle within the pick radius that `include` accepts (#core/break.js breakAt: a held point within the
-// joint pick radius is split at), or null
+// joint pick radius is split at), or null. TASK 1020 (R2-08): where curves OVERLAP at the pointer (within OVERLAP_PX of the nearest) the shared
+// pick's rank breaks the tie (#ui/snap-detection.js pickRank: a solid curve over a construction line), never the shapes' order.
 function findClosestLine(worldPt, state, svg, viewState, include = (s, inert) => activeSketchPick(state, s, inert)) {
   const scale = getScale(svg, viewState);
   const thresh = SNAP.LINE_PX / scale;
-  let best = null, bestDist = thresh;
+  const hits = [];
 
   const inert = inertEntities(state);
   for (const shape of (state.shapes || [])) {
@@ -92,9 +94,14 @@ function findClosestLine(worldPt, state, svg, viewState, include = (s, inert) =>
     const g = curveGeom(state, shape);
     if (!g) continue;
     const d = curveDistance(g, worldPt);
-    if (d < bestDist) { bestDist = d; best = shape; }
+    if (d < thresh) hits.push({ shape, d, rank: pickRank(shape, null) });
   }
-  return best ? breakAt(state, best.id, worldPt, SNAP.JOINT_PX / scale) : null;
+  if (!hits.length) return null;
+  const near = Math.min(...hits.map((h) => h.d)) + OVERLAP_PX / scale;
+  const top = Math.max(...hits.filter((h) => h.d <= near).map((h) => h.rank));
+  let best = null;
+  for (const h of hits) if (h.d <= near && h.rank === top && (!best || h.d < best.d)) best = h;
+  return breakAt(state, best.shape.id, worldPt, SNAP.JOINT_PX / scale);
 }
 
 function renderBreakHover(svg, hit, viewState) {

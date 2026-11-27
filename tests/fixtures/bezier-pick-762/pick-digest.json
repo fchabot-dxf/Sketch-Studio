@@ -1,87 +1,87 @@
 {
  "0.2px/mouse": {
-  "hash": "49538dcef38594535e13e110",
+  "hash": "444ccd08d5bbf5545573c016",
   "counts": {
    "none": 16419,
-   "shape": 17727,
+   "shape": 17952,
    "axis-y": 341,
-   "joint": 4984,
+   "joint": 4759,
    "midpoint": 254,
    "axis-x": 676
   }
  },
  "0.2px/touch": {
-  "hash": "245bd11158247ca38bc7c700",
+  "hash": "0020ffa8abc3161b214c6d71",
   "counts": {
-   "shape": 25388,
+   "shape": 25613,
    "none": 5829,
-   "joint": 8224,
+   "joint": 7999,
    "axis-y": 72,
    "midpoint": 477,
    "axis-x": 411
   }
  },
  "1px/mouse": {
-  "hash": "c07a1c22fde7cb8af55d7245",
+  "hash": "bc10ec9d57d386f394e6706a",
   "counts": {
    "none": 16419,
-   "shape": 17727,
+   "shape": 17952,
    "axis-y": 341,
-   "joint": 4984,
+   "joint": 4759,
    "midpoint": 254,
    "axis-x": 676
   }
  },
  "1px/touch": {
-  "hash": "c14281a9a45bb38519783b2d",
+  "hash": "8de0c024e0e57efa23790ca7",
   "counts": {
-   "shape": 25388,
+   "shape": 25613,
    "none": 5829,
-   "joint": 8224,
+   "joint": 7999,
    "axis-y": 72,
    "midpoint": 477,
    "axis-x": 411
   }
  },
  "5px/mouse": {
-  "hash": "1858d94ca03e80b02219636f",
+  "hash": "1f310c1dc5d2141d108be182",
   "counts": {
    "none": 16419,
-   "shape": 17727,
+   "shape": 17952,
    "axis-y": 341,
-   "joint": 4984,
+   "joint": 4759,
    "midpoint": 254,
    "axis-x": 676
   }
  },
  "5px/touch": {
-  "hash": "a2f861ff09458c21e71905d6",
+  "hash": "568322a3c2dc955fb8e84696",
   "counts": {
-   "shape": 25388,
+   "shape": 25613,
    "none": 5829,
-   "joint": 8224,
+   "joint": 7999,
    "axis-y": 72,
    "midpoint": 477,
    "axis-x": 411
   }
  },
  "78px/mouse": {
-  "hash": "5be3f5213fdb694af238417a",
+  "hash": "1ddd388034034638d36c3a67",
   "counts": {
    "none": 16419,
-   "shape": 17727,
+   "shape": 17952,
    "axis-y": 341,
-   "joint": 4984,
+   "joint": 4759,
    "midpoint": 254,
    "axis-x": 676
   }
  },
  "78px/touch": {
-  "hash": "150abd56030c099c6ceb788e",
+  "hash": "c76e466b259b7bcefb5889db",
   "counts": {
-   "shape": 25388,
+   "shape": 25613,
    "none": 5829,
-   "joint": 8224,
+   "joint": 7999,
    "axis-y": 72,
    "midpoint": 477,
    "axis-x": 411

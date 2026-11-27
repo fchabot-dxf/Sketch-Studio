@@ -62,6 +62,27 @@ const CONSTRAINT_PRESELECT = Object.freeze({
 });
 
 /**
+ * TASK 1020 (R2-09, R1-14, R2-08): what the active constraint tool can take in THE pick (#ui/snap-detection.js findSnap `picks`), read from the
+ * CONSTRAINT_PRESELECT declaration above (the pre-selection's): `points` false for a tool that takes no point (Parallel, Perpendicular, Collinear,
+ * Tangent, Equal: a point is never their pick), `curve` the curves it takes, `picked` the curves it has already picked for this constraint. Both
+ * callers of the pick pass it, the click (input-manager toolSnap) and the hover (hover-manager updateHover), so the hover lights what a click
+ * takes. null for any other tool (it takes anything).
+ */
+export function constraintToolPicks(state) {
+    const spec = state && CONSTRAINT_PRESELECT[state.currentTool];
+    if (!spec) return null;
+    const pc = state.pendingConstraint;
+    const picked = new Set();
+    if (pc && pc.firstElement && pc.firstElement.type === 'shape') picked.add(pc.firstElement.id);
+    for (const item of (pc && Array.isArray(pc.selectionBuffer) ? pc.selectionBuffer : [])) if (item && item.type !== 'joint') picked.add(item.id); // a picked shape, or a { type, id } entity that is no point
+    return {
+        points: spec.accepts({ type: 'joint' }, null),
+        curve: (shape) => spec.accepts({ type: 'shape' }, shape),
+        picked,
+    };
+}
+
+/**
  * ONE activation entry point for all constraint tools (ribbon click and keyboard shortcut, every host).
  * Applies valid immediate pre-selections (1 line for H/V, 2 shapes for Equal), validates single-item
  * pre-selections so invalid picks (e.g. a joint for Parallel or a circle for H/V) are refused instead of

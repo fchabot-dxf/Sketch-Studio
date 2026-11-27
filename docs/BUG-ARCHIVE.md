@@ -2688,6 +2688,176 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 
 ---
 
+### BUG-310
+- **Date / turn:** 2026-11-27 (audit ID `B-01`; fixed in task `1028`)
+- **Reported by:** audit `1026` (`B-C06`, `B-A11`, `B-X09`, `B-X12`, `B-C2C07`, `B-C2C21`, `B-OV07`, `B-OV21`, `B-CP07`, `B-CP21`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-01`: emptying a draw-time box does not unlock it. The last valid text keeps the lock: Circle Ø 60, Backspace x2, Enter gives a Ø 6 circle with a driving `d1 = 6`. The Arc radius / sweep, the Slot span / width and the Polygon N do the same. The two-field Line and Rectangle boxes already unlocked.
+- **What was wrong:** an emptied single box sent a preview event with no `field` and no `value`, and each single-field tool's guard dropped it (`circle-tool.js`, `arc-tool.js`, `slot-tool.js` read the event by its field). The polygon's N field kept its count (`polygon-tool.js` keeps the old N when the text reads no number).
+- **Cause:** `packages/ui/numeric-input-manager.js` `handlePreview`: "unlocked" was sent only for a Ctrl+Z reset (`detail.reset`). A typed field the user emptied was not read as unlocked, and the single box's field was omitted when its text read nothing.
+- **Fix:** in `handlePreview` (ONE place): a typed field whose text is empty is sent as `detail.reset` (the unlock every tool already honours), and the single box always sends its `field`. No tool guard changed.
+- **Task id(s):** `1028`
+- **Fix merge sha:** open (`agents/drawbox-fix-1028`, awaiting merge)
+- **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-01 circle`, `B-01 arc`, `B-01 slot`, `B-01 polygon`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-C06 | Circle | ... | DEV: circles [3] dims 1 || ... FINAL shapes{C[r=3 c=-30,0]} cons{distance=6:d1Ø pointOnLine}`. After: `ROW B-C06 | ... | OK || ... FINAL shapes{C[r=30 c=-30,0]} cons{pointOnLine}`. `B-C2C07` before `dims [[51.37,false],[4,false]]`, after `dims [[51.37,false]]`: only the slot's own width dimension, which every slot gets, so the probe's check still prints DEV. `B-P07` before: N 5 kept; after: the remembered N (7).
+
+---
+
+### BUG-311
+- **Date / turn:** 2026-11-27 (audit ID `B-02`; fixed in task `1028`)
+- **Reported by:** audit `1026` (`B-R203`, `B-R205`, `B-R220`, `B-RC04`, `B-RC05`, `B-RC08`, `B-RC20`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-02`: a rectangle committed by Enter gets `pointOnLine` snaps to an axis that the same rectangle committed by a click does not. Example: 2-point W 40 H 20 from (-40,-10), where the right side lands on the Y axis.
+- **What was wrong:** the click path and the Enter path were two copies of the placement. Enter's copy re-ran `findSnap` on every corner of the placed rectangle.
+- **Cause:** `packages/ui/input-handlers/rect-tool.js` `finalizeRectFromActive` (the three `findSnap` / `applySnapConstraint` loops, one per mode).
+- **Fix:** ONE `placeRect(state, endPt, endSnap)` in `rect-tool.js`, called by the click (`handleRectPointerUp`) and by Enter (`finalizeRectFromActive`). The click's rules apply to both: snaps recorded at the clicks, a 0.01 coincident to an existing joint, and the typed sides as dimensions.
+- **Task id(s):** `1028`
+- **Fix merge sha:** open (`agents/drawbox-fix-1028`, awaiting merge)
+- **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-02`: Enter and click give equal constraint counts, 2-point and centre)
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-R205 ... cons{horizontal vertical horizontal vertical coincident coincident coincident coincident pointOnLine distance=40:d1 distance=20:d2} dof=8`. After: `cons{horizontal vertical horizontal vertical coincident coincident coincident coincident distance=40:d1 distance=20:d2} dof=16`, which is the click's `B-R209`. Centre: `B-RC05` after `dof=26` = `B-RC09` (click) `dof=26`.
+
+---
+
+### BUG-312
+- **Date / turn:** 2026-11-27 (audit ID `B-03`; fixed in task `1028`)
+- **Reported by:** audit `1026` (`B-R302`..`B-R310`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-03`: the 3-point rectangle has no value box on click 1 or click 2. A typed digit opens the legacy box, but Enter then draws nothing or ignores the typed height, and `0` is not refused.
+- **What was wrong:** the rectangle tool's preview / commit listeners read only the two-field W x H box. A 3-point rectangle had no box of its own, and Enter returned false without a second point.
+- **Cause:** `packages/ui/input-handlers/rect-tool.js` (`onPreview` handled the sized modes only; `finalizeRectFromActive` returned false for a 3-point rectangle; no `openCreationBoxes` for the 3-point mode).
+- **Fix:** the 3-point rectangle opens a LENGTH box after click 1 and a HEIGHT box once the base is placed, both through the shared `openCreationBoxes` path. A typed length holds the base along the cursor's direction, and a typed height holds the third point on the cursor's side. Enter and a click place the same thing through `placeBase` / `placeRect`. The typed length and height become the base side's and the next side's dimensions (name / formula / `param = value` kept). `0` is refused by the shared size rule.
+- **Task id(s):** `1028`
+- **Fix merge sha:** open (`agents/drawbox-fix-1028`, awaiting merge)
+- **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-03 ... by enter`, `B-03 ... by click`, `B-03 ... a typed 0 is refused`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-R306 | Rect 3-point | after click 2: type 20 (height), Enter | DEV: bbox {"w":50,"h":30,...}`. After: `ROW B-R306 ... | OK || ... L[len=50 ...] L[len=20 ang=-90 ...]`. `B-R309` (typed 0) before: 4 shapes drawn; after: `shapes{}`. `B-R303` / `B-R304` still print `DEV: bbox null`: their cells expected a W x H box at click 1. Enter now places the base and opens the height box (`LIVE ... box=single[0] focus=dimInput`).
+
+---
+
+### BUG-313
+- **Date / turn:** 2026-11-27 (audit ID `B-04`; fixed in task `1028`)
+- **Reported by:** audit `1026` (`B-A303`, `B-A305`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-04`: the 3-point arc slot drops a typed span (`30`) and its formula (`d1 / 2`). The centre-point arc slot keeps its span.
+- **What was wrong:** the span dimension was made for the straight modes and the centre-point arc only.
+- **Cause:** `packages/ui/input-handlers/slot-tool.js` `commitSlot` (`spanJoints` required `!isArcMode(mode)`).
+- **Fix:** the same condition now includes the 3-point arc slot. Its span box is the distance between its two end centres (`resolveSpanEnd`), so a typed span is a driving distance on `c1Id`-`c2Id`. The centre-point arc slot keeps its radius.
+- **Task id(s):** `1028`
+- **Fix merge sha:** open (`agents/drawbox-fix-1028`, awaiting merge)
+- **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-04`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-A303 ... cons{... distance=23.34:d1Ø}` (no span). After: `cons{... distance=23.34:d1Ø distance=30:d2}`. `B-A305` after: `distance=20{d1 / 2}`.
+
+---
+
+### BUG-314
+- **Date / turn:** 2026-11-27 (audit ID `B-05`; fixed in task `1028`)
+- **Reported by:** audit `1026` (`B-L30`, `B-X02`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-05`: Line, a typed length, then a right-click: TWO segments, the typed one (40) and a stray one to the cursor (1.03).
+- **What was wrong:** the right button's DOWN committed the segment and started the next one. Its UP then reached `handleLinePointerUp` and placed a click segment to the cursor. Untyped, the same UP made a zero-length segment, which ended the chain only by accident (the abort).
+- **Cause:** `packages/ui/input-handlers/drawing-tools.js` `handleDrawingPointerDown` (the right-click branch committed the segment and left the chain open).
+- **Fix:** the right-click branch (ONE place) commits the segment and finishes the chain (`finishLineChain`), typed or not. The release finds no line being drawn. A typed length the sketch refuses (BUG-315) keeps the chain.
+- **Task id(s):** `1028`
+- **Fix merge sha:** open (`agents/drawbox-fix-1028`, awaiting merge)
+- **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-05`), `tests/drawbox-fix-1028-live.test.js` (`B-05`, desktop 1280x800, real right button)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-L30 ... FINAL shapes{L[len=40 ...] L[len=1.03 ...]}`. After: `ROW B-L30 ... FINAL shapes{L[len=40 ang=-42.89 -60,10>-30.69,37.22]} cons{distance=40:d1}`. Behaviour change (advisor-approved): after a typed right-click the chain ends, as it already did untyped.
+
+---
+
+### BUG-315
+- **Date / turn:** 2026-11-27 (audit IDs `B-06`, `B-08`; fixed in task `1028`)
+- **Reported by:** audit `1026` (`B-X03`, `B-OC1`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-06`: an Enter-committed Line merged its end with ANY joint within 0.5 mm, and the solver moved an unrelated line. `B-08`: a typed length that conflicts with a LOCKED point silently became a reference `(40)`.
+- **What was wrong:** the Enter path (`finalizeLineFromActive`) reused an existing joint within 0.5 mm as the end, while the click path makes a new end joint with a coincident within 0.01. A typed distance that the sketch could not hold came in as a reference, and nothing told the user.
+- **Cause:** `packages/ui/input-handlers/line-tool.js` `finalizeLineFromActive` (`findNearbyJoint(..., 0.5)` reused as the end joint). For B-08, both commit paths created the typed distance and never checked that it drives.
+- **Fix:** ONE merge rule, `mergeEndWithNearby` (the click's: a new end joint, coincident with a joint within `END_MERGE_TOL` = 0.01), used by both paths. ONE `addTypedSizes` makes the typed length's dimension in both paths. When it came in as a reference measuring another value, the segment is put back (`refuseSegment`: the snapshot from before it, the draw goes on) and the length field is refused with the edit box's wording (`numeric-input-manager.js` `cantSetText`, BUG-181: `Can't set to 40.004 mm — the sketch is over constrained`) until it is typed again (`refuseLiveValue`).
+- **Task id(s):** `1028`
+- **Fix merge sha:** open (`agents/drawbox-fix-1028`, awaiting merge)
+- **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-06`, `B-08` by Enter and by click)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-X03 ... L[len=10 ang=-90 10.1,30>10.1,40] L[len=40.3 ang=0 -30.2,30>10.1,30]` (the old line moved to x 10.1). After: `ROW B-X03 ... FINAL shapes{L[len=10 ang=-90 10,30>10,40] L[len=40.3 ang=0 -30,30>10.3,30]}` (the old line stays at x 10). `B-L14` (end exactly on an existing endpoint) before `DEV: end landed on the point but no coincident`, after `OK ... cons{horizontal coincident distance=40:d1 ...}`. The audit's `B-OC1` (locked point 0.3 mm past the typed end) no longer merges, so the typed 40.3 now drives (`cons{... distance=40.3:d1 ...}`, before `distance=40.3:d1(ref)`). The probe still prints `DEV: no warning`, but nothing is refused because nothing conflicts. A real conflict (an end within 0.01 of a locked point, typed 40.004 to a point 40 away) is refused: node test `B-08`.
+
+---
+
+### BUG-316
+- **Date / turn:** 2026-11-27 (audit ID `B-07`; fixed in task `1028`)
+- **Reported by:** audit `1026` (`B-A20a`..`B-A20d`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-07`: an Arc sweep of `0` or `-90` was silently ignored (the arc was placed at the cursor's sweep). `360` / `720` were clamped to 359.999 and made an arc whose start and end are the same point.
+- **What was wrong:** the box refused only lengths. The arc tool dropped a sweep of 0 or less and clamped 360 or more.
+- **Cause:** `packages/ui/input-handlers/arc-tool.js` `takeTyped` (`detail.value > 0 ? Math.min(value, 359.999) : null`); `numeric-input-manager.js` `liveRefusal` had no rule for an angle field.
+- **Fix:** a box may declare its own value rule (`{ single: { field, quantity, refuse } }` -> `showSingleInput(..., refuse)`). `numeric-input-manager.js` `boxRefusal` is the ONE refusal: the parser's message, else the field's rule, else its quantity's. The arc's sweep box declares `sweepRefusal` ("A sweep must be more than 0 and less than 360 degrees."), and the same rule decides what locks the sweep. Enter and a click place nothing until the text is fixed.
+- **Task id(s):** `1028`
+- **Fix merge sha:** open (`agents/drawbox-fix-1028`, awaiting merge)
+- **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-07`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-A20a | Arc | sweep 0, Enter | ... FINAL shapes{arc[-30,0 10,0 -6.7,-32.52]}`, `B-A20c` `arc[-30,0 10,0 10,0]`. After: `B-A20a`..`B-A20d` `FINAL shapes{}`.
+
+---
+
+### BUG-317
+- **Date / turn:** 2026-11-27 (audit IDs `B-09`, `B-18`, `B-19`; fixed in task `1028`)
+- **Reported by:** audit `1026` (`B-F14d`; `B-F06`, `B-F14a`, `B-F14b`, `B-F14e`, `B-F15`, `B-O04`, `B-O10a`, `B-O10d`, `B-O10e`; `B-F08`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-09`: Fillet `6abc` said "Enter a radius greater than zero". `B-18`: Fillet and Offset refused by toast only, and with different wording from each other and from the draw boxes. `B-19`: a canvas click with a typed radius CANCELLED the fillet.
+- **What was wrong:** Fillet showed its own sentence except for 5 parse codes. Offset prefixed "Offset: ". Neither used the draw boxes' inline hint. A click on empty canvas with the radius box open ran `cancelAll`.
+- **Cause:** `packages/ui/input-handlers/fillet-tool.js` `commitFilletInput` (the `formulaErr` whitelist + toast) and `pickWhileInputOpen` (`cancelAll` on an empty-canvas click); `packages/ui/input-handlers/offset-tool.js` `commitOffsetInput` (toast).
+- **Fix:** both boxes refuse through `numeric-input-manager.js` `boxRefusal`, the draw boxes' rule and wording (Offset passes its own value rule, `core/offset.js` `offsetDistanceRefusal`: any sign, never 0). The text is shown under the box, in the ONE hint line, by the external box's handle `refuse(text)` (`attachExternalCompletion`), live while typing and on Enter, with no toast. An empty-canvas click with the Fillet box open commits it (`commitFilletInput`), as a click commits a draw box. Esc still cancels.
+- **Task id(s):** `1028`
+- **Fix merge sha:** open (`agents/drawbox-fix-1028`, awaiting merge)
+- **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-09 / B-18 fillet`, `B-18 offset`, `B-19 fillet`); updated: `tests/fillet-polish-666-node.test.js`, `tests/fillet-polish-666-live.test.js` (F9: the refusal is inline, no toast)
+- **Status:** fixed
+- **Family:** `notice-wording`
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-F14d | Fillet | radius "6abc", Enter | ... toasts=["⚠️Enter a radius greater than zero"]`, `B-O10d ... toasts=["⚠️Offset: unexpected 'abc' at 1."]`, `B-F08 | DEV: arcs 0`. After: `B-F14d ... hint="unexpected 'abc' at 1" toasts=[]`, `B-F14a ... hint="A length must be more than 0." toasts=[]`, `B-O10d ... hint="unexpected 'abc' at 1" toasts=[]`, `B-O10a ... hint="an offset distance cannot be 0 (a negative distance puts the offset on the other side)" toasts=[]`, `B-F08 | OK` (1 arc). `B-F06` prints `DEV: arcs 0 toasts []`: its check wants a toast, and the refusal is now the hint `"nothing to evaluate"`.
+
+---
+
+### BUG-318
+- **Date / turn:** 2026-11-27 (audit ID `B-13`; fixed in task `1028`)
+- **Reported by:** audit `1026` (`B-X04`, `B-A17`, `B-P15`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-13`: a name in an angle or count field was refused (`"=" is not allowed here`): Line angle `ang = 30`, Arc sweep `sw = 90`, Polygon N `n = 6`. The pattern dialog accepts names in its Quantity / Angle fields.
+- **What was wrong:** `readBoxText` let `name = value` through in a length field only.
+- **Cause:** `packages/ui/numeric-input-manager.js` `readBoxText` (`allowAssign` defaulted to `quantity === 'length'`).
+- **Fix (advisor ruling, option c):** `readBoxText` reads `name = value` in every box (ONE place). An angle or a count box makes no dimension: `param = value` with an existing user parameter updates that parameter (the tools apply `liveAssign` at their commit: line angle, arc sweep, polygon N, as they already do for a length), and a FREE name is refused with "a name needs a dimension; this value makes none".
+- **Task id(s):** `1028`
+- **Fix merge sha:** open (`agents/drawbox-fix-1028`, awaiting merge)
+- **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-13`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-X04 | Line | angle box: a name "ang = 30" ... hint=""=" is not allowed here"`. After: `ROW B-X04 ... hint="a name needs a dimension; this value makes none"` (likewise `B-A17` `sw = 90`, `B-P15` `n = 6`: no such parameter, so it is a free name). An existing parameter (`ang = 30`, `n = 5`) updates it and draws: node test `B-13`.
+
+---
+
+### BUG-319
+- **Date / turn:** 2026-11-27 (audit IDs `B-14`, `B-15`; fixed in task `1028`)
+- **Reported by:** audit `1026` (`B-R202`, `B-R202b`, `B-RC02`, `B-RC02b`; `B-C04`, `B-X08`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `B-14`: Rectangle (2-point, centre): click, then Enter with no size closed the box and left the draw armed. `B-15`: Tab inside a one-field box (Circle Ø, Arc, Slot) moved the focus out to the page (the SKETCHES card's collapse button), so a later Enter pressed that button.
+- **What was wrong:** `enterCorner` returned null before the cursor moved, so the too-small check (which keeps the box open) was skipped. The one-field box let Tab go to the browser in draw mode.
+- **Cause:** `packages/ui/input-handlers/rect-tool.js` `enterCorner`; `packages/ui/numeric-input-manager.js` single-box keydown (Tab handled in edit / view mode only).
+- **Fix:** `enterCorner` falls back to the first click itself (a size of 0: the box stays open). In a draw-time one-field box, Tab goes to the "next" field, which is this field: the focus stays and the text is selected, like the two-field box's Tab.
+- **Task id(s):** `1028`
+- **Fix merge sha:** open (`agents/drawbox-fix-1028`, awaiting merge)
+- **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-14`, `B-15`), `tests/drawbox-fix-1028-live.test.js` (`B-15`, desktop 1280x800 + phone 390x844)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-R202 ... | DEV: box closed on a refused Enter`; after: `OK`. `ROW B-C04 ... LIVE ... box=single[80] focus=BUTTON`; after: `focus=dimInput`.
+
+---
+
 ## Family index
 
 Entries in each family are listed in chronological date order (`MM-DD`, oldest first) so recurring patterns read as a timeline.
@@ -2699,8 +2869,8 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
-| `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26) |
-| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26) |
+| `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
+| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-311 (11-27) |
 | `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
@@ -2709,7 +2879,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 
 ---
@@ -2723,4 +2893,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 - [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-150..BUG-154 fixed in task `1011`; BUG-160..BUG-161 fixed in task `1012`; BUG-170..BUG-174 fixed in task `1014`; BUG-180..BUG-183 fixed in task `1013`; BUG-140..BUG-147 fixed in task `1008`).
 - [docs/FILES-AUDIT-1024.md](FILES-AUDIT-1024.md) — Files and documents audit (task `1024`: Save / Open / tabs / import / templates / export / file dialog; rows `F-01`..).
 - [docs/DESIGN-RUN-AUDIT-1016.md](DESIGN-RUN-AUDIT-1016.md), [docs/DESIGN-RUN-AUDIT-1017.md](DESIGN-RUN-AUDIT-1017.md) — Real-design audits, parts A-D (tasks `1016`, `1017`; rows `R1-*` / `R2-*`; fixes in tasks `1018`-`1021`; BUG-190..BUG-199 from task `1018`: R1-01, R1-02, R1-03, R1-05, R1-07, R1-12, R2-01, R2-03, R2-05, R2-13).
-- [docs/DRAWBOX-AUDIT-1026.md](DRAWBOX-AUDIT-1026.md) — Draw-box audit (task `1026`; every typed size input of the drawing and modify tools, `425` live cells, rows `B-01`..`B-19`; audit-only, nothing registered above).
+- [docs/DRAWBOX-AUDIT-1026.md](DRAWBOX-AUDIT-1026.md) — Draw-box audit (task `1026`; every typed size input of the drawing and modify tools, `425` live cells, rows `B-01`..`B-19`; B-01..B-09, B-13, B-14, B-15, B-18, B-19 fixed in task `1028` as BUG-310..BUG-319).

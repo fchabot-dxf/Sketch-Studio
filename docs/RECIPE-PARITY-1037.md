@@ -93,7 +93,7 @@ To rotate our centre rectangle a user must delete four constraints and add perpe
 ### D-3 (c) 3-Point Rectangle: 4 Perpendicular (ours) vs Perpendicular + Parallel x2 (Fusion)
 Same true DOF (5), same shape as built. Differences a user sees: 8 perpendicular glyphs (2 per constraint) instead of Fusion's one Perpendicular and two Parallel; deleting one of ours changes nothing (the other three still define the rectangle), while in Fusion deleting the Perpendicular leaves a parallelogram. Ours also feeds the solver one redundant constraint (model rank 13 of 14 rows: `model: unknowns 18 equations 14 rank 13 DOF 5`), which `core/shapes.js:229-230` says the polygon avoids on purpose ("a redundant constraint, which the solver must not be fed").
 ```
-OURS constraints (8): perpendicular(L0,L1)[-1] perpendicular(L1,L2)[1] perpendicular(L2,L3)[-1] perpendicular(L3,L0)[1] coincident(L0.s,L3.s) ...
+OURS constraints (8): perpendicular(L0,L1)[-1] perpendicular(L1,L2)[1] perpendicular(L2,L3)[-1] perpendicular(L3,L0)[1] coincident(L0.s,L3.s) coincident(L0.e,L1.s) coincident(L2.e,L1.e) coincident(L2.s,L3.e)
 OURS visible glyphs (nothing selected): {"perpendicular":8}
 ```
 **Fix = recipe only** (`core/shapes.js:203-207`). It does NOT fix bug N-A (Fusion's recipe still has one branch-locked perpendicular).

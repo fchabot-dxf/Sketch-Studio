@@ -72,6 +72,17 @@ export function splitArcConstraints(state, target, piece, g, u0, u1) {
     }
   }
   dropConstraints(state, drop);
+  // TASK 1036 (BUG-375, N-7): a fillet arc's virtual sharp V (`filletSharp`) went onto both arcs (the piece is a copy of the target). An arc keeps it
+  // while it still touches the corner: it is tangent to a leg V is held on (the lock rule reads V through that arc, #core/lock-state.js). The arc
+  // that touches no leg drops it, so no arc claims a corner it has no leg at.
+  for (const arc of [target, piece]) if (arc.filletSharp && !touchesFilletLeg(state, arc)) delete arc.filletSharp;
+}
+
+// is `arc` tangent to a curve its virtual sharp V is held on (V's pointOnLine on that curve)?
+function touchesFilletLeg(state, arc) {
+  const legs = new Set(state.constraints.filter((c) => c && c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.joint === arc.filletSharp && c.shape).map((c) => c.shape));
+  return state.constraints.some((c) => c && c.type === CONSTRAINT_TYPES.TANGENT && (
+    (c.circle === arc.id && legs.has(c.line)) || (Array.isArray(c.shapes) && c.shapes.includes(arc.id) && c.shapes.some((id) => id !== arc.id && legs.has(id)))));
 }
 
 /**

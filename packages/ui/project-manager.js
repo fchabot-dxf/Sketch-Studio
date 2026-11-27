@@ -115,7 +115,7 @@ export function openProjectManager({ store, actions, toolbar = [], account = nul
   let projects = [];
   let menu = null;
   let closed = false;
-  const thumbCache = new Map(); // `${id}:${updatedAt}` -> svg markup, or '' when there is nothing to draw
+  const thumbCache = new Map(); // `${id}:${updatedAt}` -> a Promise of the svg markup ('' when there is nothing to draw; TASK 1036)
 
   const showMsg = (text, kind = 'info', link = null) => {
     msgEl.hidden = !text; msgEl.className = 'sk-pm-msg' + (kind === 'error' ? ' error' : ''); msgEl.textContent = text || '';
@@ -249,14 +249,18 @@ export function openProjectManager({ store, actions, toolbar = [], account = nul
       const tile = main.querySelector(`.sk-pm-tile[data-design="${CSS.escape(d.id)}"] [data-thumb]`);
       if (!tile) continue;
       const key = d.id + ':' + d.updatedAt;
-      let svg = thumbCache.get(key);
-      if (svg === undefined) {
+      let thumb = thumbCache.get(key);
+      if (thumb === undefined) {
         await new Promise((r) => setTimeout(r, 0));
-        try { const full = await store.get(d.id); svg = (full && designThumbnailSvg(full.document)) || ''; } catch (_) { svg = ''; } // an unreadable design keeps its placeholder; opening it shows the reason
-        thumbCache.set(key, svg);
+        let full = null;
+        try { full = await store.get(d.id); } catch (_) { full = null; } // an unreadable design keeps its placeholder; opening it shows the reason
+        // TASK 1036 (BUG-372): the thumbnail settles once its texts' letters are built (designThumbnailSvg). The loop does not wait for it, so a design
+        // without text never waits on another design's font; a font that cannot be read leaves that design's placeholder, as an unreadable design does
+        thumb = full ? designThumbnailSvg(full.document).then((svg) => svg || '', () => '') : Promise.resolve('');
+        thumbCache.set(key, thumb);
       }
       if (closed || run !== thumbRun) return;
-      if (svg) { tile.classList.remove('blank'); tile.innerHTML = svg; }
+      thumb.then((svg) => { if (!closed && run === thumbRun && svg && tile.isConnected) { tile.classList.remove('blank'); tile.innerHTML = svg; } });
     }
   }
 

@@ -2,17 +2,15 @@
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { arcSweepInfo } from '#core/geometry.js';
-import { CURVE_KINDS, bezierPoints } from '#core/curve-kinds.js'; // TASK 761: a bezier's control points / sampled points, declared once
+import { CURVE_KINDS, bezierPoints, exportedShapes } from '#core/curve-kinds.js'; // TASK 761: a bezier's control points / sampled points, declared once; TASK 1036: what is exported (BUG-300's rule, moved there)
 import { track } from '#ui/analytics.js'; // TASK 738
 
 // Task 614: the stroke width of an export when the caller passes none. A DECLARED export constant (was the LINE_STROKE display knob, whose
 // factory value was 1): a display look never changes what is exported.
 export const EXPORT_STROKE_WIDTH = 1;
 
-// BUG-300 (F-81 / F-81b): what an export writes, declared once for the SVG and the DXF writer: the drawn kinds (circles included) and never
-// construction geometry (a helper, not part of the design: Fusion leaves it out of its export too).
-const EXPORTED_TYPES = ['line', 'arc', 'bezier', 'circle'];
-const exportedShapes = (state) => state.shapes.filter(s => s && EXPORTED_TYPES.includes(s.type) && !s.isConstruction);
+// BUG-300 (F-81 / F-81b): what an export writes is #core/curve-kinds.js exportedShapes (the drawn kinds, never construction), for the SVG and the DXF
+// writer (and the design thumbnail, TASK 1036).
 
 function getJointPos(state, jid) {
   const j = state.joints.get(jid);
@@ -65,12 +63,15 @@ export function buildSVG(state, opts = {}) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const elems = [];
 
+  // TASK 1036 (BUG-371, N-3): THE Y flip of the SVG export: every point written (a closed loop's corners, a line's ends, an arc's centre / start / end,
+  // a circle's centre, a bezier's points, a sampled curve's points) goes through it; a mirror also turns an arc's direction round (`turn`).
   const transform = (p) => {
     let x = p.x * scale;
     let y = p.y * scale;
     if (invertY) y = -y;
     return { x, y };
   };
+  const turn = invertY ? -1 : 1;
 
   // Build mapping of joint positions and cluster by coordinate to handle double joints
   const coordKey = (p) => `${p.x.toFixed(6)},${p.y.toFixed(6)}`;
@@ -97,7 +98,7 @@ export function buildSVG(state, opts = {}) {
   // Detect simple cycles (all nodes degree==2, nodeCount>=3) and emit polygons
   const emittedEdgePairs = new Set();
   const emitPolygonFromCycle = (cycleKeys) => {
-    const pts = cycleKeys.map(k => { const [x,y] = k.split(','); return { x: Number(x) * scale, y: Number(y) * scale }; });
+    const pts = cycleKeys.map(k => { const [x,y] = k.split(','); return transform({ x: Number(x), y: Number(y) }); });
     const pointsAttr = pts.map(p => `${formatNum(p.x, precision)},${formatNum(p.y, precision)}`).join(' ');
     const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
     // Update bounds from polygon points
@@ -165,7 +166,7 @@ export function buildSVG(state, opts = {}) {
       const endAngle = Math.atan2(en0.y - c0.y, en0.x - c0.x);
       // TASK 550: direction and large-arc from the one arc-sweep function (a stored largeArc is ignored; a fillet arc has no flags)
       const info = arcSweepInfo(c0, st0, en0, { sweep: s.sweep });
-      const largeArc = info.large; const sweep = info.dir > 0;
+      const largeArc = info.large; const sweep = info.dir > 0;   // the arc's own direction (the sampled points below walk it)
 
       // Transform center and radius
       const center = transform(c0);
@@ -179,12 +180,11 @@ export function buildSVG(state, opts = {}) {
         const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
         elems.push(`<polyline points="${pointsAttr}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
       } else {
-        const startX = center.x + r * Math.cos(startAngle);
-        const startY = center.y + r * Math.sin(startAngle);
-        const endX = center.x + r * Math.cos(endAngle);
-        const endY = center.y + r * Math.sin(endAngle);
+        const onCircle = (a) => transform({ x: c0.x + r0 * Math.cos(a), y: c0.y + r0 * Math.sin(a) });
+        const { x: startX, y: startY } = onCircle(startAngle);
+        const { x: endX, y: endY } = onCircle(endAngle);
         const la = largeArc ? 1 : 0;
-        const sw = sweep ? 1 : 0;
+        const sw = info.dir * turn > 0 ? 1 : 0;   // as written: mirrored, the arc turns the other way
         const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
         elems.push(`<path d="M ${formatNum(startX, precision)} ${formatNum(startY, precision)} A ${formatNum(r, precision)} ${formatNum(r, precision)} 0 ${la} ${sw} ${formatNum(endX, precision)} ${formatNum(endY, precision)}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
       }

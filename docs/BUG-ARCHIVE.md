@@ -3310,6 +3310,36 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `PH-003 | rect-2pt | after1st | pinch zoom (2 fingers) | ... active=no shapes=12`; after: `PH-003 | rect-2pt | after1st | pinch zoom (2 fingers) | ... active=rect shapes=8`.
 
+### BUG-360
+- **Date / turn:** 2026-11-27 (plan ID `C-1`, part of `X-01`; fixed in task `1034`)
+- **Reported by:** task `1031` plan (docs/INPUT-UNIFY-PLAN-1031.md, probe `.evidence/1031/probe-enter-snap.out`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `C-1`: Circle, nothing typed, the cursor on an existing point at the rim: a click puts the point ON the circle, Enter does not (one constraint less). Probe: `Circle rim on point p  click ... [pointOnLine,pointOnLine]` / `enter ... [pointOnLine]`.
+- **What was wrong:** two commit paths for the rim step. The click passed its locked snap to `commitCircle`; Enter (`finalizeCircleFromActive`) passed none (the snap it could have read, `state.active.preview.snapTarget`, is overwritten by every `updatePreview`).
+- **Cause:** `packages/ui/input-handlers/circle-tool.js` `finalizeCircleFromActive` (its `commitCircle(state, r)` call, no snap).
+- **Fix:** Circle runs in the tool session (`packages/ui/tool-session.js`, task 1034): ONE step rule for every device and for Enter. Enter steps at the session's last hover (`at` and the snap the cursor showed), so its rim keeps the snap as the click's does; ONE build (`buildCircle`). Both old paths are deleted.
+- **Task id(s):** `1034`
+- **Fix merge sha:** open (`agents/circle-trial-1034`, awaiting merge)
+- **Guarding test file(s):** `tests/circle-session-1034-node.test.js` (B1 click-click = B2 click + hover + Enter = B3 tap-tap = B4/B5 drag: the same document, point-on-circle), `tests/circle-session-1034-live.test.js` (desktop `rim-hover-enter` = `rim-click-click`)
+- **Status:** fixed (Circle). The other tools' `X-01` rows (Line, Rect, Polygon, Arc, Slot) stay open until each migrates.
+- **Family:** `snap-not-applied`
+- **History:** found in task `1031` (plan) -> fixed in task `1034`. After: `B2 mouse: click centre, hover b, Enter: builds=1 vias=click,enter circles=1`, its document identical to B1's: `constraints:[{"joint":"#2","shape":"#3","type":"pointOnLine"}]`.
+
+### BUG-361
+- **Date / turn:** 2026-11-27 (audit ID `N-2`; fixed in task `1034`)
+- **Reported by:** audit `1035` (shape model, probed)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `N-2`: the Circle preview ignores a typed diameter: it draws the cursor's radius (10) while the preview object and the committed circle both say radius 30.
+- **What was wrong:** the renderer drew the circle preview from the cursor distance and never read the preview's `radius`.
+- **Cause:** `packages/ui/svg-renderer.js` circle preview branch (`const r = Math.hypot(p.x - a.x, p.y - a.y)`).
+- **Fix:** the circle preview draws `active.preview.radius` when there is one; the Circle step's `preview` (`circle-tool.js`) gives the radius its build makes (the typed diameter's half, else the cursor's). Untyped, both are the cursor distance, so an untyped preview is unchanged.
+- **Task id(s):** `1034`
+- **Fix merge sha:** open (`agents/circle-trial-1034`, awaiting merge)
+- **Guarding test file(s):** `tests/circle-session-1034-node.test.js` (A1-A4: the dashed preview circle's r mid-draw = the built radius), `tests/circle-session-1034-live.test.js` (N-2 checks, desktop + phone; crops `.evidence/1034/live-typed-*-preview-*.png`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1035` -> fixed in task `1034`. Before (node, the test run on the old renderer): `A1 mouse: click centre, type 60, Enter: ... previewR=20 builtR=30`. After: `A1 ... previewR=30 builtR=30`.
+
 ---
 
 ## Family index
@@ -3324,7 +3354,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
-| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27) |
+| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27), BUG-360 (11-27) |
 | `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
@@ -3333,7 +3363,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-361 (11-27) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 

@@ -673,7 +673,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Status:** fixed
 - **Family:** `solver`
 - **Related:** BUG-005, BUG-059, BUG-060, BUG-076
-- **History:** found in hunt 784 2026-11-18 -> 789 merged 2026-11-19 -> owner widened <=0 refusal to all distances -> 789b merged 2026-11-19
+- **History:** found in hunt 784 2026-11-18 -> 789 merged 2026-11-19 -> owner widened <=0 refusal to all distances -> 789b merged 2026-11-19 -> audit 1035 (N-5) found Shaper's Fusion / STL import landing without the arc equal: BUG-373, fixed in task 1036 (one shared landing)
 
 ### BUG-047
 - **Date / turn:** 2026-11-19 (turn ~2478)
@@ -3310,6 +3310,115 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `PH-003 | rect-2pt | after1st | pinch zoom (2 fingers) | ... active=no shapes=12`; after: `PH-003 | rect-2pt | after1st | pinch zoom (2 fingers) | ... active=rect shapes=8`.
 
+### BUG-370
+- **Date / turn:** 2026-11-27 (audit `1035` appendix `N-1`; fixed in task `1036`)
+- **Reported by:** audit `1035` (probe `probe-preview-vs-final.mjs`, section A)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab, Arc tool)
+- **Report:** `N-1`: the Center Point Arc PREVIEW goes the wrong way when the sweep crosses 180 deg. Centre, start at 170 deg, cursor moved +20 deg to 190 deg: the preview path is `A ... 0 1,0` (the 340 deg arc the other way); the committed arc is `sweep true`, 20.29 deg. Also the 3-Point Arc preview (same mirror).
+- **What was wrong:** the dashed preview drew the long way round whenever the atan2 angles wrapped at the +-180 deg line; the arc placed by the click was the short one.
+- **Cause:** `packages/ui/preview-manager.js` `updatePreview` (`case 'arc'`) copied only centre / radius / angles / cursor into `state.active.preview` and dropped the `largeArc` / `sweep` the Arc tool passes (`arc-tool.js` `drawSweepPreview`, `drawThreePointPreview`), so the renderer's fallback (`svg-renderer.js` arc preview) guessed the flags from the raw angles (`endAngle > startAngle`).
+- **Fix:** `preview-manager.js` passes the tool's `largeArc` and `sweep` with the angles (one place); the renderer already prefers them. The arc slots' previews were already right (`calculateArcPath` with the slot's own sweep, the commit's data): guarded, not changed.
+- **Task id(s):** `1036`
+- **Fix merge sha:** open (`agents/shape-bugs-1036`, awaiting merge)
+- **Guarding test file(s):** `tests/shape-bugs-1036-node.test.js` (`N-1a` Center Point Arc both ways + a 270 deg sweep, `N-1b` 3-Point Arc, `N-1c` arc slots), `tests/arc-preview-1036-live.test.js` (desktop 1280x800 mouse, phone 390x844 touch)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1035` (`N-1`) -> fixed in task `1036`. Probe before: `A preview path d: M -29.246...,5.938... A 29.843...,29.843... 0 1,0 ...` vs `A committed arc: sweep true span(deg) 20.29 large false`; after: the live test prints `desktop: preview flags 0,1 ..., committed flags 0,1`.
+
+### BUG-371
+- **Date / turn:** 2026-11-27 (audit `1035` appendix `N-3`; fixed in task `1036`)
+- **Reported by:** audit `1035` (probe `probe-preview-vs-final.mjs`, section C)
+- **App(s) & host:** SketchStudio (Export SVG, "Invert Y axis (SVG)")
+- **Report:** `N-3`: SVG export with "Invert Y axis (SVG)" does not flip closed line loops: a closed 4-line loop comes out at y 0..5 while a lone line at y 2 comes out at y -2. Every closed rectangle in such an export is mirrored against the rest.
+- **What was wrong:** the closed line loops (written as one `<polygon>`) kept their Y while every other part was flipped.
+- **Cause:** `apps/sketchstudio/ui/export-manager.js` `buildSVG` `emitPolygonFromCycle` applied `scale` itself and not the Y flip of `transform()`.
+- **Fix:** ONE Y flip in `buildSVG`: every written point goes through `transform` (the polygon's corners now too); a mirrored arc turns the other way (`turn`, see BUG-376). With the box off the output is byte-identical (probe `probe-n3-svg-invert`, `OFF-IDENTICAL`). The DXF writer (always Y-up, task `1027`) is untouched.
+- **Task id(s):** `1036`
+- **Fix merge sha:** open (`agents/shape-bugs-1036`, awaiting merge)
+- **Guarding test file(s):** `tests/shape-bugs-1036-node.test.js` (`N-3`: every part, with and without arcApprox, and the DXF unchanged by the box), `tests/export-roundtrip-1027-node.test.js`
+- **Status:** fixed
+- **Family:** `export-svg`
+- **Related:** BUG-301, BUG-376
+- **History:** found in audit `1035` (`N-3`) -> fixed in task `1036`. Probe before: `polygon  points="0.000,0.000 10.000,0.000 10.000,5.000 0.000,5.000"` with invertY; after: `polygon  points="0.000,0.000 10.000,0.000 10.000,-5.000 0.000,-5.000"`.
+
+### BUG-372
+- **Date / turn:** 2026-11-27 (audit `1035` appendix `N-4`; fixed in task `1036`)
+- **Reported by:** audit `1035` (probe `probe-thumbnail.mjs`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (project manager thumbnails)
+- **Report:** `N-4`: a design that is only text has no thumbnail; a mixed design's thumbnail has no letters; the thumbnail draws construction geometry, which the export leaves out. Advisor rule: the thumbnail draws what the export draws (no construction) plus the text's letters.
+- **What was wrong:** text-only designs showed the blank placeholder; letters never appeared; construction circles / lines were drawn.
+- **Cause:** `packages/ui/design-thumbnail.js` flattened the STORED document's shapes as they are: `serializeDocument` (`core/document.js`) never stores a text's letters (they are rebuilt from the font on a read), and no filter left construction out.
+- **Fix:** `designThumbnailSvg` (now async) reads the shapes the export reads (`exportedShapes`, BUG-300's rule moved from `export-manager.js` to `#core/curve-kinds.js` so both read one declaration) on a working copy of the geometry, after THE letter rebuild a document read runs (`#ui/text-fonts.js syncTextOutlines`, from the page's one font library: each font downloaded once). `project-manager.js fillThumbs` fills each tile when its thumbnail settles and does not wait for it, so a design without text never waits on a font. Measured (live, 20 designs, 6 with text, 3 rounds): non-text tiles shown 93 / 85 / 83 ms before, 121 / 145 / 146 ms after; every tile (letters included) shown 121 / 145 / 146 ms after (never before).
+- **Task id(s):** `1036`
+- **Fix merge sha:** open (`agents/shape-bugs-1036`, awaiting merge)
+- **Guarding test file(s):** `tests/shape-bugs-1036-node.test.js` (`N-4a` text-only, `N-4b` mixed + construction, `N-4c` no font wait), `tests/project-actions.test.js`
+- **Status:** fixed
+- **Family:** `storage-lifecycle`
+- **Related:** BUG-300
+- **History:** found in audit `1035` (`N-4`) -> fixed in task `1036`. Probe before: `D text-only design thumbnail: null`, `D construction-only circle thumbnail drawn: yes, 955 chars`.
+
+### BUG-373
+- **Date / turn:** 2026-11-27 (audit `1035` appendix `N-5`; fixed in task `1036`)
+- **Reported by:** audit `1035` (read, not run); probed in task `1036` (`probe-n5-shaper-arc.mjs`)
+- **App(s) & host:** Shaper (Fusion selection / STL import)
+- **Report:** `N-5`: Shaper's Fusion / STL import gives its arcs no equal-radius rule; BUG-046's fix (task `789`) went only into the shared import landing.
+- **What was wrong:** an arc imported from Fusion had no structural equal: a radius edit moved its start only (probe: `radius 30 -> 40 applied true   radii after (start,end) 40.000,30.000`).
+- **Cause:** `apps/shaper/src/fusion-import.js importFusionSelection` landed the parsed joints and shapes with its own loops and never added `arcStructuralConstraints` (the shared landing in `packages/ui/sketch-import.js` did).
+- **Fix:** the landing is ONE function, `landImportedGeometry` (`packages/ui/sketch-import.js`: joints, shapes, each arc's structural equal); the SVG / DXF import and Shaper's Fusion / STL import both call it. Shaper's explicit `stampSketch` calls went with its loops (the state's own `joints.set` / `shapes.push` stamp the active sketch). Not changed: Shaper's import still adds no import groups (`groupImported`), as before.
+- **Task id(s):** `1036`
+- **Fix merge sha:** open (`agents/shape-bugs-1036`, awaiting merge)
+- **Guarding test file(s):** `tests/shape-bugs-1036-node.test.js` (`N-5`), `tests/import-arc-equal-789-node.test.js`, `tests/fusion-import-664-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-046
+- **History:** found in audit `1035` (`N-5`, read only) -> probed and fixed in task `1036`. Probe before: `N5 structural equal constraints on the arc: 0`, radii after a 30 -> 40 edit `40.000,30.000`; after: the node test `N-5` holds both ends at 40.
+
+### BUG-374
+- **Date / turn:** 2026-11-27 (audit `1035` appendix `N-6`)
+- **Reported by:** audit `1035` (read, not run; latent)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (profile fill)
+- **Report:** `N-6`: the profile-fill cache ignores a bezier's control points, so a change of `c1` / `c2` alone keeps a stale fill.
+- **What was wrong:** unknown (no user path found that changes `c1` / `c2` alone in a frame; the fill is off by default).
+- **Cause:** `packages/ui/profile-fill.js geometrySignature` hashes joints, type, construction, radius and arc sweep, not a bezier's `c1` / `c2`.
+- **Fix:** none yet (task `1036` was told to record it only).
+- **Task id(s):** none
+- **Fix merge sha:** none
+- **Guarding test file(s):** none
+- **Status:** open
+- **Family:** `toolpath-geometry`
+- **History:** found in audit `1035` (`N-6`), recorded open in task `1036`.
+
+### BUG-375
+- **Date / turn:** 2026-11-27 (audit `1035` appendix `N-7`; fixed in task `1036`)
+- **Reported by:** audit `1035` (read, not run); probed in task `1036` (`probe-n7-fillet-split.mjs`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Trim, Break on a fillet arc)
+- **Report:** `N-7`: trim and break copy `filletSharp` onto both pieces, so two arcs claim one virtual corner.
+- **What was wrong:** probe: after a Break both pieces claim the corner V. While each piece is tangent to a leg V is held on, that is needed (the lock rule, `#core/lock-state.js`, reads V through the arc at each leg: both legs stay locked). A piece that touches NO leg (one leg deleted first, then Break / Trim) still claimed V: a copy + paste of it brought a stray virtual-sharp cross with it.
+- **Cause:** `packages/core/break.js splitArcConstraints` (THE split that Break of an arc, Break of a circle and Trim of an arc's middle share) moved the tangents onto the piece that meets each leg, but the piece is a copy of the target (`{ ...target }`), so both kept `filletSharp`.
+- **Fix:** at the end of `splitArcConstraints`, an arc that is tangent to no curve V is held on (`touchesFilletLeg`) drops `filletSharp`; one that still touches a leg keeps it (no change for a fillet with both legs).
+- **Task id(s):** `1036`
+- **Fix merge sha:** open (`agents/shape-bugs-1036`, awaiting merge)
+- **Guarding test file(s):** `tests/shape-bugs-1036-node.test.js` (`N-7a` both legs: both keep V, legs still locked; `N-7b` Break with a leg gone; `N-7c` Trim with a leg gone)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in audit `1035` (`N-7`, read only) -> probed and fixed in task `1036`. Probe before: `B after break: arcs claiming V ...: 2 [... live=false legs=s..._3_1 | Abrk_... live=false legs=-]`; after: `N-7b`: only the piece on the remaining leg claims V, a paste of the legless piece adds 0 virtual sharps.
+
+### BUG-376
+- **Date / turn:** 2026-11-27 (found in task `1036` while fixing BUG-371)
+- **Reported by:** worker (task `1036`, probe `probe-n3-svg-invert.mjs`)
+- **App(s) & host:** SketchStudio (Export SVG, "Invert Y axis (SVG)", arcs written as `A` paths)
+- **Report:** with "Invert Y axis" an arc centred (50,10) from (60,10) to (50,20) was written `M 60 -10 A 10 10 0 0 1 50 0`: its centre flipped but the arc itself only moved (not mirrored, the same turning).
+- **What was wrong:** an exported arc kept its shape and direction under the flip; with arcApprox (sampled points) it was right.
+- **Cause:** `apps/sketchstudio/ui/export-manager.js buildSVG` wrote the arc's ends as the flipped centre plus the UNflipped `r sin(angle)`, and kept the sweep flag.
+- **Fix:** the BUG-371 rule: the ends go through `transform` and the sweep flag turns with the mirror; after: `M 60 -10 A 10 10 0 0 0 50 -20`.
+- **Task id(s):** `1036`
+- **Fix merge sha:** open (`agents/shape-bugs-1036`, awaiting merge)
+- **Guarding test file(s):** `tests/shape-bugs-1036-node.test.js` (`N-3`, both arc directions)
+- **Status:** fixed
+- **Family:** `export-svg`
+- **Related:** BUG-371
+- **History:** found and fixed in task `1036`.
+
 ---
 
 ## Family index
@@ -3319,21 +3428,21 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | Family | Timeline (oldest first) |
 |---|---|
 | `build-deploy` | BUG-062 (11-21) |
-| `export-svg` | BUG-300 (11-27), BUG-301 (11-27), BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19) |
+| `export-svg` | BUG-300 (11-27), BUG-301 (11-27), BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19), BUG-371 (11-27), BUG-376 (11-27) |
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
-| `storage-lifecycle` | BUG-305 (11-27), BUG-306 (11-27), BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16) |
+| `storage-lifecycle` | BUG-305 (11-27), BUG-306 (11-27), BUG-014 (11-15), BUG-015 (11-15), BUG-023 (11-16), BUG-372 (11-27) |
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
-| `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27) |
+| `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22), BUG-374 (11-27, open) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-370 (11-27) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 
@@ -3349,4 +3458,5 @@ Audit-only findings live in their dedicated audit documents rather than being du
 - [docs/FILES-AUDIT-1024.md](FILES-AUDIT-1024.md) — Files and documents audit (task `1024`: Save / Open / tabs / import / templates / export / file dialog; rows `F-01`..).
 - [docs/DESIGN-RUN-AUDIT-1016.md](DESIGN-RUN-AUDIT-1016.md), [docs/DESIGN-RUN-AUDIT-1017.md](DESIGN-RUN-AUDIT-1017.md) — Real-design audits, parts A-D (tasks `1016`, `1017`; rows `R1-*` / `R2-*`; fixes in tasks `1018`-`1021`; BUG-190..BUG-199 from task `1018`: R1-01, R1-02, R1-03, R1-05, R1-07, R1-12, R2-01, R2-03, R2-05, R2-13).
 - [docs/DRAWBOX-AUDIT-1026.md](DRAWBOX-AUDIT-1026.md) — Draw-box audit (task `1026`; every typed size input of the drawing and modify tools, `425` live cells, rows `B-01`..`B-19`; B-01..B-09, B-13, B-14, B-15, B-18, B-19 fixed in task `1028` as BUG-310..BUG-319).
+- `docs/SHAPE-MODEL-PLAN-1035.md` (branch `agents/shape-model-1035`) — Shape-model audit (task `1035`, plan only; appendix `N-1`..`N-7`: N-1, N-3, N-4, N-5, N-7 fixed in task `1036` as BUG-370..BUG-373 and BUG-375, with BUG-376 found there; N-6 open as BUG-374; N-2 belongs to task `1034`).
 - [docs/INTERRUPTS-AUDIT-1023.md](INTERRUPTS-AUDIT-1023.md) — Interruptions audit (task `1023`: every ribbon tool x Esc / tool switch / re-click / Ctrl+Z / Ctrl+Y / right-click / zoom / pan / panel click / Delete / blur / phone touch; findings `I-01`..`I-23`; I-01..I-06, I-08, I-09, I-12, I-15, I-17..I-19, I-21 fixed in task `1030` as BUG-320..BUG-333; I-07 fixed before it (task `1020`), I-20 / I-22 and the 3-point rectangle half of I-02 by task `1028`; the 1030 guards cover them).

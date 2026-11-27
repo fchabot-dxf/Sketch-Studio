@@ -101,15 +101,15 @@ await assert.rejects(() => createProjectActions({ store, getBuffer: () => null }
   assert.strictEqual(await pa.settleUnsaved(), true); assert.deepStrictEqual(log, [], 'a saved or empty design is never asked about');
 }
 
-// thumbnails
+// thumbnails (TASK 1036: designThumbnailSvg is async: a design's texts get their letters first)
 const doc = (pts) => ({ version: 2, geometry: { joints: pts.map((p, i) => ['j' + i, { x: p[0], y: p[1] }]), shapes: pts.map((_, i) => ({ id: 's' + i, type: 'line', joints: ['j' + i, 'j' + ((i + 1) % pts.length)] })), constraints: [] }, hosts: {} });
-const svg = designThumbnailSvg(doc([[0, 0], [200, 0], [200, 100]]));
+const svg = await designThumbnailSvg(doc([[0, 0], [200, 0], [200, 100]]));
 assert.ok(svg.startsWith('<svg') && svg.includes('viewBox="0 0 100 100"') && svg.includes('stroke="currentColor"'));
 const nums = [...svg.match(/d="([^"]+)"/)[1].matchAll(/-?\d+(\.\d+)?/g)].map((m) => Number(m[0]));
 assert.ok(nums.every((n) => n >= 0 && n <= 100), 'every point is inside the tile: ' + nums);
 assert.ok(Math.max(...nums) >= 90, 'the drawing is scaled up to fill the tile');
-assert.strictEqual(designThumbnailSvg({ version: 2, geometry: { joints: [], shapes: [], constraints: [] }, hosts: {} }), null, 'an empty design has no thumbnail');
-assert.strictEqual(designThumbnailSvg(null), null);
-const circ = designThumbnailSvg({ version: 2, geometry: { joints: [['c', { x: 5, y: 5 }]], shapes: [{ id: 'k', type: 'circle', joints: ['c'], radius: 10 }], constraints: [] }, hosts: {} });
+assert.strictEqual(await designThumbnailSvg({ version: 2, geometry: { joints: [], shapes: [], constraints: [] }, hosts: {} }), null, 'an empty design has no thumbnail');
+assert.strictEqual(await designThumbnailSvg(null), null);
+const circ = await designThumbnailSvg({ version: 2, geometry: { joints: [['c', { x: 5, y: 5 }]], shapes: [{ id: 'k', type: 'circle', joints: ['c'], radius: 10 }], constraints: [] }, hosts: {} });
 assert.ok(circ && circ.includes('M'), 'a circle is drawn');
 console.log('project-actions: ok');

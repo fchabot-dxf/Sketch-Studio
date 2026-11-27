@@ -122,6 +122,17 @@ function elementNamer(descs, shapes) {
   };
 }
 
+/**
+ * THE landing of an import's parsed geometry in the active sketch, for every importer (this file's SVG / DXF import; Shaper's Fusion / STL import,
+ * apps/shaper/src/fusion-import.js, TASK 1036 BUG-373): the joints ({ id, x, y }) and the shapes are added, and each arc gets THE arc structural
+ * constraints (#core/shapes.js, TASK 789 / BUG-046), so it keeps its two ends on one circle like a drawn one (a radius edit after an ungroup moves both).
+ */
+export function landImportedGeometry(st, joints, shapes) {
+  for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
+  for (const s of shapes) st.shapes.push(s);
+  for (const s of shapes) if (s.type === 'arc') st.constraints.push(...arcStructuralConstraints(s));
+}
+
 export function importIntoSketch(text, fileName, controller, options = {}) {
   if (options.showDesign) options.showDesign();
   const st = controller.state;
@@ -157,11 +168,7 @@ export function importIntoSketch(text, fileName, controller, options = {}) {
   st.saveState('import ' + (fileName || 'file'), { host: true });
   const sketch = addSketch(st, (fileName || 'Imported').replace(/\.(svg|dxf)$/i, '') || 'Imported');
   activateSketch(st, sketch.id);
-  for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
-  for (const s of shapes) st.shapes.push(s);
-  // TASK 789: an imported arc keeps its two ends on one circle like a drawn one (THE arc structural constraints, #core/shapes.js), so a radius edit
-  // after an ungroup moves both ends
-  for (const s of shapes) if (s.type === 'arc') st.constraints.push(...arcStructuralConstraints(s));
+  landImportedGeometry(st, joints, shapes);
   // TASK 751 / 756: every app has user groups: the import lands grouped in the app (#core/group-model.js groupImported): each profile (an
   // outline with its holes) / open chain one group, the whole file one group around them; the same undo step as the import
   groupImported(st, shapes, { fileName: sketch.name, nameOf: elementNamer(descs, shapes) });

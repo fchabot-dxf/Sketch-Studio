@@ -96,8 +96,13 @@ export function defaultOffsetDistance(docUnit = 'mm') { return docUnit === 'in' 
 export function evaluateOffsetDistance(state, str, unit = 'mm') {
   const r = evaluateBoxText(state, str, 'length', { unit, allowAssign: !!state });
   if (!r.ok) return r;
-  if (!(Number.isFinite(r.v) && r.v !== 0)) return { ok: false, code: 'OUT_OF_RANGE', message: OFFSET_ZERO_REASON };
+  const why = offsetDistanceRefusal(r.v);
+  if (why) return { ok: false, code: 'OUT_OF_RANGE', message: why };
   return r;
+}
+/** TASK 1028 (B-18): THE value rule of an offset distance (any sign, never 0): null, or why not. The Offset box refuses by it (numeric-input-manager boxRefusal). */
+export function offsetDistanceRefusal(v) {
+  return Number.isFinite(v) && v !== 0 ? null : OFFSET_ZERO_REASON;
 }
 /** A typed distance in the document unit (a suffix overrides; with `state`, formulas like `d1 / 2` resolve too) -> world mm, SIGNED (task 690), or null when invalid or 0. */
 export function parseOffsetDistance(str, unit = 'mm', state = null) {

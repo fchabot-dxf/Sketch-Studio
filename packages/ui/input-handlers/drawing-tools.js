@@ -7,7 +7,7 @@ import { TOOL_MODES, RECT_MODES, SLOT_MODES, SNAP, CONSTRAINT_TYPES } from '#cor
 import { addConstraint } from '#core/constraints.js';
 import { findNearbyJoint } from '#core/joints.js';
 import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '#core/shapes.js';
-import { setupLineTool, handleLinePointerDown, handleLinePointerMove, handleLinePointerUp, resetLineState, finalizeLineFromActive } from '#ui/input-handlers/line-tool.js';
+import { setupLineTool, handleLinePointerDown, handleLinePointerMove, handleLinePointerUp, resetLineState, finalizeLineFromActive, finishLineChain } from '#ui/input-handlers/line-tool.js';
 import { clearPreview } from '#ui/preview-manager.js';
 import { setupRectTool, handleRectPointerDown, handleRectPointerMove, handleRectPointerUp, resetRectState } from '#ui/input-handlers/rect-tool.js';
 import { setupSlotTool, handleSlotPointerDown, handleSlotPointerMove, handleSlotPointerUp, resetSlotState } from '#ui/input-handlers/slot-tool.js';
@@ -64,9 +64,12 @@ export function handleDrawingPointerDown(e, svg, state, hitSnap, w) {
     
     dbg.log('drawing', `[drawing-tools] Pointer down for ${state.currentTool}`, { hitSnap, activeSnap: state.activeSnap, w });
     
-    // Right-click (button === 2) finalizes the current line segment (if active)
+    // Right-click (button === 2) commits the current line segment (if active) AND finishes the chain (TASK 1028, B-05): one right-click = one segment, typed or
+    // not. The chain used to stay open after the commit, so the release of this same press (handleLinePointerUp) placed a stray segment to the cursor
+    // when a length was typed (and, untyped, ended the chain only by accident: its zero-length abort). A typed length the sketch refuses keeps the chain.
     if (state.currentTool === TOOL_MODES.LINE && e && typeof e.button === 'number' && e.button === 2 && state.active) {
-        try { e.preventDefault(); finalizeLineFromActive(svg, state); } catch(_) {}
+        e.preventDefault();
+        if (finalizeLineFromActive(svg, state)) finishLineChain(state);
         return true;
     }
     

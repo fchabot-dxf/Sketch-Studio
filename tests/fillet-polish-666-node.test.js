@@ -178,7 +178,10 @@ try {
     }
     clearToasts(doc);
     app.enter();
-    assert.ok(toastTexts(doc).some((t) => t.includes('Enter a radius greater than zero')), 'F9: Enter on invalid warns');
+    // TASK 1028 (B-18): the refusal is the draw boxes' one: inline under the box (#dimHint), the parser's own message (the last text is empty), no toast
+    const hintEl = doc.getElementById('dimHint');
+    assert.ok(hintEl && !hintEl.classList.contains('hidden') && /nothing to evaluate/.test(hintEl.textContent), `F9: Enter on invalid says why under the box (${hintEl && hintEl.textContent})`);
+    assert.deepStrictEqual(toastTexts(doc), [], 'F9: no toast');
     assert.ok(boxEl(), 'F9: Enter on invalid keeps box open');
 
     // Recover by typing valid 0.05 (also checks F7 in UI!)

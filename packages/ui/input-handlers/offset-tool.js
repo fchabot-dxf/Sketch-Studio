@@ -19,14 +19,14 @@ import { snapBoostFor } from '#ui/snap-detection.js';
 import { dragArrowSvg, dragArrowHit } from '#ui/drag-arrow-handle.js';
 import {
   offsetChainOf, offsetChainGeometry, offsetSideAt, offsetHandleAnchor, offsetArcSpan, applyOffset, defaultOffsetDistance, parseOffsetDistance,
-  evaluateOffsetDistance, offsetSideAndDistance, OFFSET_ZERO_REASON, OFFSET_UNDO_LABEL
+  evaluateOffsetDistance, offsetSideAndDistance, offsetDistanceRefusal, OFFSET_UNDO_LABEL
 } from '#core/offset.js';
 import { arcSweepInfo } from '#core/geometry.js';
 import { inertEntities, activeSketchPick } from '#core/sketch-model.js';
 import { docUnit, lengthText } from '#core/settings-manager.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660
-import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox, attachExternalCompletion } from '#ui/numeric-input-manager.js';
+import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox, attachExternalCompletion, boxRefusal } from '#ui/numeric-input-manager.js';
 import { applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 
@@ -191,7 +191,7 @@ function openInput(svg, state, chain, pickId, side, pickPt) {
   const applyInputValue = () => {
     if (el.value === _open.text) {
       _open.expression = null; _open.name = null; _open.assign = null;
-      el.setAttribute('aria-invalid', 'false');
+      refuseText('');
       return refresh(); // not an edit: the exact _open.d stays
     }
     const r = evaluateOffsetDistance(state, el.value, docUnit());
@@ -200,13 +200,13 @@ function openInput(svg, state, chain, pickId, side, pickPt) {
       _open.expression = r.expression;
       _open.name = r.name || null;
       _open.assign = r.assign || null;
-      el.setAttribute('aria-invalid', 'false');
     } else {
       _open.expression = null; _open.name = null; _open.assign = null;
-      el.setAttribute('aria-invalid', 'true');
     }
+    refuseText(r.ok ? '' : offsetRefusal(state, el.value));
     refresh();
   };
+  const refuseText = (text) => { if (_open && _open.completion) _open.completion.refuse(text); };   // TASK 1028 (B-18): why, under the box
   _open.completion = attachExternalCompletion(el, state, () => { applyInputValue(); });
   el.addEventListener('input', () => { applyInputValue(); if (_open && _open.completion) _open.completion.update(); });
   el.addEventListener('keydown', (ev) => {
@@ -223,6 +223,10 @@ function openInput(svg, state, chain, pickId, side, pickPt) {
   window.addEventListener('pointerup', () => setTimeout(focusIt, 0), { once: true, capture: true });
   setTimeout(focusIt, 60);
 }
+
+/** TASK 1028 (B-18): why the Offset box refuses `text`: the draw boxes' refusal (numeric-input-manager boxRefusal: the parser's message), with the offset's own
+ *  value rule (any sign, never 0: core/offset.js offsetDistanceRefusal) in place of a length's. */
+const offsetRefusal = (state, text) => boxRefusal(text, 'length', { state, refuse: offsetDistanceRefusal });
 
 function refresh() {
   renderOffsetOverlay(); // draw the drag arrow first so placeAnchoredBox keeps the box clear of it
@@ -259,7 +263,7 @@ export function commitOffsetInput() {
     v = _open.d; // an unedited box applies its exact distance, not the rounded text
   } else {
     const parsed = evaluateOffsetDistance(state, el.value, docUnit());
-    if (!parsed.ok) { showNotification(`Offset: ${parsed.message || `enter a distance; ${OFFSET_ZERO_REASON}`}.`, 'warning'); return; }
+    if (!parsed.ok) { _open.completion.refuse(offsetRefusal(state, el.value)); return; }   // TASK 1028 (B-18): inline, the draw boxes' wording, no toast
     v = parsed.v;
     expression = parsed.expression;
     name = parsed.name || null;

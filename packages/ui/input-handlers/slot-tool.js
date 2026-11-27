@@ -358,10 +358,11 @@ function commitSlot(svg, state, cursorPt) {
         : (built.meta && !isArcMode(mode) && built.meta.c1Id && built.meta.c2Id ? [built.meta.c1Id, built.meta.c2Id] : null);
     if (centreJoints && active.spanInference) applyLineInference(state, active.spanInference, centreJoints[0], centreJoints[1], null);
     // TASK 782 / 1013 (B-19c): a typed span length becomes a driving span dimension in ALL straight slot modes (C2C, Overall, Center-Point) and Center-Point Arc
+    // (its radius). TASK 1028 (B-04): and the 3-point arc slot: its span box is the distance between its two end centres (resolveSpanEnd), so that distance.
     if (active.typedSpan > 0 && built.meta) {
         const spanJoints = mode === SLOT_MODES.OVERALL
             ? (built.meta.t1Id && built.meta.t2Id ? [built.meta.t1Id, built.meta.t2Id] : null)
-            : (!isArcMode(mode) && built.meta.c1Id && built.meta.c2Id ? [built.meta.c1Id, built.meta.c2Id] : null);
+            : (mode !== SLOT_MODES.CENTER_POINT_ARC && built.meta.c1Id && built.meta.c2Id ? [built.meta.c1Id, built.meta.c2Id] : null);
         if (spanJoints) {
             if (active.typedSpanAssign) applyLiveAssign(state, active.typedSpanAssign);
             ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {

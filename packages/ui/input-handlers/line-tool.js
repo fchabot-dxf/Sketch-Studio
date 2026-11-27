@@ -15,7 +15,7 @@ import { hideInput, setupNumericInput, refuseLiveValue, cantSetText } from '#ui/
 import { quantityText } from '#core/parameters.js';
 import { docUnit } from '#core/settings-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, MIN_SHAPE_SIZE, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, shownSnap, MIN_SHAPE_SIZE, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { newShapeId as mintShapeId } from '#core/shape-id.js';
 import { clearHover } from '#ui/hover-manager.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -583,6 +583,7 @@ export function finalizeLineFromActive(svg, state) {
     dbg.log('line-tool', '[DEBUG LINE] Finalizing line. Locked:', lineState);
     if (!state || !state.active || state.active.mode !== TOOL_MODES.LINE) return false;
     ensureSegmentStep(state);
+    const typedLock = hasLock();   // TASK 1033 (X-01): as the click: a typed length / angle positions the end, so the shown snap is dropped
 
     const endPt = (state.active.preview && state.active.preview.pt) ? state.active.preview.pt : (state.tempMousePos || state.active.startPt || { x: 0, y: 0 });
     const before = state.captureUndoSnapshot();   // TASK 1028 (B-08): the document before this segment (a refused typed length puts it back)
@@ -625,7 +626,7 @@ export function finalizeLineFromActive(svg, state) {
     applyLineInference(state, state.activeInference || state.inference || null, startId, endId, newShapeId);
 
     try{ applyLockedSnap(state, startId, state.active && state.active.startSnapTarget, [endId]); }catch(_){ }
-    try{ applyLockedSnap(state, endId, state.active && state.active.preview && state.active.preview.snapTarget, [startId]); }catch(_){ }
+    try{ if (!typedLock) applyLockedSnap(state, endId, shownSnap(state), [startId]); }catch(_){ }
 
     state.inference = null; state.activeInference = null;   // the next segment infers afresh
     endSegmentStep(state);

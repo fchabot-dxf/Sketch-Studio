@@ -85,8 +85,10 @@
             phase: 'start',
             center: centerId,
             start: startId,
-            preview: { type: 'arc', pt: { x: 0, y: 10 }, snapTarget: { type: 'joint', targetId: existingEnd, id: existingEnd, pt: { x: 0, y: 10 }, isLocked: true } }
+            preview: { type: 'arc', pt: { x: 0, y: 10 } }
         };
+        // TASK 1033 (X-01): the snap the cursor shows lives in state.activeSnap (input-manager updateSnapTarget), never on the preview the tool rebuilds
+        state.activeSnap = { type: 'joint', targetId: existingEnd, id: existingEnd, pt: { x: 0, y: 10 }, isLocked: true };
 
         const ok3 = finalizeArcFromActive(null, state);
         assert(ok3 === true, 'finalizeArcFromActive should return true when snapping end to an existing joint');

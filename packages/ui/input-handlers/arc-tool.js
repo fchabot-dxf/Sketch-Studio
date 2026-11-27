@@ -8,7 +8,7 @@ import { hideInput, setupNumericInput, boxValueText, SIZE_REFUSAL_HINT } from '#
 import { showNotification } from '#ui/notification-manager.js';
 import { angleBetween, circumcenter3Pt, arcSweepFor3Pt, arcSweepInfo } from '#core/geometry.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, MIN_SHAPE_SIZE, tooSmall, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, shownSnap, MIN_SHAPE_SIZE, tooSmall, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 
 const localState = { isDragging: false, dragStartScreen: null };
 
@@ -211,10 +211,10 @@ export function setupArcTool(svg, state) {
         if (detail.field === 'chord') {
           const endPt = chordEndFor(start, arcState.cursor || start);
           if (tooSmall(Math.hypot(endPt.x - start.x, endPt.y - start.y))) { detail.keepOpen = true; return; }   // no chord yet: the box stays open
-          handleThreePointArc(state, null, endPt, pos);
+          handleThreePointArc(state, shownSnap(state), endPt, pos);   // TASK 1033 (X-01): the snap the cursor shows, as the click (a typed chord drops it there)
           detail.keepOpen = true;   // the radius box is up now
         } else {
-          handleThreePointArc(state, null, arcState.cursor || start, pos);
+          handleThreePointArc(state, shownSnap(state), arcState.cursor || start, pos);
           if (state.active) detail.keepOpen = true;   // the third point on the ends' line: the hint, the box stays
         }
         return;
@@ -224,14 +224,14 @@ export function setupArcTool(svg, state) {
       if (detail.field === 'radius') {   // Enter in the radius box: the start point goes at the typed radius (else the cursor's), then the sweep box
         const startPt = startPointFor(center, arcState.cursor || center);
         if (!(Math.hypot(startPt.x - center.x, startPt.y - center.y) > MIN_R)) { detail.keepOpen = true; return; }   // no radius yet: the box stays open
-        handleCenterArc(state, null, startPt, startPt, arcState.screen && { clientX: arcState.screen.x, clientY: arcState.screen.y });
+        handleCenterArc(state, shownSnap(state), startPt, startPt, arcState.screen && { clientX: arcState.screen.x, clientY: arcState.screen.y });   // TASK 1033 (X-01): as the click (a typed radius drops the snap there)
         detail.keepOpen = true;   // the sweep box is up now
       } else {   // Enter in the sweep box: the arc is placed
         const start = state.joints.get(state.active.start);
         if (!start) return;
         if (arcState.lockedSweep === null && !(Math.abs(state.active.totalSweep || 0) > 1e-9)) { detail.keepOpen = true; return; }   // no sweep yet: the box stays open
         const endPt = drawSweepPreview(state, center, start, arcState.cursor || start);
-        handleCenterArc(state, null, endPt, endPt, null);
+        handleCenterArc(state, shownSnap(state), endPt, endPt, null);   // TASK 1033 (X-01): as the click (a typed sweep drops the snap there)
       }
     },
     onPreview: (detail) => {
@@ -348,8 +348,12 @@ export function handleArcPointerMove(e, svg, state, w) {
 export function handleArcPointerUp(e, svg, state, hitSnap, w, wasDragging) {
   if (!state.active || state.active.mode !== TOOL_MODES.ARC) return false;
   dbg.debug('app', '[arc-tool] pointerUp', { phase: state.active && state.active.phase, wasDragging, isDragging: localState.isDragging });
-  if (state.active._tempStart && !localState.isDragging) {
-    arcLog('clickIgnored', { phase: state.active.phase, reason: '_tempStart_click' }); state.active._tempStart = false; localState.dragStartScreen = null;
+  // TASK 1033 (A-1): `_tempStart` = the press placed the first point and its release is still to come. That release consumes it, a click's or a drag's
+  // (a drag's release places the next point below): left set, the NEXT click was taken for the first release and swallowed.
+  const firstRelease = state.active._tempStart;
+  state.active._tempStart = false;
+  if (firstRelease && !localState.isDragging) {
+    arcLog('clickIgnored', { phase: state.active.phase, reason: '_tempStart_click' }); localState.dragStartScreen = null;
     openArcBox(e, isThreePoint(state) ? 'chord' : 'radius');   // TASK 597: the radius shows now, after the centre click (TASK 1022: a 3-point arc's chord, after its start click)
     return true;
   }
@@ -541,9 +545,7 @@ export function finalizeArcFromActive(svg, state) {
   if (!previewPt) return false;
 
   if (state.active.subMode === ARC_MODES.CENTER_START_END && state.active.phase === 'start') {
-    // Use preview snapTarget when programmatically finalizing
-    const snap = (state.active.preview && state.active.preview.snapTarget) ? state.active.preview.snapTarget : state.active.startSnap;
-    return handleCenterArc(state, snap, previewPt, previewPt);
+    return handleCenterArc(state, shownSnap(state), previewPt, previewPt);   // TASK 1033 (X-01): the snap the cursor shows
   }
 
   return false;

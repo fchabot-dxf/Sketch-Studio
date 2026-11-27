@@ -75,7 +75,7 @@ await (async () => {
     console.log('before drag: d1 row', JSON.stringify(r1), 'labels', JSON.stringify(await labels()));
     // the canvas labels: the line's distance and the circle's radius ('R ' + the value); a row's Value cell (index 2) shows the value alone
     const lineLabel = async () => (await labels()).find((t) => !t.startsWith('R'));
-    const radiusLabel = async () => ((await labels()).find((t) => t.startsWith('R')) || '').replace(/^R\s*/, '');
+    const radiusLabel = async () => ((await labels()).find((t) => /^\(?R/.test(t)) || '').replace(/^\(R\s*(.*)\)$/, '($1)').replace(/^R\s*/, '');   // R2-11: a reference reads (R 15) -> (15)
     assert.strictEqual(r1[2].trim(), await lineLabel(), 'before: the d1 row reads what the canvas label reads');
     assert.strictEqual(r1[2].trim(), '(37)', 'before: 37');
     const before = await shot('fx-reference-before.png');

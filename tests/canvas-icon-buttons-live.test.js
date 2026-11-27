@@ -20,7 +20,7 @@ try {
   assert.ok(await evalJs(`!!document.getElementById('btn-recenter-view').closest('footer')`), 'TASK 618/619: Recenter stays in the footer');
   assert.ok(c.glyph >= 20 && r.glyph >= 20, `TASK 616: the glyph fills the button (>= 20 px of 32): ${c.glyph} / ${r.glyph}`);
   assert.deepStrictEqual([c.aria, r.aria], ['Construction', 'Recenter view'], 'aria-labels');
-  assert.strictEqual(c.title, 'Construction: OFF (K)', 'Construction title includes K shortcut');
+  assert.strictEqual(c.title, 'Construction: OFF (X)', 'Construction title includes X shortcut (R1-17)');
   assert.deepStrictEqual([c.text, r.text], ['', ''], 'no text, icon only');
   assert.deepStrictEqual([c.use, r.use], ['#icon-construction', '#icon-recenter'], 'each draws its sprite glyph');
   assert.ok(await evalJs(`!!document.querySelector('symbol#icon-construction') && !!document.querySelector('symbol#icon-recenter')`), 'glyphs are in the sprite');
@@ -28,7 +28,7 @@ try {
   await click('btn-construct-toggle');
   c = await info('btn-construct-toggle');
   assert.strictEqual(c.pressed, 'true', 'a real click turns Construction ON'); assert.notStrictEqual(c.bg, off, 'ON looks different'); assert.strictEqual(c.bg, 'rgb(249, 115, 22)', 'ON is the orange fill');
-  assert.strictEqual(c.title, 'Construction: ON (K)', 'ON title reflects state + K shortcut');
+  assert.strictEqual(c.title, 'Construction: ON (X)', 'ON title reflects state + X shortcut');
   assert.strictEqual(c.text, '', 'still no text after toggling');
   await click('btn-construct-toggle');
   assert.strictEqual((await info('btn-construct-toggle')).pressed, 'false', 'a second click turns it OFF');

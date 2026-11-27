@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import { openBezierPickPage } from './helpers/bezier-pick-live.js';
 
 const REFUSED = {
-  trim: 'Trim: not available on a Bezier curve (Trim cuts lines only)',
+  trim: 'Trim: not available on a Bezier curve (Trim cuts lines, arcs and circles only)',
   fillet: 'Fillet: not available on a Bezier curve (Fillet rounds corners of lines and arcs only)',
   dim: 'Dimension: not available on a Bezier curve (pick its end points to dimension the distance between them)',
 };

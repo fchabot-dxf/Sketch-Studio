@@ -157,6 +157,7 @@ export function findCornerAtJoint(state, jointId, only = null, include = () => t
     incident.push({ shape: s, cornerJoint: ends[idx], otherJoint: ends[1 - idx], cornerIdx: base + idx });
   }
 
+  if (incident.length === 1 && only) return gapCorner(state, jointId, cluster, incident[0], curves.find(s => only.includes(s.id) && s !== incident[0].shape), curves);
   if (incident.length !== 2) return null;
   if (only && !only.every(id => incident.some(i => i.shape.id === id))) return null;
 
@@ -184,6 +185,54 @@ export function findCornerAtJoint(state, jointId, only = null, include = () => t
 }
 
 const TANGENT_DOT = 0.9999;
+
+/**
+ * TASK 1018 (R1-05): two LINES picked one by one that do not meet, but whose extensions do beyond the ends nearest that point P (a corner whose
+ * fillet arc was deleted: the lines stay cut back, Fusion's), are a corner at P: Fusion's Fillet takes two curves that do not touch and extends
+ * them to the fillet (unverified). `a` = the line whose end is in `cluster` (the joint the caller looks at), `other` = the second line. Each
+ * line's end nearest P is its corner end; P must not lie inside either segment (two crossing lines, or a line ending on the other: no corner
+ * here), and nothing else may end at either corner end (the fillet moves both ends to its tangent points). A virtual sharp held on both lines
+ * at P (the deleted fillet's) is kept as this fillet's (`sharpJoint`). Same result shape as findCornerAtJoint's.
+ */
+function gapCorner(state, jointId, cluster, a, other, curves) {
+  if (!other || !isLineShape(a.shape) || !isLineShape(other)) return null;
+  const pt = (id) => state.joints.get(id);
+  const [a0, a1] = a.shape.joints.map(pt), [b0, b1] = other.joints.map(pt);
+  if (!a0 || !a1 || !b0 || !b1) return null;
+  const d1x = a1.x - a0.x, d1y = a1.y - a0.y, d2x = b1.x - b0.x, d2y = b1.y - b0.y, den = d1x * d2y - d1y * d2x;
+  if (Math.abs(den) < 1e-9 * Math.hypot(d1x, d1y) * Math.hypot(d2x, d2y)) return null; // parallel: no corner
+  const tA = ((b0.x - a0.x) * d2y - (b0.y - a0.y) * d2x) / den, tB = ((b0.x - a0.x) * d1y - (b0.y - a0.y) * d1x) / den;
+  const inside = (t) => t > COLLAPSE_TOL && t < 1 - COLLAPSE_TOL;
+  if (inside(tA) || inside(tB)) return null;
+  const P = { x: a0.x + tA * d1x, y: a0.y + tA * d1y };
+  const endA = tA <= 0.5 ? a.shape.joints[0] : a.shape.joints[1], endB = tB <= 0.5 ? other.joints[0] : other.joints[1];
+  if (endA !== a.cornerJoint) return null; // the caller's joint is this line's FAR end
+  const clusterB = getCoincidentCluster(state, endB);
+  if (clusterB.has(jointId)) return null; // they meet: findCornerAtJoint's own corner
+  const ends = (s) => endJoints(s);
+  if (curves.some(s => s !== a.shape && s !== other && ends(s).some(j => cluster.has(j) || clusterB.has(j)))) return null;
+  if (ends(other).every(j => clusterB.has(j))) return null; // a collapsed line
+  const legOf = (shape, cornerJoint) => ({ shape, cornerJoint, otherJoint: shape.joints.find(j => j !== cornerJoint), cornerIdx: shape.joints.indexOf(cornerJoint) });
+  const lineA = legOf(a.shape, endA), lineB = legOf(other, endB);
+  const pA = pt(lineA.otherJoint), pB = pt(lineB.otherJoint);
+  const heldOn = (j, s) => (state.constraints || []).some(c => c && c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.joint === j && c.shape === s.id);
+  let sharpJoint = null;
+  for (const [jid, j] of state.joints) {
+    if (j && j.virtualSharp && Math.hypot(j.x - P.x, j.y - P.y) < 1e-4 && heldOn(jid, a.shape) && heldOn(jid, other)) { sharpJoint = jid; break; }
+  }
+  return {
+    cornerJointId: jointId,
+    cluster: new Set([...cluster, ...clusterB]),
+    cornerPt: P,
+    lineA,
+    lineB,
+    curveA: legAt(state, lineA.shape, lineA.cornerJoint, P),
+    curveB: legAt(state, lineB.shape, lineB.cornerJoint, P),
+    pA: { x: pA.x, y: pA.y },
+    pB: { x: pB.x, y: pB.y },
+    sharpJoint,
+  };
+}
 
 /** What a tap on a T-junction (three or more curves meeting) says: the corner is not one, so the two curves are picked one by one (task 655). */
 export const T_JUNCTION_MESSAGE = 'Pick the two curves to fillet';
@@ -438,14 +487,16 @@ export function applyFillet(state, cornerInfo, radius = 5, options = {}) {
   // always first); the other fixed ones are coincident with it, so deleting them loses no position.
   let keptFixed = null;
   for (const [id, j] of joints) if (cluster.has(id) && j && j.fixed) { keptFixed = id; break; }
-  const jV = keptFixed || genJ();
+  // TASK 1018 (R1-05): a corner across a GAP (findCornerAtJoint) keeps the virtual sharp its deleted fillet left there, held on both lines
+  const keptSharp = !keptFixed && cornerInfo.sharpJoint && joints.has(cornerInfo.sharpJoint) ? cornerInfo.sharpJoint : null;
+  const jV = keptFixed || keptSharp || genJ();
 
   joints.set(jCenter, { x: centerPt.x, y: centerPt.y, fixed: false });
   joints.set(jTA, { x: tA.x, y: tA.y, fixed: false });
   joints.set(jTB, { x: tB.x, y: tB.y, fixed: false });
   // V: a bare joint (NO shape) left at the sharp corner. Held on both trimmed lines by pointOnLine so it
   // follows them when the radius changes; overall dimensions attach to it. Not a shape => loops/export ignore it.
-  if (!keptFixed) joints.set(jV, { x: cornerPt0.x, y: cornerPt0.y, fixed: false, virtualSharp: true });
+  if (!keptFixed && !keptSharp) joints.set(jV, { x: cornerPt0.x, y: cornerPt0.y, fixed: false, virtualSharp: true });
 
   // Update line endpoint joints to the new tangent points
   lineA.shape.joints[lineA.cornerIdx] = jTA;
@@ -482,6 +533,15 @@ export function applyFillet(state, cornerInfo, radius = 5, options = {}) {
           constraints.splice(i, 1);
           continue;
         }
+      }
+
+      // TASK 1018 (R1-07): a constraint that names the corner by its ONE `joint` field (pointOnLine: the corner held on an axis or a line; a midpoint)
+      // is about the sharp corner's position, like a measurement: it follows the virtual sharp V, in this same step (it named a joint deleted below,
+      // so it was left dangling until a reload pruned it). V held on lineA / lineB is made below: such a copy is dropped, not doubled.
+      if (c.joint && cluster.has(c.joint)) {
+        if (c.type === CONSTRAINT_TYPES.POINT_ON_LINE && (c.shape === lineA.shape.id || c.shape === lineB.shape.id)) constraints.splice(i, 1);
+        else c.joint = jV;
+        continue;
       }
 
       // An ARC leg's own structural equal (makeArc: [centre, rim, centre, rim], it keeps the arc a circle) is part of that arc, not a
@@ -537,8 +597,9 @@ export function applyFillet(state, cornerInfo, radius = 5, options = {}) {
 
   // V is held on both trimmed curves (a line: pointOnLine; an arc: the same constraint on its circle). Pushed BEFORE removeOrphanJoints, which would otherwise delete V (it is
   // referenced by constraints only, not by a shape).
-  constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: jV, shape: lineA.shape.id });
-  constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: jV, shape: lineB.shape.id });
+  for (const leg of [lineA, lineB]) {
+    if (!constraints.some((c) => c && c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.joint === jV && c.shape === leg.shape.id)) constraints.push({ type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: jV, shape: leg.shape.id });
+  }
 
   // Delete the old corner cluster joints
   for (const jid of cluster) {

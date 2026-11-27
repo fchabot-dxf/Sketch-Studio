@@ -1,6 +1,7 @@
 // tests/trim-break-curve-refusal-ux25-node.test.js -- UX-25 (TASK 1007):
-// Trim and Break on an arc or circle emit a plain warning notice (matching Bezier), leave shapes/history untouched,
-// and keep the active tool.
+// Trim and Break on a curve they cannot cut emit a plain warning notice, leave shapes/history untouched, and keep the active tool.
+// TASK 1018 (R1-12, owner ruling): Trim and Break now TAKE arcs and circles (tests/trim-break-curves-r112-1018-node.test.js), so only the
+// Bezier refuses; a press on the arc and the circle here must not show the old refusal.
 import assert from 'node:assert';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 
@@ -43,10 +44,18 @@ const toasts = () => {
 
 try {
   const targets = {
-    A1: [140 + 20 * Math.SQRT1_2, 20 * Math.SQRT1_2],
-    C1: [98, 0],
     B1: [205, 18.75],
   };
+  for (const tool of ['trim', 'break']) {
+    for (const [wx, wy] of [[140 + 20 * Math.SQRT1_2, 20 * Math.SQRT1_2], [98, 0]]) {
+      app.tool(tool);
+      clearToasts();
+      const sp = app.toScreen(wx, wy);
+      app.click(sp.x, sp.y);
+      assert.ok(!toasts().some((m) => /not available on an? (arc|circle)/.test(m)), `${tool} takes an arc / a circle: no refusal (got ${JSON.stringify(toasts())})`);
+      app.undo();
+    }
+  }
 
   for (const tool of ['trim', 'break']) {
     const toolLabel = tool === 'trim' ? 'Trim' : 'Break';

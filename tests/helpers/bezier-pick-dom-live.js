@@ -15,7 +15,7 @@ import { resetBufferLive } from './reset-buffer.js';
 import { pressRibbonTool } from './ribbon-tool.js';
 import { HOSTS } from './close-path-live.js';
 
-export const TRIM_REFUSAL = 'Trim: not available on a Bezier curve (Trim cuts lines only)';
+export const TRIM_REFUSAL = 'Trim: not available on a Bezier curve (Trim cuts lines, arcs and circles only)';
 
 /** host: a close-path-live HOSTS entry; shots: write the screenshots (.evidence/762/<host>-*.png). -> the results, or null (no browser). */
 export async function runBezierDomScenario(host, { shots = false } = {}) {

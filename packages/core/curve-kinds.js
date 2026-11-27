@@ -209,18 +209,11 @@ export function curvePointsFrom(s, state, fromPos, n) {
  *  kind: for a bezier, Select (hover, click, drag, double click, box, the hold menu), Close path, Mirror's objects, and Offset, which gives its own reason
  *  (#core/offset.js offsetChainOf). What each refused tool would take is in WORK-LOG TURN 762. */
 const NO_BEZIER = (what) => `${what}: not available on a Bezier curve`;
+// TASK 1018: Trim and Break take lines, arcs and circles (#core/curve-cuts.js), so an arc or a circle refuses neither (task 1007 refused them).
 export const CURVE_REFUSALS = Object.freeze({
-  arc: Object.freeze({
-    [TOOL_MODES.TRIM]: 'Trim: not available on an arc (Trim cuts lines only)',
-    [TOOL_MODES.BREAK]: 'Break: not available on an arc (Break splits lines only)',
-  }),
-  circle: Object.freeze({
-    [TOOL_MODES.TRIM]: 'Trim: not available on a circle (Trim cuts lines only)',
-    [TOOL_MODES.BREAK]: 'Break: not available on a circle (Break splits lines only)',
-  }),
   bezier: Object.freeze({
-    [TOOL_MODES.TRIM]: NO_BEZIER('Trim') + ' (Trim cuts lines only)',
-    [TOOL_MODES.BREAK]: NO_BEZIER('Break') + ' (Break splits lines only)',
+    [TOOL_MODES.TRIM]: NO_BEZIER('Trim') + ' (Trim cuts lines, arcs and circles only)',
+    [TOOL_MODES.BREAK]: NO_BEZIER('Break') + ' (Break splits lines, arcs and circles only)',
     [TOOL_MODES.FILLET]: NO_BEZIER('Fillet') + ' (Fillet rounds corners of lines and arcs only)',
     [TOOL_MODES.DIMENSION]: NO_BEZIER('Dimension') + ' (pick its end points to dimension the distance between them)',
     [TOOL_MODES.COINCIDENT]: NO_BEZIER('Coincident') + ' (a point cannot be held on its curve: pick its end point)',

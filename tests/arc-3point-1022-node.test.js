@@ -4,6 +4,7 @@
 //   3 the third point on the ends' line: refused with a hint, then a good point makes the arc     4 Esc after one / two clicks: nothing left, no undo step
 //   5 typed chord (and a formula), typed radius, a too-small / 0 radius refused inline, an emptied box unlocks      6 a third click on a point: on the arc
 //   7 the tool stays after an arc; another variant mid-draw restarts it     8 the 3-point arc slot's geometry is main's (the shared circle function)
+//   9 a right press places nothing in either mode (TASK 1030's shared rightPressIgnored); re-clicking Arc keeps the draw
 import assert from 'node:assert';
 import { open } from './helpers/node-app.js';
 import { ARC_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
@@ -286,6 +287,37 @@ await run('7 the tool stays after an arc (a second arc is drawn); the Center Poi
     const g = arcGeom(app, arcs(app)[2], null);
     near(Math.hypot(g.c.x - 0, g.c.y + 30), 0, 0.5, 'its first click is the centre');
   } finally { await app.close(); }
+});
+
+// ── 9. right press (TASK 1030: the shared input-manager rightPressIgnored, no guard in the Arc tool) ──
+await run('9 a right press places nothing in either Arc mode (empty canvas, after one click, after two clicks); re-clicking Arc keeps the draw; left clicks then make the arc', async () => {
+  for (const mode of [ARC_MODES.CENTER_START_END, ARC_MODES.THREE_POINT]) {
+    const app = await openFresh();
+    try {
+      pickArcVariant(app, mode);
+      const j0 = app.state.joints.size, h0 = app.state.history.length;
+      const right = (x, y) => { const p = W(app, x, y); app.rightClick(p.x, p.y); };
+      right(-20, 0);
+      assert.strictEqual(app.state.active, null, `${mode}: a right press on empty canvas starts nothing`);
+      assert.strictEqual(app.state.joints.size, j0, `${mode}: no joint`);
+      clickW(app, -20, 0); moveW(app, 20, 0);
+      const phase1 = app.state.active && app.state.active.phase, j1 = app.state.joints.size;
+      right(20, 0);
+      assert.strictEqual(app.state.active && app.state.active.phase, phase1, `${mode}: a right press after one click places no point`);
+      assert.strictEqual(app.state.joints.size, j1, `${mode}: no joint after one click`);
+      app.tool('arc');   // re-clicking the tool's own button: nothing (TASK 1030)
+      assert.strictEqual(app.state.active && app.state.active.phase, phase1, `${mode}: re-clicking Arc keeps the draw`);
+      clickW(app, 20, 0); moveW(app, 0, 20);
+      const phase2 = app.state.active && app.state.active.phase, j2 = app.state.joints.size;
+      right(0, 20);
+      assert.strictEqual(arcs(app).length, 0, `${mode}: a right press after two clicks makes no arc`);
+      assert.strictEqual(app.state.active && app.state.active.phase, phase2, `${mode}: the draw still waits`);
+      assert.strictEqual(app.state.joints.size, j2, `${mode}: no joint after two clicks`);
+      clickW(app, 0, 20);
+      assert.strictEqual(arcs(app).length, 1, `${mode}: the left click makes the arc`);
+      assert.strictEqual(app.state.history.length, h0 + 1, `${mode}: one undo step`);
+    } finally { app.esc(); await app.close(); }
+  }
 });
 
 // ── 8. the 3-point arc slot after moving its circle maths to #core/geometry.js ──

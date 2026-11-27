@@ -3,20 +3,27 @@
 // so there is no second renderer: this only fits those polylines into a square and writes them as strokes. Pure (no DOM of its own;
 // arcs are sampled by #core's sampler, which uses the browser's SVG path API and degrades to the endpoints elsewhere).
 // Returns an SVG markup string (stroke = currentColor, so it follows the theme), or null when the design has no drawable geometry.
+// TASK 1036 (BUG-372, N-4): it draws what the export draws (#core/curve-kinds exportedShapes: no construction geometry) plus the texts' letters. A
+// stored document has no letters (#core/document.js serializeDocument drops them): they are rebuilt here by THE rebuild a document read runs
+// (#ui/text-fonts.js syncTextOutlines, from the page's one font library, so a font is downloaded once), on a working copy of the document's
+// geometry. -> a Promise: a design with no text settles at once (it never waits on a font); one with text when its fonts are read.
 
 import { coreShapeToPolyline } from '#core/core-shape-to-polyline.js';
+import { exportedShapes } from '#core/curve-kinds.js';
+import { syncTextOutlines, fontLibrary } from '#ui/text-fonts.js';
 
 const SIZE = 100;     // viewBox is SIZE x SIZE
 const MARGIN = 8;
 const r = (n) => Math.round(n * 100) / 100;
 
-export function designThumbnailSvg(document) {
+export async function designThumbnailSvg(document, { library = fontLibrary } = {}) {
   const g = document && document.geometry;
   if (!g || !Array.isArray(g.joints) || !Array.isArray(g.shapes)) return null;
-  const joints = new Map(g.joints.map(([id, j]) => [id, j]));
+  const drawing = { joints: new Map(g.joints.map(([id, j]) => [id, j])), shapes: g.shapes.slice() };   // the letters are added to this copy, never to the document
+  await syncTextOutlines(drawing, { library });
   const lines = [];
-  for (const s of g.shapes) {
-    const pts = coreShapeToPolyline(s, joints).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  for (const s of exportedShapes(drawing)) {
+    const pts = coreShapeToPolyline(s, drawing.joints).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
     if (pts.length >= 2) lines.push(pts);
   }
   if (!lines.length) return null;

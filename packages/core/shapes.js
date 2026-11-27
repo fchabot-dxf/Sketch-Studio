@@ -286,7 +286,7 @@ export function makeArc(joints, p1, p2, p3, subType='CENTER', isConstruction=fal
 
 /**
  * THE structural constraints of an arc (joints [centre, start, end]), whatever made it: the Arc tool and every other maker through makeArc, an
- * imported arc (DXF / SVG) through the import's landing (#ui/sketch-import.js, TASK 789). Keeps the two rim points (start, end) equidistant
+ * imported arc (DXF / SVG, Shaper's Fusion / STL) through the import's landing (landImportedGeometry below, TASK 789 / 1036). Keeps the two rim points (start, end) equidistant
  * from the centre ALWAYS -- not just at creation. Without this, dragging the end alone (or editing a radius dimension, which only wires in the
  * start, engine.js _radiusOperand) silently stops the arc being circular. Reuses the EXISTING `equal` definition (len(a,b) == len(c,d)) via its
  * joints-based input mode -- no new solver math, mirrors how makeRectFromTwoJoints already bakes in H/V so a rectangle stays a rectangle.
@@ -294,6 +294,18 @@ export function makeArc(joints, p1, p2, p3, subType='CENTER', isConstruction=fal
 export function arcStructuralConstraints(arc) {
     const [c, s, e] = arc.joints;
     return [{ type: 'equal', joints: [c, s, c, e] }];
+}
+
+/**
+ * TASK 1036 (BUG-373): THE landing of an import's parsed geometry in the active sketch, for every importer (the shared SVG / DXF import,
+ * #ui/sketch-import.js; Shaper's Fusion / STL import, apps/shaper/src/fusion-import.js): the joints ({ id, x, y }) and the shapes are added (the
+ * state's joints.set / shapes.push stamp the active sketch), and each arc gets arcStructuralConstraints (TASK 789 / BUG-046), so it keeps its two
+ * ends on one circle like a drawn one (a radius edit after an ungroup moves both).
+ */
+export function landImportedGeometry(st, joints, shapes) {
+    for (const j of joints) st.joints.set(j.id, { x: j.x, y: j.y });
+    for (const s of shapes) st.shapes.push(s);
+    for (const s of shapes) if (s.type === 'arc') st.constraints.push(...arcStructuralConstraints(s));
 }
 
 /**

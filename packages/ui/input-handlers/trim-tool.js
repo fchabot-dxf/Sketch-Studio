@@ -1,15 +1,16 @@
 // packages/ui/input-handlers/trim-tool.js — TRACE-1
-// Input handler for the Trim tool: hover highlights the trimmable segment;
-// click removes it between its nearest two intersections.
+// Input handler for the Trim tool: hover highlights the trimmable piece of a line, an arc or a circle (TASK 1018);
+// click removes it between its nearest two cuts. The piece is #core/trim.js trimPreview's: the same one the click removes.
 
 import { screenToWorld } from '#ui/coords.js';
-import { trimShape } from '#core/trim.js';
+import { trimShape, trimPreview } from '#core/trim.js';
+import { curveGeom, curveDistance } from '#core/curve-cuts.js';
 import { SNAP, TOOL_MODES } from '#core/constants.js';
 import { resolveCanvasSvg, setCanvasCursor } from '#ui/cursor-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's line warns
-import { inertEntities, activeSketchPick, otherSketchPick, inActiveSketch } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not trimmed; TASK 659: only the active sketch is (the shared pick rule), its curves alone cut
+import { inertEntities, activeSketchPick, otherSketchPick } from '#core/sketch-model.js'; // TASK 577: a locked / hidden sketch is not trimmed; TASK 659: only the active sketch is (the shared pick rule), its curves alone cut
 
-let hover = null; // { shapeId, t, segStart, segEnd } current hover interval
+let hover = null; // { shapeId, piece } current hover piece (#core/curve-cuts.js curvePiece)
 let _ctx = null;
 let _state = null;
 const OVERLAY_ID = 'trim-tool-overlay';
@@ -56,8 +57,8 @@ export function handleTrimPointerDown(e, ctx, state, viewState) {
   const hit = findTrimInterval(world, state, svg, viewState);
   if (!hit) {
     const scale = getScale(svg, viewState);
-    const other = nearestLine(world, state, SNAP.LINE_PX / scale, (s, inert) => otherSketchPick(state, s, inert));
-    return other ? warnOtherSketch(state, 'Trim', other.shape) : false; // an active line wins; only with none in reach, another sketch's line warns (no undo step)
+    const other = nearestCurve(world, state, SNAP.LINE_PX / scale, (s, inert) => otherSketchPick(state, s, inert));
+    return other ? warnOtherSketch(state, 'Trim', other) : false; // an active curve wins; only with none in reach, another sketch's curve warns (no undo step)
   }
 
   try { state.saveState?.('trim'); } catch (_) {}
@@ -77,62 +78,33 @@ export function handleTrimPointerUp() {
   /* no drag op */
 }
 
-// the nearest line within `thresh` that `include(shape, inert)` accepts: { shape, t } or null (the pick rule is searched, never applied after)
-function nearestLine(worldPt, state, thresh, include) {
+// the nearest line, arc or circle within `thresh` that `include(shape, inert)` accepts, or null (the pick rule is searched, never applied after)
+function nearestCurve(worldPt, state, thresh, include) {
   let best = null, bestDist = thresh;
   const inert = inertEntities(state);
   for (const shape of (state.shapes || [])) {
-    if (shape.type !== 'line' || !include(shape, inert)) continue;
-    const [aId, bId] = shape.joints;
-    const jA = state.joints.get(aId);
-    const jB = state.joints.get(bId);
-    if (!jA || !jB) continue;
-
-    const t = lineParam(jA, jB, worldPt);
-    const px = jA.x + t * (jB.x - jA.x);
-    const py = jA.y + t * (jB.y - jA.y);
-    const d = Math.hypot(worldPt.x - px, worldPt.y - py);
-    if (d < bestDist) { bestDist = d; best = { shape, t }; }
+    if (!include(shape, inert)) continue;
+    const g = curveGeom(state, shape);
+    if (!g) continue;
+    const d = curveDistance(g, worldPt);
+    if (d < bestDist) { bestDist = d; best = shape; }
   }
   return best;
 }
 
 function findTrimInterval(worldPt, state, svg, viewState) {
   const scale = getScale(svg, viewState);
-  const thresh = SNAP.LINE_PX / scale;
-  const near = nearestLine(worldPt, state, thresh, (s, inert) => activeSketchPick(state, s, inert));
-  const bestShape = near && near.shape, bestT = near ? near.t : 0;
+  const near = nearestCurve(worldPt, state, SNAP.LINE_PX / scale, (s, inert) => activeSketchPick(state, s, inert));
+  if (!near) return null;
+  const piece = trimPreview(state, near.id, worldPt);
+  return piece ? { shapeId: near.id, piece } : null;
+}
 
-  if (!bestShape) return null;
-
-  const [aId, bId] = bestShape.joints;
-  const jA = state.joints.get(aId);
-  const jB = state.joints.get(bId);
-
-  const tVals = [0, 1];
-  for (const other of (state.shapes || [])) {
-    if (other.id === bestShape.id || other.type !== 'line' || !inActiveSketch(state, other)) continue;
-    const [cId, dId] = other.joints;
-    const jC = state.joints.get(cId);
-    const jD = state.joints.get(dId);
-    if (!jC || !jD) continue;
-    const t = segSegParam(jA, jB, jC, jD);
-    if (t !== null && t > 1e-6 && t < 1 - 1e-6) tVals.push(t);
-  }
-  tVals.sort((a, b) => a - b);
-
-  let idx = 0;
-  for (let i = 0; i < tVals.length - 1; i++) {
-    if (bestT >= tVals[i] && bestT <= tVals[i + 1]) { idx = i; break; }
-  }
-
-  const t0 = tVals[idx], t1 = tVals[idx + 1];
-  return {
-    shapeId: bestShape.id,
-    t: bestT,
-    segStart: lerpPt(jA, jB, t0),
-    segEnd: lerpPt(jA, jB, t1),
-  };
+// the SVG markup of a piece (a line, an arc from `from` to `to` turning `dir`, a whole circle)
+function pieceMarkup(p, attrs) {
+  if (p.kind === 'line') return `<line x1="${p.a.x}" y1="${p.a.y}" x2="${p.b.x}" y2="${p.b.y}" ${attrs}/>`;
+  if (p.kind === 'circle') return `<circle cx="${p.c.x}" cy="${p.c.y}" r="${p.r}" fill="none" ${attrs}/>`;
+  return `<path d="M ${p.from.x} ${p.from.y} A ${p.r} ${p.r} 0 ${p.large ? 1 : 0} ${p.dir > 0 ? 1 : 0} ${p.to.x} ${p.to.y}" fill="none" ${attrs}/>`;
 }
 
 function renderTrimHover(svg, hit, state, viewState) {
@@ -151,37 +123,9 @@ function renderTrimHover(svg, hit, state, viewState) {
     svg.appendChild(el);
   }
 
-  const { segStart: s, segEnd: e } = hit;
-  el.innerHTML = `
-    <line x1="${s.x}" y1="${s.y}" x2="${e.x}" y2="${e.y}"
-          stroke="#ef4444" stroke-width="${sw}"
-          stroke-dasharray="${da} ${da / 2}" stroke-linecap="round"
-          opacity="0.9"/>
-  `;
+  el.innerHTML = pieceMarkup(hit.piece, `stroke="#ef4444" stroke-width="${sw}" stroke-dasharray="${da} ${da / 2}" stroke-linecap="round" opacity="0.9"`);
 }
 
 function clearTrimOverlay() {
   document.getElementById(OVERLAY_ID)?.remove();
-}
-
-function lineParam(jA, jB, p) {
-  const dx = jB.x - jA.x, dy = jB.y - jA.y;
-  const L2 = dx * dx + dy * dy;
-  if (L2 < 1e-12) return 0;
-  return Math.max(0, Math.min(1, ((p.x - jA.x) * dx + (p.y - jA.y) * dy) / L2));
-}
-
-function segSegParam(jA, jB, jC, jD) {
-  const dx1 = jB.x - jA.x, dy1 = jB.y - jA.y;
-  const dx2 = jD.x - jC.x, dy2 = jD.y - jC.y;
-  const den = dx1 * dy2 - dy1 * dx2;
-  if (Math.abs(den) < 1e-10) return null;
-  const t = ((jC.x - jA.x) * dy2 - (jC.y - jA.y) * dx2) / den;
-  const u = ((jC.x - jA.x) * dy1 - (jC.y - jA.y) * dx1) / den;
-  if (t < -1e-6 || t > 1 + 1e-6 || u < -1e-6 || u > 1 + 1e-6) return null;
-  return Math.max(0, Math.min(1, t));
-}
-
-function lerpPt(a, b, t) {
-  return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
 }

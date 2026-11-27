@@ -6,6 +6,7 @@
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { isDimension } from '#core/parameters.js';
 import { GROUP_LOCKS } from '#core/group-model.js'; // TASK 753: the two group locks' labels
+import { SHARED_POINT_COINCIDENT } from '#core/shared-point.js'; // TASK 1041
 
 const STYLE_ID = 'sk-context-menu-styles';
 const CSS = `
@@ -166,7 +167,8 @@ export function showContextMenu({ x, y, items, returnFocusTo = null, touch = fal
 
 // The constraints whose GLYPH opens the 'constraint' menu (its Delete): every geometric constraint. (A distance / angle / offset is a dimension:
 // its own menu.) Task 571: the glyph wins the right-click over the geometry under it, so a geometric glyph must always open a menu.
-export const CONSTRAINT_MENU_TYPES = Object.freeze(Object.values(CONSTRAINT_TYPES).filter(t => !isDimension({ type: t }))); // a dimension (#core/parameters.js isDimension)
+// TASK 1041: + the SharedPointCoincident glyph (#core/shared-point.js): its Delete detaches its curve from the shared point.
+export const CONSTRAINT_MENU_TYPES = Object.freeze([...Object.values(CONSTRAINT_TYPES).filter(t => !isDimension({ type: t })), SHARED_POINT_COINCIDENT]); // a dimension (#core/parameters.js isDimension)
 
 // TASK 577: "Move to sketch ▸" is ONE row with a submenu: every sketch (a locked one, and the one the selection is already in, greyed out
 // with its reason) plus "New sketch…" (the selection moves into a new sketch). Only when the document has 2+ sketches.
@@ -209,6 +211,7 @@ export function groupMenuItems(actions) {
 /**
  * The declared item list per target kind. `actions` are the EXISTING functions (see input-manager.js):
  *   toggleDriving(constraint) — toggleDriving + its notifications; deleteSelection(); toggleLock(); lockState() → { locked };
+ *   hasJoin(jointId), deleteCoincident(jointId) (TASK 1041: a point's "Delete Coincident", #core/shared-point.js joinsAt).
  *   sketchTargets() → every sketch with { disabled, reason } for a locked one / the selection's own, moveToSketch(id), moveToNewSketch() (TASK 577).
  *   groupState(), group(), ungroup(), enterGroup(), leaveGroup() (TASK 756: #ui/group-actions.js groupMenuActions).
  *   closePathState(), closePath() (TASK 760: #ui/close-path-actions.js closePathMenuActions).
@@ -232,6 +235,9 @@ export function contextMenuItems(kind, { target, actions }) {
     return [
       { id: 'geo-lock', label: locked ? 'Unlock' : 'Lock', checked: locked, onSelect: () => actions.toggleLock() },
       { id: 'geo-delete', label: 'Delete', onSelect: () => actions.deleteSelection() },
+      // TASK 1041 (Fusion, owner-checked): a point with a join (a shared point, or points glued by a coincident) offers "Delete Coincident": it
+      // unjoins the point's spot (#core/shared-point.js joinsAt: the shared-point split + the glue coincidents)
+      ...(target && target.kind === 'joint' && actions.hasJoin && actions.hasJoin(target.id) ? [{ id: 'geo-delete-coincident', label: 'Delete Coincident', onSelect: () => actions.deleteCoincident(target.id) }] : []),
       // TASK 760: "Close path" when the selection holds an open chain it can close (#ui/close-path-actions.js: the tool's own function)
       ...(actions.closePathState && actions.closePathState() ? [{ id: 'geo-close-path', label: 'Close path', onSelect: () => actions.closePath() }] : []),
       // TASK 577: sketches as layers: one entry per sketch the selection can move to (a flat list: the menu has no submenus)

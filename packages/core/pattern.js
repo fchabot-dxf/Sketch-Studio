@@ -470,12 +470,15 @@ function makeInstance(state, c, at) {
 const JOINT_FIELDS = ['joints', 'joint'], SHAPE_FIELDS = ['shapes', 'shape', 'line', 'circle'];
 const names = (k, fields, ids) => fields.some((f) => asList(k[f]).some((x) => ids.has(x)));
 
-// Remove one instance's copies: its shapes, its points (a point another shape still uses stays, as a plain point), every constraint on them.
+// Remove one instance's copies: its shapes, its points AND every other point its copy shapes used (TASK 1041, BUG-411: a copy detached from a
+// shared corner, #core/shared-point.js, ends at a point the instance does not list; it stayed behind as a lone point) -- a point another shape
+// still uses stays, as a plain point -- and every constraint on them.
 function removeInstance(state, inst) {
   const shapes = new Set(inst.shapes);
-  for (let i = state.shapes.length - 1; i >= 0; i--) if (state.shapes[i] && shapes.has(state.shapes[i].id)) state.shapes.splice(i, 1);
+  const copyJoints = [];
+  for (let i = state.shapes.length - 1; i >= 0; i--) if (state.shapes[i] && shapes.has(state.shapes[i].id)) copyJoints.push(...asList(state.shapes.splice(i, 1)[0].joints));
   const used = new Set(state.shapes.flatMap((s) => asList(s.joints)));
-  const joints = new Set(inst.joints.filter((j) => !used.has(j)));
+  const joints = new Set([...inst.joints, ...copyJoints].filter((j) => !used.has(j)));
   for (let i = state.constraints.length - 1; i >= 0; i--) {
     const k = state.constraints[i];
     if (k && !isPatternConstraint(k) && (names(k, SHAPE_FIELDS, shapes) || names(k, JOINT_FIELDS, joints))) state.constraints.splice(i, 1);

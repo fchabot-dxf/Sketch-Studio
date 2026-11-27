@@ -410,6 +410,11 @@ export function createStylePanel({ settings = SettingsManager, title = 'Settings
   function open() {
     if (isOpen) return;
     isOpen = true; el.classList.remove('sk-hidden'); populate();
+    // BUG-243: centre ONCE, at the height it opens with, then keep that top. A panel centred by translate(-50%,-50%) moves when its content grows (a hint
+    // opening, another tab): the control slides from under a resting pointer, which closes the hint again: a flicker loop and a click that misses.
+    // It scrolls inside itself when it grows past the room below its top.
+    const top = Math.max(12, Math.round((window.innerHeight - el.offsetHeight) / 2));
+    el.style.top = top + 'px'; el.style.transform = 'translateX(-50%)'; el.style.maxHeight = `min(82vh, calc(100vh - ${top + 12}px))`;
     opener = document.activeElement; el.focus(); // TASK 783: the keyboard focus goes INTO the panel (a key then belongs to it, not to the drawing behind it)
     track('settings'); // TASK 738
     escHandler = (e) => { if (e.key === 'Escape') close(); };
@@ -419,6 +424,7 @@ export function createStylePanel({ settings = SettingsManager, title = 'Settings
   function close() {
     if (!isOpen) return;
     isOpen = false; el.classList.add('sk-hidden');
+    el.style.top = el.style.transform = el.style.maxHeight = '';
     if (opener && opener.isConnected && (el.contains(document.activeElement) || document.activeElement === document.body)) opener.focus(); // the focus goes back where it was
     opener = null;
     if (escHandler) { document.removeEventListener('keydown', escHandler); escHandler = null; }

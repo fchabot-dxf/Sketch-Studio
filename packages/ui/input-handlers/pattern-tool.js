@@ -116,7 +116,7 @@ function beginPattern(state, tool) {
   // Task 662: Rectangular Pattern's Distribution defaults to Fusion's Extent ('total' in the stored record so saved files stay identical).
   const values = { ...patternDefaults(kind.type, docUnit()), ...(kind.type === T.RECTANGULAR_PATTERN ? { distanceType: 'total' } : {}) };
   _s = { kind, state, svg: _host.canvas(), mode: 'create', step: 'objects', values, c: null, before: state.captureUndoSnapshot(), stepTaken: false,
-    suppressOn: false, drag: null, hover: null, activeDir: null, inline: null, pending: {} };
+    suppressOn: false, drag: null, hover: null, activeDir: null, inline: null, pending: {}, selectionBefore: selectionSnapshot(state) };
   state.pattern = { step: 'objects' };
   listenHistory();
   openDialog();
@@ -131,7 +131,7 @@ export function editPatternFromLabel(svg, state, c) {
   cancelSession();
   const kind = kindOfType(c.type);
   _s = { kind, state, svg, mode: 'edit', step: 'values', values: valuesOf(c), c, before: state.captureUndoSnapshot(), stepTaken: false,
-    suppressOn: c.suppressed.length > 0, drag: null, hover: null, activeDir: null, inline: null, pending: {} };
+    suppressOn: c.suppressed.length > 0, drag: null, hover: null, activeDir: null, inline: null, pending: {}, selectionBefore: selectionSnapshot(state) };
   state.pattern = { step: 'values' };
   listenHistory();
   openDialog();
@@ -167,7 +167,9 @@ function endSession() {
 }
 // the user's Cancel (the button, the window's close, Esc in a field / on the canvas): as resetPatternState, and the create command ends
 function userCancel() { const create = _s && _s.mode === 'create'; cancelSession(); if (create) _host.exit(); }
-// Cancel: the live pattern goes (its step undone and dropped from the redo stack: nothing changed)
+// Cancel: the live pattern goes (its step undone and dropped from the redo stack: nothing changed), and so do the session's picks: TASK 1020
+// (R1-14b) the selection is given back as it was when the session began (the dialog's picks ARE the selection: a pick left there was the next
+// session's objects, "1 selected")
 function cancelSession() {
   if (!_s) return;
   const s = _s;
@@ -175,7 +177,14 @@ function cancelSession() {
     _committing = true;
     try { s.state.undo(); if (s.state.redoStack && s.state.redoStack.length) { s.state.redoStack.pop(); s.state._notifyHistory(); } } finally { _committing = false; }
   }
+  restoreSelection(s.state, s.selectionBefore);
   endSession();
+}
+const selectionSnapshot = (state) => ({ shapes: [...state.selectedShapes], joints: [...state.selectedJoints] });
+function restoreSelection(state, sel) {
+  state.selectedShapes.clear(); state.selectedJoints.clear();
+  for (const id of sel.shapes) state.selectedShapes.add(id);
+  for (const id of sel.joints) state.selectedJoints.add(id);
 }
 /** OK / Enter / the check at the values step: the pattern stays (its one undo step is already taken); the create tool ends (Fusion's command). */
 export function commitPattern() {

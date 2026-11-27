@@ -1255,6 +1255,10 @@ export function handleSelectionPointerUp(e, svg, state) {
         }
     }
     settleDragUndo(state);
+    // TASK 1020 (R1-10): a press on a point selects it (a release without a move is that click), but a finished DRAG of a point is a move, not a
+    // pick: nothing stays selected, so the next tool (D: Dimension) does not start from the dragged corner. (A dragged curve stays selected, task 588;
+    // a group drag keeps its selection.)
+    if (state.drag && !state.drag.group && selectionState.isDragging && (state.drag.type === DRAG_TYPES.JOINT || state.drag.type === DRAG_TYPES.CLUSTER)) clearSelection(state);
     // Clear any temporary drag snap preview state
     try{ delete state.activeSnap; }catch(_){ }
     if (state.drag && state.drag.pointerId) {

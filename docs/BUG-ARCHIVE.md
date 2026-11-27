@@ -1973,7 +1973,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** none yet
 - **Status:** open
 - **Family:** `snap-not-applied`
-- **History:** found in `1000B` (`B-20c`); a fix (`15 * boost`) was tried in task `1010` and REVERTED by the advisor: needs a touch design, a flat 30 px point priority breaks line picks near endpoints (coincident-868-live, offset-fusion-match-667-live, pattern-params-694-live, toast-done-689-live fail with it).
+- **History:** found in `1000B` (`B-20c`); a fix (`15 * boost`) was tried in task `1010` and REVERTED by the advisor: needs a touch design, a flat 30 px point priority breaks line picks near endpoints (coincident-868-live, offset-fusion-match-667-live, pattern-params-694-live, toast-done-689-live fail with it). Task `1020` (BUG-210) narrowed WHICH points get the 15 px priority: an end of a curve or a point on the curve under the pointer keeps it, and a point that ends no curve and lies beside that curve competes on distance. The radius itself and its touch scaling are unchanged: still open.
 
 ---
 
@@ -2613,12 +2613,12 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Reported by:** advisor, merge gate
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
 - **Report:** `tests/ui-fixes-774-live.test.js` fails intermittently under gate load and passes alone.
-- **What was wrong:** Flaky live test: a red merge gate that is not a product bug.
-- **Cause:** unknown
-- **Task id(s):** unknown
-- **Fix merge sha:** none
-- **Guarding test file(s):** none yet
-- **Status:** open
+- **What was wrong:** NOT only a flaky test: a real UI bug. Hovering a Settings row's "i" near its edge opened the hint, the hint grew the panel, and the panel (centred by translate(-50%,-50%)) shifted, so the "i" slid from under the resting pointer: pointerleave closed the hint, the panel shrank, pointerenter reopened it (a ~16 ms flicker loop) and a click missed (no pin). The test's `.sk-hint:not([hidden])` read then hit null (`Cannot read properties of null (reading 'textContent')`).
+- **Cause:** `.sk-style-panel` in packages/ui/style-panel.js re-centred itself vertically whenever its content grew.
+- **Task id(s):** 1029 (fix: the panel is centred once on open and keeps that top; max-height min(82vh, room below the top), it scrolls inside)
+- **Fix merge sha:** (pending merge of agents/flaky774-1029)
+- **Guarding test file(s):** tests/settings-hint-stays-put-1029-live.test.js (desktop 1280x800 and phone 390; fails without the fix), tests/ui-fixes-774-live.test.js
+- **Status:** fixed
 - **Related:** unknown
 - **History:** seen in several merge gates on 2026-11-26.
 
@@ -2685,6 +2685,112 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Status:** fixed
 - **Family:** `solver`
 - **History:** found in audit `1017` -> fixed in task `1019`. Probe before: `ROW E-01a.autoRefUndoRedo | afterPlace=["80","(80)"] ... afterRedo=["80"]`. After: `ROW E-01a.autoRefUndoRedo | ... afterRedo=["80","(80)"]`, `ROW E-01b.singleUndoAutoRef | before=["80","(80)","(80)"] after1Undo=["80","(80)"] after1Redo=["80","(80)","(80)"]`.
+
+### BUG-210
+- **Date / turn:** 2026-11-27 (real-design audits `R2-09` + `R1-14`)
+- **Reported by:** worker (audits 1016 / 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Equal on a small circle (Ø5, r ~ 10 px) picks its centre point instead of its rim (C2 stays 4.92); Circular Pattern on an Ø8 bolt hole's rim picks the centre joint ('1 selected', patterning a bare point)."
+- **What was wrong:** A click on a small circle's rim went to the circle's centre point, also in a tool that takes no point (Equal, Tangent, Parallel, Perpendicular, Collinear).
+- **Cause:** `packages/ui/snap-detection.js` `findSnap`: (1) it searched points for every tool, even one that takes none; (2) `JOINT_PRIORITY_RADIUS = 15` gave ANY point within 15 px priority over the nearer curve under the pointer, a circle's own centre included.
+- **Fix:** ONE pick filter in `findSnap`. Its new `picks` argument is what the active tool takes, and `points: false` means a point is never the pick. It is declared once, from `CONSTRAINT_PRESELECT` (`constraint-tools.js` `constraintToolPicks`), and passed by both callers of the pick, the click (`input-manager.js` `toolSnap`) and the hover (`hover-manager.js` `updateHover`). The 15 px priority stays for a point that ENDS a curve (a line's or arc's end) or lies ON the curve under the pointer. A point that ends no curve (a circle or arc centre, a virtual sharp, a lone point, the origin) and lies beside that curve competes on plain distance (advisor ruling, option C).
+- **Task id(s):** `1020`
+- **Fix merge sha:** pending (`agents/picks-1020`)
+- **Guarding test file(s):** `tests/picks-1020-node.test.js` (`BUG-210 R2-09 Equal takes no point`, `BUG-210 R1-14 pattern rim, not centre`), `tests/picks-1020-live.test.js` (desktop + phone), `tests/bezier-pick-762-node.test.js` (digest rewritten: only centre / lone point / origin cells changed)
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **Related:** BUG-136 (open: the touch scaling of the same radius; this fix only narrows WHICH points get it)
+- **History:** found in audits `1016` / `1017` -> fixed in task `1020`. Probe before: `ROW D-06c.smallCircleRimBug | at vw~310 Equal(C1 r=2.5, C2): C2.r=4.92 (expected 2.5) toasts=[]`, `ROW R1-14 | Part B / B6a | BUG | Circular Pattern at flange zoom picked bolt center joint instead of Ø8 rim ("1 selected") ...`. After: `ROW D-06c.smallCircleRimBug | at vw~310 Equal(C1 r=2.5, C2): C2.r=2.5 (expected 2.5) toasts=[]`, `ROW R1-14 | Part B / B6a | OK | ...`.
+
+### BUG-211
+- **Date / turn:** 2026-11-27 (real-design audit `R1-14b`)
+- **Reported by:** worker (audit 1016, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Esc out of Circular Pattern leaves its mistaken joint selected, so reopening the tool starts with '1 selected'."
+- **What was wrong:** The pattern dialog's picks ARE the selection, and Cancel left them there, so they became the next session's objects.
+- **Cause:** `packages/ui/input-handlers/pattern-tool.js` `cancelSession` undid the live pattern but left `state.selectedShapes` / `state.selectedJoints` as the session had made them.
+- **Fix:** `cancelSession` gives back the selection the session began with (`selectionBefore`, taken in `beginPattern` and `editPatternFromLabel`). A pre-selection made before the tool survives Cancel, and a pick made inside the dialog does not.
+- **Task id(s):** `1020`
+- **Fix merge sha:** pending (`agents/picks-1020`)
+- **Guarding test file(s):** `tests/picks-1020-node.test.js` (`BUG-211 R1-14b Esc clears the pattern picks`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1016` -> fixed in task `1020`. Probe after: `ROW R1-14 | Part B / B6a | OK | ... Esc leaked selection into reopened dialog ("Select")`.
+
+### BUG-212
+- **Date / turn:** 2026-11-27 (real-design audit `R1-06`)
+- **Reported by:** worker (audit 1016, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Clicking an R5 fillet arc at normal desktop zoom selects the virtual sharp next to it. Delete then removes the overall dimensions d1 and d4, and the arc stays."
+- **What was wrong:** The fillet's virtual sharp, 2 mm (6.8 px) beside the arc's middle, won the click over the arc under the pointer.
+- **Cause:** `packages/ui/snap-detection.js` `findSnap` `JOINT_PRIORITY_RADIUS = 15`: the same cause as BUG-210 (a point that ends no curve took the priority over the curve under the pointer).
+- **Fix:** the BUG-210 point priority (one place). Should deleting a virtual sharp ever delete dims? Yes: a virtual sharp is a point, and deleting a point deletes the dimensions on it, as for any point (Fusion: deleting a sketch point deletes its dimensions, unverified). The bug was the pick, not the delete.
+- **Task id(s):** `1020`
+- **Fix merge sha:** pending (`agents/picks-1020`)
+- **Guarding test file(s):** `tests/picks-1020-node.test.js` (`BUG-212 R1-06 fillet arc, not virtual sharp`)
+- **Status:** fixed (the virtual-sharp steal). In the real bracket the arc's middle is still covered by its tangent glyph: BUG-215.
+- **Family:** `snap-not-applied`
+- **Led to:** BUG-215
+- **History:** found in audit `1016` -> fixed in task `1020`. Probe before: `ROW R1-06 | Part A / A15a | BUG | ... Delete removed ["d1","d4"] while arc survived=true`. After: `ROW R1-06 | Part A / A15a | OK | ... Delete removed [] while arc survived=true` (tangent count 16 -> 15: the glyph was hit, BUG-215).
+
+### BUG-213
+- **Date / turn:** 2026-11-27 (real-design audit `R2-08`)
+- **Reported by:** worker (audit 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "Where a construction line and a solid curve overlap, the click hits the wrong one with no feedback: Tangent on an arc apex over the Y centreline ('not two lines'); Equal on construction pieces over the hypotenuse ('Pick a second curve, a different one.'); Collinear on the broken halves; Break at (90, -60) split the construction line."
+- **What was wrong:** Between overlapping curves, the shapes' order decided the pick: a later curve had to be strictly nearer.
+- **Cause:** `packages/ui/snap-detection.js` `findSnap` (the shape loop's "dist + 2 < best" rule) and `packages/ui/input-handlers/break-tool.js` `findClosestLine` (its own picker, `d < bestDist`): neither had a rule for a tie.
+- **Fix:** ONE overlap rule, `snap-detection.js` `pickRank` + `OVERLAP_PX` (3 px). Among curves whose hits lie within 3 px of the nearest one, the winner is first a curve the tool takes, then one it has not already picked for this constraint (`picks.picked`), then a solid curve over a construction line or a reference axis. `findSnap` (`pickShape`) applies it, and Break's `findClosestLine` reuses the same exported rank to break its distance ties. Where all the overlapping curves have the same rank, the pick is exactly as before.
+- **Task id(s):** `1020`
+- **Fix merge sha:** pending (`agents/picks-1020`)
+- **Guarding test file(s):** `tests/picks-1020-node.test.js` (`BUG-213 R2-08a`..`R2-08d`), `tests/picks-1020-live.test.js` (Tangent apex, desktop + phone)
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **Related:** BUG-216 (no Select Other: a first click aimed at a construction piece lying on a solid line takes the solid line)
+- **History:** found in audit `1017` -> fixed in task `1020`. Probe before: `ROW C-09b.apexHitBug | ... toasts=["[warning] ⚠️Tangent takes a line and a circle or arc, or two circles / arcs (not two lines)."]`, `ROW D-10c.afterRejoin | ... toasts=["[warning] ⚠️Pick a second line, a different one."]`. After: `ROW C-09b.apexHitBug | ... tool=tool-tangent toasts=[]`, `ROW D-10a.afterBreak | midHole={"cx":"90","cy":"-60"} solidLines:3->4 ...`. Break was first thought covered by 1018 (its probe row passed), but that was the shapes' order: once 1020 changed the run upstream, the row split the construction line, so the rule was extended to Break (advisor ruling).
+
+### BUG-214
+- **Date / turn:** 2026-11-27 (real-design audit `R1-10`)
+- **Reported by:** worker (audit 1016, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "After dragging a corner, pressing D and clicking the adjacent line makes nothing."
+- **What was wrong:** The press on the corner selected it, and the finished drag left it selected, so Dimension started a point pick from it and the click on its own line cancelled silently.
+- **Cause:** `packages/ui/input-handlers/selection-tools.js` `handleSelectionPointerUp` kept the selection the press had made, also after a real drag of a point.
+- **Fix:** after a moved (> 5 px) drag of a point (`DRAG_TYPES.JOINT` / `CLUSTER`, not a group), nothing stays selected. A plain click still selects the point. A dragged curve stays selected (task 588 ruling). Fusion: a dragged sketch point is not left selected (unverified).
+- **Task id(s):** `1020`
+- **Fix merge sha:** pending (`agents/picks-1020`)
+- **Guarding test file(s):** `tests/picks-1020-node.test.js` (`BUG-214 R1-10 drag leaves no selection`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1016` -> fixed in task `1020`. Probe before: `ROW R1-10 | Part A / A7b->A8a | FRICTION | ... (dim50FirstTry=false)`. After: `ROW R1-10 | Part A / A7b->A8a | OK | ... (dim50FirstTry=true)`.
+
+### BUG-215
+- **Date / turn:** 2026-11-27 (found in task `1020`, audit row `R1-06`)
+- **Reported by:** worker (task 1020 after-probe)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "A click on a fillet arc's middle at normal zoom hits its tangent glyph."
+- **What was wrong:** At the bracket's desktop zoom (~3.3 px/mm) an R5 fillet arc is about 23 px long, and its tangent glyph badge covers its middle. A click there selects the tangent constraint, and Delete removes that tangent (tangent 16 -> 15). The arc stays.
+- **Cause:** the Select pick order (`hover-manager.js` `selectPick`: a joint, then a glyph the pointer is ON (badge + 3 px), then a shape; task 588). On a curve shorter than its glyph badge, the curve's body is only reachable outside the badge.
+- **Task id(s):** none yet (owner decision: glyph priority vs a short curve)
+- **Fix merge sha:** none
+- **Guarding test file(s):** none yet. Probe: `node tests/audits/design-run-audit-1016-partA.mjs`, `ROW R1-06 | Part A / A15a | OK | clicking R5 fillet arc at normal desktop zoom hits virtual sharp; Delete removed [] while arc survived=true` (its A15a summary shows `"tangent":15`, it was 16 before the click).
+- **Status:** open
+- **Family:** `ui-input`
+- **Related:** BUG-212
+
+### BUG-216
+- **Date / turn:** 2026-11-27 (real-design audit `R2-14`)
+- **Reported by:** worker (audit 1017, Gemini Neon seat)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Design tab)
+- **Report:** "No 'Select Other' disambiguation picker for overlapping curves (Fusion: click and hold, unverified)."
+- **What was wrong:** Where curves overlap, the user cannot choose which one a click takes. BUG-213's rule picks the likely one, but a first click aimed at a construction piece that lies on a solid line takes the solid line (audit `D-06b`: Equal then makes hyp + seg3, not seg1 + seg3).
+- **Cause:** no such picker exists (feature gap).
+- **Task id(s):** none (recorded only in task `1020`, not built)
+- **Fix merge sha:** none
+- **Guarding test file(s):** none
+- **Status:** open
+- **Family:** `ui-input`
+- **Related:** BUG-213
 
 ### BUG-300
 - **Date / turn:** 2026-11-27 (task 1027, from the files and documents audit 1024, row F-81 / F-81b)
@@ -3005,7 +3111,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
-| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-311 (11-27) |
+| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27) |
 | `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
@@ -3014,7 +3120,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 
@@ -3030,3 +3136,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 - [docs/FILES-AUDIT-1024.md](FILES-AUDIT-1024.md) — Files and documents audit (task `1024`: Save / Open / tabs / import / templates / export / file dialog; rows `F-01`..).
 - [docs/DESIGN-RUN-AUDIT-1016.md](DESIGN-RUN-AUDIT-1016.md), [docs/DESIGN-RUN-AUDIT-1017.md](DESIGN-RUN-AUDIT-1017.md) — Real-design audits, parts A-D (tasks `1016`, `1017`; rows `R1-*` / `R2-*`; fixes in tasks `1018`-`1021`; BUG-190..BUG-199 from task `1018`: R1-01, R1-02, R1-03, R1-05, R1-07, R1-12, R2-01, R2-03, R2-05, R2-13).
 - [docs/DRAWBOX-AUDIT-1026.md](DRAWBOX-AUDIT-1026.md) — Draw-box audit (task `1026`; every typed size input of the drawing and modify tools, `425` live cells, rows `B-01`..`B-19`; B-01..B-09, B-13, B-14, B-15, B-18, B-19 fixed in task `1028` as BUG-310..BUG-319).
+- [docs/INTERRUPTS-AUDIT-1023.md](INTERRUPTS-AUDIT-1023.md) — Interruptions audit (task `1023`: every ribbon tool x Esc / tool switch / re-click / Ctrl+Z / Ctrl+Y / right-click / zoom / pan / panel click / Delete / blur / phone touch; findings `I-01`..`I-23`; audit-only, nothing entered in the table above).

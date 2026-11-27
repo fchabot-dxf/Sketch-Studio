@@ -2613,12 +2613,12 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Reported by:** advisor, merge gate
 - **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
 - **Report:** `tests/ui-fixes-774-live.test.js` fails intermittently under gate load and passes alone.
-- **What was wrong:** Flaky live test: a red merge gate that is not a product bug.
-- **Cause:** unknown
-- **Task id(s):** unknown
-- **Fix merge sha:** none
-- **Guarding test file(s):** none yet
-- **Status:** open
+- **What was wrong:** NOT only a flaky test: a real UI bug. Hovering a Settings row's "i" near its edge opened the hint, the hint grew the panel, and the panel (centred by translate(-50%,-50%)) shifted, so the "i" slid from under the resting pointer: pointerleave closed the hint, the panel shrank, pointerenter reopened it (a ~16 ms flicker loop) and a click missed (no pin). The test's `.sk-hint:not([hidden])` read then hit null (`Cannot read properties of null (reading 'textContent')`).
+- **Cause:** `.sk-style-panel` in packages/ui/style-panel.js re-centred itself vertically whenever its content grew.
+- **Task id(s):** 1029 (fix: the panel is centred once on open and keeps that top; max-height min(82vh, room below the top), it scrolls inside)
+- **Fix merge sha:** (pending merge of agents/flaky774-1029)
+- **Guarding test file(s):** tests/settings-hint-stays-put-1029-live.test.js (desktop 1280x800 and phone 390; fails without the fix), tests/ui-fixes-774-live.test.js
+- **Status:** fixed
 - **Related:** unknown
 - **History:** seen in several merge gates on 2026-11-26.
 

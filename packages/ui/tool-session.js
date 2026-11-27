@@ -164,7 +164,6 @@ function createSession(state, desc) {
     /** cancel: everything held goes (the picks, the typed values, the boxes). The draw's undo step is closed by its caller (cancelActiveWork). */
     session.cancel = () => { log.push({ cancel: desc.tool }); reset(); };
 
-    state.onDrawCancelled(() => { if (stepIndex > 0 || boxOpen) session.cancel(); });   // a draw cancelled by any path (Undo, a Delete, a document switch)
     return session;
 }
 
@@ -172,7 +171,10 @@ const sessions = new WeakMap();   // state -> Map(tool id -> session)
 /** THE session of `desc` on `state` (one per tool per document state, made on first use) */
 export function toolSession(state, desc) {
     let m = sessions.get(state);
-    if (!m) { m = new Map(); sessions.set(state, m); }
+    if (!m) {
+        m = new Map(); sessions.set(state, m);
+        state.onDrawCancelled(() => cancelToolSessions(state));   // a draw dropped by ANY path (the footer Clear, a document-tab switch): THE cancel of Esc / another tool / Undo
+    }
     if (!m.has(desc.tool)) m.set(desc.tool, createSession(state, desc));
     return m.get(desc.tool);
 }

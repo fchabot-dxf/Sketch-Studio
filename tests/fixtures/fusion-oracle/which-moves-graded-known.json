@@ -42,90 +42,11 @@
   "cells": "all"
  },
  "perpendicular|LL": {
-  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
+  "reason": "after task 1038 (a perpendicular's mover turns rigidly to 90 degrees, also with a handedness locked): who moves agrees; two lines each held at one end (levels 1 / 6): Fusion turns the line rigidly and drags a partner, ours moves one end",
   "total": 64,
   "cells": [
-   "0,0",
-   "0,1",
-   "0,2",
-   "0,3",
-   "0,6",
-   "0,7",
-   "1,0",
-   "1,1",
-   "1,2",
-   "1,3",
    "1,6",
-   "1,7",
-   "2,0",
-   "2,1",
-   "3,0",
-   "3,1",
-   "5,0",
-   "5,1",
-   "6,0",
-   "6,1",
-   "7,0",
-   "7,1"
-  ]
- },
- "perpendicular|LC": {
-  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "3,0",
-   "7,0"
-  ]
- },
- "perpendicular|CL": {
-  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,3",
-   "0,7"
-  ]
- },
- "perpendicular|LS": {
-  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
-  "total": 4,
-  "cells": [
-   "0,0",
-   "3,0",
-   "7,0"
-  ]
- },
- "perpendicular|SL": {
-  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
-  "total": 4,
-  "cells": [
-   "0,3",
-   "0,4",
-   "0,7"
-  ]
- },
- "perpendicular|LR": {
-  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "0,8"
-  ]
- },
- "perpendicular|RL": {
-  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
-  "total": 8,
-  "cells": [
-   "0,0",
-   "8,0"
-  ]
- },
- "perpendicular|CC": {
-  "reason": "after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly",
-  "total": 4,
-  "cells": [
-   "0,0"
+   "6,1"
   ]
  },
  "collinear|LL": {

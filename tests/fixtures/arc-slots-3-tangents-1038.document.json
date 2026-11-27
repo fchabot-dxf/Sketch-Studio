@@ -1,0 +1,460 @@
+{
+ "version": 3,
+ "geometry": {
+  "joints": [
+   [
+    "j_origin",
+    {
+     "x": 0,
+     "y": 0,
+     "fixed": true,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j1_1795800413743",
+    {
+     "x": 50,
+     "y": -50,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j2_1795800413743",
+    {
+     "x": 90.00000000000003,
+     "y": -50.00000000000001,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j3_1795800413743",
+    {
+     "x": 70.00000000000001,
+     "y": -44.17464793072637,
+     "fixed": false,
+     "orphanAllowed": true,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j4_1795800413743",
+    {
+     "x": 46.16204079847071,
+     "y": -51.117873178820815,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j5_1795800413743",
+    {
+     "x": 53.83795920152929,
+     "y": -48.882126821179185,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j6_1795800413743",
+    {
+     "x": 93.83795920152932,
+     "y": -51.11787317882083,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j7_1795800413743",
+    {
+     "x": 86.16204079847074,
+     "y": -48.882126821179185,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j8_1795800413798",
+    {
+     "x": 70,
+     "y": -100,
+     "fixed": false,
+     "sketchId": "sketch-1",
+     "orphanAllowed": true
+    }
+   ],
+   [
+    "j9_1795800413798",
+    {
+     "x": 90,
+     "y": -100,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j10_1795800413798",
+    {
+     "x": 70,
+     "y": -120,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j11_1795800413798",
+    {
+     "x": 93.99680784018493,
+     "y": -100,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j12_1795800413798",
+    {
+     "x": 86.00319215981507,
+     "y": -100,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j13_1795800413798",
+    {
+     "x": 70,
+     "y": -123.99680784018493,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ],
+   [
+    "j14_1795800413798",
+    {
+     "x": 70,
+     "y": -116.00319215981507,
+     "fixed": false,
+     "sketchId": "sketch-1"
+    }
+   ]
+  ],
+  "shapes": [
+   {
+    "id": "s_arc_1795800413743_3",
+    "type": "arc",
+    "subType": "CENTER",
+    "joints": [
+     "j3_1795800413743",
+     "j4_1795800413743",
+     "j6_1795800413743"
+    ],
+    "groupId": "slot_1795800413743_1",
+    "sweep": true,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s_arc_1795800413743_6",
+    "type": "arc",
+    "subType": "CENTER",
+    "joints": [
+     "j2_1795800413743",
+     "j6_1795800413743",
+     "j7_1795800413743"
+    ],
+    "groupId": "slot_1795800413743_1",
+    "sweep": true,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s_arc_1795800413743_4",
+    "type": "arc",
+    "subType": "CENTER",
+    "joints": [
+     "j3_1795800413743",
+     "j5_1795800413743",
+     "j7_1795800413743"
+    ],
+    "groupId": "slot_1795800413743_1",
+    "sweep": true,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s_arc_1795800413743_5",
+    "type": "arc",
+    "subType": "CENTER",
+    "joints": [
+     "j1_1795800413743",
+     "j5_1795800413743",
+     "j4_1795800413743"
+    ],
+    "groupId": "slot_1795800413743_1",
+    "sweep": true,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s_arc_1795800413743_2",
+    "type": "arc",
+    "subType": "CENTER",
+    "joints": [
+     "j3_1795800413743",
+     "j1_1795800413743",
+     "j2_1795800413743"
+    ],
+    "isConstruction": true,
+    "sweep": true,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s_arc_1795800413798_9",
+    "type": "arc",
+    "subType": "CENTER",
+    "joints": [
+     "j8_1795800413798",
+     "j11_1795800413798",
+     "j13_1795800413798"
+    ],
+    "groupId": "slot_1795800413798_7",
+    "sweep": true,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s_arc_1795800413798_12",
+    "type": "arc",
+    "subType": "CENTER",
+    "joints": [
+     "j10_1795800413798",
+     "j13_1795800413798",
+     "j14_1795800413798"
+    ],
+    "groupId": "slot_1795800413798_7",
+    "sweep": true,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s_arc_1795800413798_10",
+    "type": "arc",
+    "subType": "CENTER",
+    "joints": [
+     "j8_1795800413798",
+     "j12_1795800413798",
+     "j14_1795800413798"
+    ],
+    "groupId": "slot_1795800413798_7",
+    "sweep": true,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s_arc_1795800413798_11",
+    "type": "arc",
+    "subType": "CENTER",
+    "joints": [
+     "j9_1795800413798",
+     "j12_1795800413798",
+     "j11_1795800413798"
+    ],
+    "groupId": "slot_1795800413798_7",
+    "sweep": true,
+    "sketchId": "sketch-1"
+   },
+   {
+    "id": "s_arc_1795800413798_8",
+    "type": "arc",
+    "subType": "CENTER",
+    "joints": [
+     "j8_1795800413798",
+     "j9_1795800413798",
+     "j10_1795800413798"
+    ],
+    "isConstruction": true,
+    "sweep": true,
+    "sketchId": "sketch-1"
+   }
+  ],
+  "constraints": [
+   {
+    "type": "equal",
+    "joints": [
+     "j3_1795800413743",
+     "j1_1795800413743",
+     "j3_1795800413743",
+     "j2_1795800413743"
+    ]
+   },
+   {
+    "type": "equal",
+    "joints": [
+     "j3_1795800413743",
+     "j4_1795800413743",
+     "j3_1795800413743",
+     "j6_1795800413743"
+    ]
+   },
+   {
+    "type": "equal",
+    "joints": [
+     "j3_1795800413743",
+     "j5_1795800413743",
+     "j3_1795800413743",
+     "j7_1795800413743"
+    ]
+   },
+   {
+    "type": "equal",
+    "joints": [
+     "j1_1795800413743",
+     "j5_1795800413743",
+     "j1_1795800413743",
+     "j4_1795800413743"
+    ]
+   },
+   {
+    "type": "equal",
+    "joints": [
+     "j2_1795800413743",
+     "j6_1795800413743",
+     "j2_1795800413743",
+     "j7_1795800413743"
+    ]
+   },
+   {
+    "type": "tangent",
+    "shapes": [
+     "s_arc_1795800413743_3",
+     "s_arc_1795800413743_5"
+    ],
+    "branch": "internal"
+   },
+   {
+    "type": "tangent",
+    "shapes": [
+     "s_arc_1795800413743_4",
+     "s_arc_1795800413743_5"
+    ],
+    "branch": "external"
+   },
+   {
+    "type": "tangent",
+    "shapes": [
+     "s_arc_1795800413743_3",
+     "s_arc_1795800413743_6"
+    ],
+    "branch": "internal"
+   },
+   {
+    "type": "distance",
+    "shape": "s_arc_1795800413743_5",
+    "value": 7.9948911878849955,
+    "offset": 9.194124866067746,
+    "isRadius": true,
+    "isDriven": false,
+    "driven": false,
+    "isDiameter": true,
+    "labelAngle": -4.428962687262613,
+    "name": "d1",
+    "glyphPos": {
+     "x": 47.42889168871211,
+     "y": -41.17269383648264
+    }
+   },
+   {
+    "type": "equal",
+    "joints": [
+     "j8_1795800413798",
+     "j9_1795800413798",
+     "j8_1795800413798",
+     "j10_1795800413798"
+    ]
+   },
+   {
+    "type": "equal",
+    "joints": [
+     "j8_1795800413798",
+     "j11_1795800413798",
+     "j8_1795800413798",
+     "j13_1795800413798"
+    ]
+   },
+   {
+    "type": "equal",
+    "joints": [
+     "j8_1795800413798",
+     "j12_1795800413798",
+     "j8_1795800413798",
+     "j14_1795800413798"
+    ]
+   },
+   {
+    "type": "equal",
+    "joints": [
+     "j9_1795800413798",
+     "j12_1795800413798",
+     "j9_1795800413798",
+     "j11_1795800413798"
+    ]
+   },
+   {
+    "type": "equal",
+    "joints": [
+     "j10_1795800413798",
+     "j13_1795800413798",
+     "j10_1795800413798",
+     "j14_1795800413798"
+    ]
+   },
+   {
+    "type": "tangent",
+    "shapes": [
+     "s_arc_1795800413798_9",
+     "s_arc_1795800413798_11"
+    ],
+    "branch": "internal"
+   },
+   {
+    "type": "tangent",
+    "shapes": [
+     "s_arc_1795800413798_10",
+     "s_arc_1795800413798_11"
+    ],
+    "branch": "external"
+   },
+   {
+    "type": "tangent",
+    "shapes": [
+     "s_arc_1795800413798_9",
+     "s_arc_1795800413798_12"
+    ],
+    "branch": "internal"
+   },
+   {
+    "type": "distance",
+    "shape": "s_arc_1795800413798_11",
+    "value": 7.9936156803698495,
+    "offset": 9.192658032425328,
+    "isRadius": true,
+    "isDriven": false,
+    "driven": false,
+    "isDiameter": true,
+    "labelAngle": -1.5707963267948966,
+    "name": "d2",
+    "glyphPos": {
+     "x": 90,
+     "y": -109.19265803242533
+    }
+   }
+  ],
+  "sketches": [
+   {
+    "id": "sketch-1",
+    "name": "Sketch 1",
+    "visible": true
+   }
+  ],
+  "activeSketchId": "sketch-1",
+  "groups": [],
+  "profiles": [],
+  "parameters": []
+ },
+ "hosts": {}
+}

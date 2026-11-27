@@ -57,8 +57,6 @@
  "scurve/recipe/7/full": "per-entity fully-constrained flag differs (arcs / points; a circle radius is a DOF in ours since task 515)",
  "scurve/recipe/8/full": "per-entity fully-constrained flag differs (arcs / points; a circle radius is a DOF in ours since task 515)",
  "scurve/recipe/9/full": "per-entity fully-constrained flag differs (arcs / points; a circle radius is a DOF in ours since task 515)",
- "scurve/recipe/10/full": "per-entity fully-constrained flag differs (arcs / points; a circle radius is a DOF in ours since task 515)",
- "scurve/recipe/10/sketchFull": "sketch fully-constrained flag differs (a refused / redundant step upstream)",
  "scurve/redundant/outcome": "FUSION REFUSES (over-constrained / redundant); ours keeps it (accepted or as a reference)",
  "scurve/conflict/outcome": "FUSION REFUSES (over-constrained / redundant); ours keeps it (accepted or as a reference)",
  "slot/recipe/8/outcome": "FUSION REFUSES (over-constrained / redundant); ours keeps it (accepted or as a reference)",

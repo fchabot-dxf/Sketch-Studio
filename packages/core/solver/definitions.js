@@ -54,6 +54,38 @@ const addSizeGrad = (outRow, t, sg, positions) => {
   addGrad(outRow, t.b, -sg * dx / l, -sg * dy / l);
 };
 
+// THE right angle of two vectors u and v (task 1038): ONE row for the perpendicular constraint and for a tangent at a shared end
+// (sharedEndTangent below). Returns its value r and the derivatives gu = dr/du, gv = dr/dv.
+//   no branch:   r = u . v   (zero at +90 or -90 degrees)
+//   branch +-1:  the turn from u to v is locked to that sign: it IS the angle constraint's row (angleGrad) at 90 degrees with that turn,
+//                regular at the solution and folded on the other half-plane, so the mirrored right angle is no solution. (The old
+//                branched row u x v - branch |u||v| is never above 0 and touches 0 at the solution: a double root, its derivative vanishes
+//                there, so the DOF counted a perpendicular that holds as free and the solve stopped short of 90 degrees: BUG-380, audit
+//                1037 N-A.)
+const rightAngleRow = (ux, uy, vx, vy, branch) => ((branch !== 1 && branch !== -1)
+  ? { r: ux * vx + uy * vy, gu: [vx, vy], gv: [ux, uy] }
+  : angleGrad({ value: 90, sector: { ray1: 1, ray2: 1, turn: branch } }, ux, uy, vx, vy));
+
+// THE tangent at a shared end (task 1038; ONE rule for line-arc and arc-arc): the two curves share their touch point P (one joint of both),
+// so they are tangent when the arc's radius C -> P is at a right angle to the other curve's direction t at P:
+//   r = rightAngleRow(P - C, t) / |t|   (a length)
+// t = B - A for a line (no branch: either way along it); for an arc t = (P - C2) turned +90 degrees, with the tangent's side as the
+// branch (u x t = (P - C) . (P - C2)): 'external', the centres on either side of P, is -1; 'internal' +1.
+// The distance forms (|C - line| = r, |C1C2| = r1 + r2 or |r1 - r2|) have a double root when the curves share P (a zero row: the DOF
+// counted the tangent as free, BUG-381, audit 1037 N-B). e = params.sharedEnd (engine.js): { at: P, centre: C, from, to, turned, branch },
+// t = to - from, turned +90 degrees when `turned`.
+const sharedEndTangent = (e, positions) => {
+  const ux = positions[e.at*2] - positions[e.centre*2], uy = positions[e.at*2+1] - positions[e.centre*2+1];
+  const dx = positions[e.to*2] - positions[e.from*2], dy = positions[e.to*2+1] - positions[e.from*2+1];
+  const tx = e.turned ? -dy : dx, ty = e.turned ? dx : dy;
+  const lt = Math.hypot(tx, ty) || 1e-12;
+  const { r, gu, gv } = rightAngleRow(ux, uy, tx, ty, e.branch);
+  const value = r / lt;
+  // d(value)/dt = gv / |t| - value t / |t|^2; back through the turn (tx = -dy, ty = dx) to d = to - from
+  const gtx = gv[0] / lt - value * tx / (lt * lt), gty = gv[1] / lt - value * ty / (lt * lt);
+  return { value, gu: [gu[0] / lt, gu[1] / lt], gd: e.turned ? [gty, -gtx] : [gtx, gty] };
+};
+
 // THE mirror rows of ONE point pair (p, q) across the line through a and b (task 563, the symmetric constraint; every form uses it). With
 // u = b - a and n = u turned -90 degrees / |u| (the normal of the cross product (w x u) / |u|), the reflection residual q - mirror(p) written
 // in the line's own frame is
@@ -137,6 +169,29 @@ const angleRow = (params, ux, uy, vx, vy) => {
   const cross = ux * vy - uy * vx, dot = ux * vx + uy * vy;
   const S = k * (cross * ct - dot * st), C = k * (dot * ct + cross * st);
   return { k, ct, st, S, C, far: C < 0, sgn: S < 0 ? -1 : 1, lu: Math.hypot(ux, uy), lv: Math.hypot(vx, vy) };
+};
+
+// THE angle row's value and derivatives (the angle constraint; a branch-locked perpendicular is this row at 90 degrees, rightAngleRow):
+// r = S = k (cross ct - dot st) where the pair is on the sector's side (C >= 0), else folded: 2 sgn(S) |u||v| - S.
+const angleGrad = (params, ux, uy, vx, vy) => {
+  const g = angleRow(params, ux, uy, vx, vy);
+  const { k, ct, st } = g;
+  // S = k (cross·ct − dot·st)
+  // ∂cross/∂(ux,uy) = (vy, −vx); ∂dot/∂(ux,uy) = (vx, vy)
+  // ∂cross/∂(vx,vy) = (−uy, ux); ∂dot/∂(vx,vy) = (ux, uy)
+  let drdux = k * ( vy * ct - vx * st);
+  let drduy = k * (-vx * ct - vy * st);
+  let drdvx = k * (-uy * ct - ux * st);
+  let drdvy = k * ( ux * ct - uy * st);
+  if (g.far) {
+    // r = 2 sgn(S) |u||v| − S:  ∂(|u||v|)/∂u = |v| u/|u|,  ∂(|u||v|)/∂v = |u| v/|v|
+    const lu = g.lu || 1e-12, lv = g.lv || 1e-12, w = 2 * g.sgn;
+    drdux = w * lv * ux / lu - drdux;
+    drduy = w * lv * uy / lu - drduy;
+    drdvx = w * lu * vx / lv - drdvx;
+    drdvy = w * lu * vy / lv - drdvy;
+  }
+  return { r: g.far ? 2 * g.sgn * g.lu * g.lv - g.S : g.S, gu: [drdux, drduy], gv: [drdvx, drdvy] };
 };
 
 // TASK 658: the pattern rows (#core/pattern.js patternOperands, engine.js maps them to dense indices).
@@ -507,62 +562,24 @@ export const Definitions = {
     }
   },
 
-  // Perpendicular: (B-A) dot (D-C) = 0
+  // Perpendicular: (B-A) dot (D-C) = 0, branch-locked (c.branch +-1, CM.lockPerpendicularBranch) to the turn it was made with:
+  // THE right-angle row (rightAngleRow above) of u = B - A and v = D - C.
   perpendicular: {
-    // Always 1 row, but the residual *formula* depends on branch:
-    //   no branch:   r = u · v        (zero for either ±90° configuration)
-    //   branch ±1:   r = u × v − branch · |u||v|
-    //                (zero iff u ⟂ v AND cross(u,v) has sign 'branch')
-    // The branched form is smooth with no kinks and has a single global
-    // minimum at the chosen perpendicular configuration — no local minima
-    // on the wrong half-plane.
     rows: 1,
     computeError: (params, positions) => {
-      const ax = positions[params.joints[0]*2], ay = positions[params.joints[0]*2+1];
-      const bx = positions[params.joints[1]*2], by = positions[params.joints[1]*2+1];
-      const cx = positions[params.joints[2]*2], cy = positions[params.joints[2]*2+1];
-      const dx = positions[params.joints[3]*2], dy = positions[params.joints[3]*2+1];
-      const ux = bx - ax, uy = by - ay;
-      const vx = dx - cx, vy = dy - cy;
-      if (params.branch !== 1 && params.branch !== -1) return ux * vx + uy * vy;
-      const cross = ux * vy - uy * vx;
-      const lenU = Math.hypot(ux, uy) || 1e-12;
-      const lenV = Math.hypot(vx, vy) || 1e-12;
-      return cross - params.branch * lenU * lenV;
+      const [a, b, c, d] = params.joints;
+      return rightAngleRow(positions[b*2] - positions[a*2], positions[b*2+1] - positions[a*2+1],
+        positions[d*2] - positions[c*2], positions[d*2+1] - positions[c*2+1], params.branch).r;
     },
     computeJacobian: (params, positions, outRow) => {
-      const a = params.joints[0], b = params.joints[1], c = params.joints[2], d = params.joints[3];
-      const ax = positions[a*2], ay = positions[a*2+1];
-      const bx = positions[b*2], by = positions[b*2+1];
-      const cx = positions[c*2], cy = positions[c*2+1];
-      const dx = positions[d*2], dy = positions[d*2+1];
-      const ux = bx - ax, uy = by - ay;
-      const vx = dx - cx, vy = dy - cy;
-      if (params.branch !== 1 && params.branch !== -1) {
-        // Original dot-product Jacobian
-        addGrad(outRow, a, -vx, -vy);
-        addGrad(outRow, b,  vx,  vy);
-        addGrad(outRow, c, -ux, -uy);
-        addGrad(outRow, d,  ux,  uy);
-        return;
-      }
-      // Branched: r = (ux*vy − uy*vx) − branch · |u| · |v|
-      // ∂r/∂u = (vy, −vx) − branch · |v| · (ux/|u|, uy/|u|)
-      // ∂r/∂v = (−uy, ux) − branch · |u| · (vx/|v|, vy/|v|)
-      // Chain to a,b,c,d via u = b−a, v = d−c.
-      const lenU = Math.hypot(ux, uy) || 1e-12;
-      const lenV = Math.hypot(vx, vy) || 1e-12;
-      const br = params.branch;
-      const drdux =  vy - br * lenV * (ux / lenU);
-      const drduy = -vx - br * lenV * (uy / lenU);
-      const drdvx = -uy - br * lenU * (vx / lenV);
-      const drdvy =  ux - br * lenU * (vy / lenV);
-      // u = b − a  →  ∂u/∂a = −I, ∂u/∂b = +I
-      addGrad(outRow, a, -drdux, -drduy);
-      addGrad(outRow, b,  drdux,  drduy);
-      // v = d − c  →  ∂v/∂c = −I, ∂v/∂d = +I
-      addGrad(outRow, c, -drdvx, -drdvy);
-      addGrad(outRow, d,  drdvx,  drdvy);
+      const [a, b, c, d] = params.joints;
+      const { gu, gv } = rightAngleRow(positions[b*2] - positions[a*2], positions[b*2+1] - positions[a*2+1],
+        positions[d*2] - positions[c*2], positions[d*2+1] - positions[c*2+1], params.branch);
+      // u = b - a, v = d - c (ACCUMULATE: the two lines may share a joint)
+      addGrad(outRow, a, -gu[0], -gu[1]);
+      addGrad(outRow, b,  gu[0],  gu[1]);
+      addGrad(outRow, c, -gv[0], -gv[1]);
+      addGrad(outRow, d,  gv[0],  gv[1]);
     }
   },
 
@@ -578,6 +595,8 @@ export const Definitions = {
   tangent: {
     rows: 1,
     computeError: (params, positions) => {
+      // Curves that share their touch point (a fillet, an arc slot's corner): THE shared-end row (sharedEndTangent), line-arc and arc-arc.
+      if (params.sharedEnd) return sharedEndTangent(params.sharedEnd, positions).value;
       // Two modes:
       //   1) circle-circle: params.joints = [C1, C2], params.radii = [r1, r2]
       //      residual = ‖C2−C1‖ − target, target = r1+r2 (external) or |r1−r2| (internal)
@@ -609,15 +628,18 @@ export const Definitions = {
       const wx = cx - ax, wy = cy - ay;
       const cross = wx * uy - wy * ux;
       const lu = Math.hypot(ux, uy) || 1e-12;
-      if (params.sharedEnd) {
-        // Endpoint tangency: the shared joint P is the touch point, so (P - C) ⟂ line direction.
-        const px = params.sharedEnd === 'a' ? ax : bx, py = params.sharedEnd === 'a' ? ay : by;
-        return ((px - cx) * ux + (py - cy) * uy) / lu;
-      }
       const r = radiusValue(positions, params.radiusAt, params.radius, params.rimJoint, cI);
       return Math.abs(cross / lu) - r;
     },
     computeJacobian: (params, positions, outRow) => {
+      if (params.sharedEnd) { // u = P - C, d = to - from (ACCUMULATE: P is also `to` of an arc's turned direction)
+        const e = params.sharedEnd, { gu, gd } = sharedEndTangent(e, positions);
+        addGrad(outRow, e.at, gu[0], gu[1]);
+        addGrad(outRow, e.centre, -gu[0], -gu[1]);
+        addGrad(outRow, e.to, gd[0], gd[1]);
+        addGrad(outRow, e.from, -gd[0], -gd[1]);
+        return;
+      }
       // circle-circle Jacobian: same as distance w.r.t centers
       if (params.joints && params.joints.length === 2 && Array.isArray(params.radii) && params.radii.length === 2) {
         const i1 = params.joints[0], i2 = params.joints[1];
@@ -646,22 +668,6 @@ export const Definitions = {
       const wx = cx - ax, wy = cy - ay;
       const cross = wx * uy - wy * ux;
       const lu = Math.hypot(ux, uy) || 1e-12;
-      if (params.sharedEnd) {
-        // s = (P - C).u / |u|; ds = (dw.u + w.du)/|u| - g (u.du)/|u|^3, g = w.u
-        const pI = params.sharedEnd === 'a' ? aI : bI;
-        const wpx = positions[pI*2] - cx, wpy = positions[pI*2+1] - cy;
-        const g = wpx * ux + wpy * uy;
-        const lu3 = lu * lu * lu;
-        const add = (idx, dwx, dwy, dux, duy) => addGrad(outRow, idx,
-          (dwx * ux + wpx * dux) / lu - g * (ux * dux) / lu3,
-          (dwy * uy + wpy * duy) / lu - g * (uy * duy) / lu3);
-        // x and y components are independent: variable x moves (dw,du) along x only.
-        add(cI, -1, -1, 0, 0);
-        add(pI, 1, 1, 0, 0);
-        add(aI, 0, 0, -1, -1);
-        add(bI, 0, 0, 1, 1);
-        return;
-      }
       const s = cross / lu;
       const sgn = s >= 0 ? 1 : -1;
       // ∂cross/∂{Cx,Cy} = (uy, −ux)
@@ -741,8 +747,7 @@ export const Definitions = {
       const bx = positions[params.joints[1]*2], by = positions[params.joints[1]*2+1];
       const cx = positions[params.joints[2]*2], cy = positions[params.joints[2]*2+1];
       const dx = positions[params.joints[3]*2], dy = positions[params.joints[3]*2+1];
-      const g = angleRow(params, bx - ax, by - ay, dx - cx, dy - cy);
-      return g.far ? 2 * g.sgn * g.lu * g.lv - g.S : g.S;
+      return angleGrad(params, bx - ax, by - ay, dx - cx, dy - cy).r;
     },
     computeJacobian: (params, positions, outRow) => {
       const aI = params.joints[0], bI = params.joints[1], cI = params.joints[2], dI = params.joints[3];
@@ -752,23 +757,8 @@ export const Definitions = {
       const dx = positions[dI*2], dy = positions[dI*2+1];
       const ux = bx - ax, uy = by - ay;
       const vx = dx - cx, vy = dy - cy;
-      const g = angleRow(params, ux, uy, vx, vy);
-      const { k, ct, st } = g;
-      // S = k (cross·ct − dot·st)
-      // ∂cross/∂(ux,uy) = (vy, −vx); ∂dot/∂(ux,uy) = (vx, vy)
-      // ∂cross/∂(vx,vy) = (−uy, ux); ∂dot/∂(vx,vy) = (ux, uy)
-      let drdux = k * ( vy * ct - vx * st);
-      let drduy = k * (-vx * ct - vy * st);
-      let drdvx = k * (-uy * ct - ux * st);
-      let drdvy = k * ( ux * ct - uy * st);
-      if (g.far) {
-        // r = 2 sgn(S) |u||v| − S:  ∂(|u||v|)/∂u = |v| u/|u|,  ∂(|u||v|)/∂v = |u| v/|v|
-        const lu = g.lu || 1e-12, lv = g.lv || 1e-12, w = 2 * g.sgn;
-        drdux = w * lv * ux / lu - drdux;
-        drduy = w * lv * uy / lu - drduy;
-        drdvx = w * lu * vx / lv - drdvx;
-        drdvy = w * lu * vy / lv - drdvy;
-      }
+      const { gu, gv } = angleGrad(params, ux, uy, vx, vy);
+      const [drdux, drduy] = gu, [drdvx, drdvy] = gv;
       addGrad(outRow, aI, -drdux, -drduy);
       addGrad(outRow, bI,  drdux,  drduy);
       addGrad(outRow, cI, -drdvx, -drdvy);

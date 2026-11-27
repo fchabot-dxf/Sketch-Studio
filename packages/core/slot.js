@@ -309,6 +309,9 @@ function buildArcSlotCore(joints, { centerId, c1Id, c2Id, sweep, width, genJ, is
     createConstraint(CONSTRAINT_TYPES.TANGENT, { shapes: [ao.id, e1.id], branch: 'internal' }),
     createConstraint(CONSTRAINT_TYPES.TANGENT, { shapes: [ai.id, e1.id], branch: 'external' }),
     createConstraint(CONSTRAINT_TYPES.TANGENT, { shapes: [ao.id, e2.id], branch: 'internal' }),
+    // TASK 1038 (audit 1037 D-7): the 4th corner too, as Fusion (Tangent x4). With 3, the inner arc and cap 2 met as two circles tangent at
+    // their shared corner by the other rows (a tangential intersection): one more DOF counted than can move.
+    createConstraint(CONSTRAINT_TYPES.TANGENT, { shapes: [ai.id, e2.id], branch: 'external' }),
     ...extraConstraints.map((fn) => fn({ ac, ao, ai, e1, e2 })),
   ].filter(Boolean);
 

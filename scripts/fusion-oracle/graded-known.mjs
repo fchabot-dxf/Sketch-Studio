@@ -11,7 +11,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // refuses a redundant / over-constraining add that ours accepts (refusing like Fusion is task 526).
 const REASON = {
   'parallel': 'after task 525: Fusion refuses a redundant parallel (task 526); a corner line against an H/V line pinned at one end: Fusion turns it rigidly and drags its partner, ours swings it about the corner',
-  'perpendicular': 'after task 525: who moves agrees; with a handedness locked ours reaches 90 degrees by the least-change solve of the mover (the branched solver row is stationary at exactly 90 degrees), Fusion turns it rigidly',
+  'perpendicular': "after task 1038 (a perpendicular's mover turns rigidly to 90 degrees, also with a handedness locked): who moves agrees; two lines each held at one end (levels 1 / 6): Fusion turns the line rigidly and drags a partner, ours moves one end",
   'collinear': 'after task 525: Fusion refuses (task 526) or moves both lines; a corner line: Fusion stretches it, ours turns it rigidly; a rect side: Fusion translates the rect, ours deforms it',
   'equal-line-line': 'after task 525: two rect sides: Fusion deforms one rect, ours both',
   'dim-angle': 'after task 525: Fusion refuses a redundant angle (task 526); a free line: Fusion turns it rigidly, ours reaches the angle by the least-change solve (it stretches)',

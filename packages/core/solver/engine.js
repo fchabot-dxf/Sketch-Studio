@@ -559,7 +559,7 @@ export class NewtonSolver {
     const denseLen = densePositions.length;
     const colOf = this._colOf, acc = this._acc, mark = this._mark, touched = this._touched, bufs = this._rowBufs;
     // THE operands of a row: the dense indices its Definition reads and differentiates, every one set into the row's params (or a body
-    // point's op) by this function: joints / rimJoint / rimJoints / the terms' a and b (both coordinates of a joint), radiusAt / radiiAt /
+    // point's op) by this function: joints / rimJoint / rimJoints / the terms' a and b / a tangent's sharedEnd (both coordinates of a joint), radiusAt / radiiAt /
     // the terms' at (a circle's radius unknown). Ascending, so emitRow sums a cluster's members in insertion order. A Definition writing
     // anywhere else would leave a row buffer dirty: the assembly checks they are all zero at its end and THROWS (never a wrong row).
     let ops = this._ops, nOps = 0;
@@ -573,6 +573,7 @@ export class NewtonSolver {
       if (Array.isArray(p.radiiAt)) for (const a of p.radiiAt) addAt(a);
       if (Array.isArray(p.rimJoints)) for (const j of p.rimJoints) addJoint(j);
       if (Array.isArray(p.terms)) for (const t of p.terms) if (t) { addAt(t.at); addJoint(t.a); addJoint(t.b); }
+      if (p.sharedEnd) { addJoint(p.sharedEnd.at); addJoint(p.sharedEnd.centre); addJoint(p.sharedEnd.from); addJoint(p.sharedEnd.to); } // a tangent's shared end (_sharedEndTangent)
       for (let a = 1; a < nOps; ++a) { const v = ops[a]; let b = a - 1; while (b >= 0 && ops[b] > v) { ops[b + 1] = ops[b]; --b; } ops[b + 1] = v; }
     };
     // Close row `row` from one dense Jacobian row (the Definitions' layout) over the row's operands, scaled by w: a joint column sums its
@@ -813,6 +814,8 @@ export class NewtonSolver {
                     params.radii = [opA.radius, opB.radius];
                     params.radiiAt = [opA.at, opB.at];       // a circle operand reads its radius unknown
                     params.rimJoints = [opA.rim, opB.rim];   // an arc operand's radius is live through its rim joint
+                    const shared = this._sharedEndTangent(sA, sB, jointIndexMap, c.branch === 'internal' ? 1 : -1);
+                    if (shared) params.sharedEnd = shared;
                   }
                 }
               } else if (sA.type === 'line' && (sB.type === 'circle' || sB.type === 'arc')) {
@@ -836,11 +839,9 @@ export class NewtonSolver {
               const bIdx = jointIndexMap.get(lineShape.joints[1]);
               if (typeof cIdx === 'number' && typeof aIdx === 'number' && typeof bIdx === 'number') {
                 params.joints = [cIdx, aIdx, bIdx];
-                // Shared endpoint (a fillet: the line ends ON the arc's rim joint) -> endpoint-tangency
-                // residual (P - C) . u/|u| = 0, non-singular; distance-to-line has a double root there.
-                const arcRim = new Set(circShape.joints.slice(1));
-                if (arcRim.has(lineShape.joints[0])) params.sharedEnd = 'a';
-                else if (arcRim.has(lineShape.joints[1])) params.sharedEnd = 'b';
+                // Shared endpoint (a fillet: the line ends ON the arc's rim joint): THE shared-end row (definitions.js sharedEndTangent)
+                const shared = this._sharedEndTangent(circShape, lineShape, jointIndexMap, null);
+                if (shared) params.sharedEnd = shared;
                 // a circle's radius unknown or an arc's live |rim - centre| takes part in the row
                 const op = this._radiusOperand(circShape, jointIndexMap);
                 params.radiusAt = op.at; params.radius = op.radius; params.rimJoint = op.rim;
@@ -943,6 +944,22 @@ export class NewtonSolver {
     }
 
     return new Assembly(withJ ? { rowPtr, cols: cols.subarray(0, nnz), vals: vals.subarray(0, nnz) } : null, r, m, n);
+  }
+
+  // THE shared end of a tangent (task 1038, one rule for line-arc and arc-arc): when the other curve (a line's end, an arc's rim) ends ON the
+  // arc's rim joint P, P is the touch point, and the tangent's row is definitions.js sharedEndTangent: the radius C -> P at a right angle to
+  // the other curve's direction at P (a line's B - A; an arc's P - C2 turned +90 degrees, with the tangent's side as the branch: -1
+  // external, +1 internal). The distance rows have a double root there (BUG-381). Returns { at, centre, from, to, turned, branch } as
+  // dense indices, or null when the two share no such joint (a circle has no rim joint).
+  _sharedEndTangent(arc, other, jointIndexMap, branch) {
+    const rim = arc && arc.type === 'arc' && arc.joints ? arc.joints.slice(1) : [];
+    const ends = !other || !other.joints ? [] : other.type === 'line' ? other.joints.slice(0, 2) : other.type === 'arc' ? other.joints.slice(1) : [];
+    const p = ends.find(id => rim.includes(id));
+    if (p === undefined) return null;
+    const [from, to] = other.type === 'line' ? [other.joints[0], other.joints[1]] : [other.joints[0], p];
+    const e = { at: jointIndexMap.get(p), centre: jointIndexMap.get(arc.joints[0]), from: jointIndexMap.get(from), to: jointIndexMap.get(to),
+      turned: other.type === 'arc', branch: other.type === 'arc' ? branch : null };
+    return [e.at, e.centre, e.from, e.to].every(i => typeof i === 'number') ? e : null;
   }
 
   // ── Rank-redundancy of a candidate constraint row ───────────────────────────

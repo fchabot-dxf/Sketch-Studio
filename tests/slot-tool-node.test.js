@@ -260,12 +260,13 @@ for (const [tag, p3, expectSweep] of [
   verifyArcTangency(state.joints, res.meta.ao, res.meta.e1, res.meta.o1Id, 'CPArc ao-e1');
   verifyArcTangency(state.joints, res.meta.ai, res.meta.e2, res.meta.i2Id, 'CPArc ai-e2');
 
-  // DOF recorded cleanly (pinned N-F7 keeps nullity=9 free / 4 when cm,c1,c2 fixed)
-  assert.strictEqual(state.engine.jointFreedom().nullity, 9, 'Arc slot free DOF === 9 (known N-F7)');
+  // DOF (task 1038, BUG-381 / BUG-383: the shared-end arc-arc tangents are real rows and the slot has Fusion's 4 tangents; N-F7 pinned 9 / 4):
+  // centre (2) + radius + 2 end angles + width - the width dimension = 5 free; the centre and both end centres fixed leave nothing free
+  assert.strictEqual(state.engine.jointFreedom().nullity, 5, 'Arc slot free DOF === 5');
   state.joints.get('jcm').fixed = true;
   state.joints.get('ja').fixed = true;
   state.joints.get('jb').fixed = true;
-  assert.strictEqual(state.engine.jointFreedom().nullity, 4, 'Arc slot fixed 3 centers DOF === 4 (known N-F7)');
+  assert.strictEqual(state.engine.jointFreedom().nullity, 0, 'Arc slot fixed 3 centers DOF === 0');
 
   // Drag jb smoothly along the circle while jcm + ja fixed (0,80) -> (-40, 69.282), then release
   state.joints.get('jb').fixed = false;

@@ -202,6 +202,9 @@ SHARED_CASES.push(
   ['tangent line-arc, the line ends on the centre', { type: 'tangent', line: 'LX', circle: 'A1' }, LX('ac', 'd')],
   ['tangent line-arc, the line starts on the start rim', { type: 'tangent', line: 'LX', circle: 'A1' }, LX('as', 'd')],
   ['tangent arc-arc, a shared rim', { type: 'tangent', shapes: ['A1', 'A3'] }, ARC3('bc', 'as', 'be')],
+  // task 1038: the shared-end row (definitions.js sharedEndTangent) on its folded half-plane (internal here), and at both arcs' END rim
+  ['tangent arc-arc internal, a shared rim', { type: 'tangent', shapes: ['A1', 'A3'], branch: 'internal' }, ARC3('bc', 'as', 'be')],
+  ['tangent arc-arc, a shared end rim (each arc last joint)', { type: 'tangent', shapes: ['A1', 'A3'] }, ARC3('bc', 'be', 'ae')],
   ['tangent arc-arc, centre on the other rim', { type: 'tangent', shapes: ['A1', 'A3'] }, ARC3('as', 'bs', 'be')],
   ['tangent arc-arc internal, a shared centre', { type: 'tangent', shapes: ['A1', 'A3'], branch: 'internal' }, ARC3('ac', 'bs', 'be')],
   ['equal arc-arc, a shared centre', { type: 'equal', shapes: ['A1', 'A3'] }, ARC3('ac', 'bs', 'be')],

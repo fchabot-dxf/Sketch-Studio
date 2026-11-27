@@ -18476,3 +18476,10 @@ Real-Design UI/UX audit of Parts C (router jig template) and D (frame gusset / t
   - `R2-11` (`misleading UI`): Reference Radius & Diameter labels format as `R (15)` and `Ø (5)` instead of `(R 15)` / `(Ø 5)` (`packages/ui/svg-renderer.js:73-80`).
   - `R2-12` (`DIVERGENCE`): No 3-Point Arc tool (Center-Start-End only). `R2-13` (`FRICTION`): No Join/Merge command after Break. `R2-14` (`FRICTION`): No "Select Other" picker for overlapping curves.
 - **Evidence:** Local untracked screenshots + MD5s in `.evidence/1017/` (all visually re-opened and verified).
+
+## TURN 1024
+- **Task:** Files and documents AUDIT (Save / Open / Save As / New / Close, document tabs, SVG+DXF import, templates, SVG+DXF export, file dialog). Audit only: no code in `packages/` or `apps/` changed.
+- **Deliverables:** `docs/FILES-AUDIT-1024.md` (summary table + rows F-01..); probes `tests/audits/files-audit-1024-{kit,fixture}.js` and `-{roundtrip,tabs,dialog,import,templates,export}.mjs` (outside the gate); fixtures `tests/fixtures/files-1024/`; one line under `## Audits` in `docs/BUG-ARCHIVE.md` (audit-only findings stay in the audit doc, rule 5).
+- **Result:** 10 BUG, 5 DIVERGENCE, 15 FRICTION, 90 OK, 0 REGRESSION. Main BUGs: SVG and DXF export drop every circle and write construction lines as real geometry (`export-manager.js` filters line|arc|bezier); DXF out then in is mirrored top to bottom (`invertY:false`); an opened but untouched file tab is lost on reload / app switch; SVG import turns `NaN` into 0, radius <= 0 into radius-0 circles and a non-uniform scaled circle into a wrong circle, silently; Tab leaves the modal Save as / Open dialog; a file shape naming a missing joint vanishes with no word.
+- **Probe lessons (not app bugs):** `.sk-fd .sk-tp-cancel` also matches the hidden overwrite box's Cancel (use `[data-choice="__cancel"]`); a punctuation key code can collide with a control key (`.` = vk 46 = Delete), so the kit types punctuation as text; with `cdn.tailwindcss.com` blocked the Export form shows unstyled (the `hidden` class is Tailwind's).
+- **Evidence:** `.evidence/1024/` (local): `out-*.txt` per probe, screenshots, saved/exported files.

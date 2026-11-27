@@ -539,6 +539,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
 
   // Scale function to convert screen-space sizes to world-space
   const scale = (screenSize) => screenSize * zoom;
+  // THE mark of a point (a joint): its disc at the point size and the point ring width (TASK 1034: shared by the joints and a session's held picks)
+  const pointMark = (p, fill, stroke) => `<circle cx="${p.x}" cy="${p.y}" r="${scale(BASE_JOINT_RADIUS)}" style="cursor:pointer; fill:${skv(fill)}; stroke:${skv(stroke)}" stroke-width="${scale(BASE_JOINT_STROKE)}"/>`;
   
   // Dash pattern size constants in screen pixels (converted to world units with scale())
   const DASH_LENGTH_PX = getNum('DASH_LENGTH_PX', 8);    // Length of dashes in screen pixels
@@ -1605,7 +1607,7 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const strokeW = scale(BASE_JOINT_STROKE);
 
     // Main joint circle
-    out.push(`<circle cx="${j.x}" cy="${j.y}" r="${r}" style="cursor:pointer; fill:${skv(fill)}; stroke:${skv(stroke)}" stroke-width="${strokeW}"/>`);
+    out.push(pointMark(j, fill, stroke));
 
     // If this joint is an arc/circle endpoint, draw an expanded invisible hit-target and subtle ring to make dragging easier
     try {
@@ -1622,6 +1624,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
     const isOrigin = pointsCoincidentToOrigin.has(id);
   }
   out.dim = null;
+  // TASK 1034: the points a tool session holds until its build (a circle's centre, #ui/tool-session.js) are drawn as the lone point each becomes
+  if (active && Array.isArray(active.heldPoints)) for (const p of active.heldPoints) out.push(pointMark(p, 'white', JOINT_RING));
 
   // TASK 760: while the Close path tool is on, every free end of every open chain of the active sketch is marked: a ring in the warning token
   // (--sk-warning), on top of the points, so the user sees WHY an outline takes no inside / outside cut. The ends come from the host's render
@@ -1772,7 +1776,8 @@ export function draw(joints, shapes, svg, active, snapTarget, constraints=[], se
       if(active.preview.type === 'line'){
         out.push(`<line x1="${a.x}" y1="${a.y}" x2="${p.x}" y2="${p.y}" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
       } else if(active.preview.type === 'circle'){
-        const r = Math.hypot(p.x - a.x, p.y - a.y);
+        // TASK 1034 (N-2): the radius the build will make (a typed diameter's half, else the cursor's: #ui/input-handlers/circle-tool.js preview)
+        const r = typeof active.preview.radius === 'number' ? active.preview.radius : Math.hypot(p.x - a.x, p.y - a.y);
         out.push(`<circle cx="${a.x}" cy="${a.y}" r="${r}" fill="none" style="stroke:${skv(previewStroke)}" stroke-width="${scale(2)}" stroke-dasharray="${previewDash}" stroke-opacity="${previewOpacity}"/>`);
       } else if(active.preview.type === 'polygon'){
         // Draw regular polygon preview using center 'a' and preview point 'p'

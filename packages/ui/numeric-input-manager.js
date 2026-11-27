@@ -218,6 +218,7 @@ let uiState = {
     expressions: [null, null], // TASK 876: what each typed field READS when its text names a dimension / parameter (d1 / 2): the canonical formula the new dimension is driven by; null = a plain value
     names: [null, null], // TASK 1013 (UX-17a): dimension name assigned via `w = expr` in a draw-time box, per field
     assigns: [null, null], // TASK 1013 (UX-17a): existing user parameter update `{ name, text }` via `param = expr` in a draw-time box, per field
+    owner: null, // TASK 1034: the tool session whose step opened this live box (#ui/input-translate-box.js): its edits and Enter go to it, not to the window liveDimension* events
     externalInput: null, // TASK 1013 (UX-17c / B-19e): active external box (Fillet / Offset) borrowing the ONE #dimComplete list
     externalState: null,
     externalOnInsert: null,
@@ -423,10 +424,11 @@ function setupListeners() {
 
 // --- Public API ---
 
-export function showSingleInput(x, y, value, field, initialKey = null, focus = true, quantity = 'length', refuse = null) {
+export function showSingleInput(x, y, value, field, initialKey = null, focus = true, quantity = 'length', refuse = null, owner = null) {
     if (!uiState.singleInput) return;   // a host with no DOM (the headless node tests that drive a tool's handlers bare) has no boxes: the tool runs as it does with one
     resetState();
     uiState.active = true;
+    uiState.owner = owner;
     uiState.mode = 'live-single';
     uiState.field = field; // 'length', 'radius'
     uiState.refuses = [refuse, null]; // TASK 1028 (B-07): the box's own value rule (an arc's sweep), else the quantity's (boxRefusal)
@@ -453,6 +455,7 @@ export function showSingleInput(x, y, value, field, initialKey = null, focus = t
         uiState.singleInput.focus();
         if (!initialKey) uiState.singleInput.select();
     }
+    if (initialKey && owner) handlePreview();   // TASK 1034: an owner hears the key that opened the box as its first edit (as the two-field box reports it)
 }
 
 /**
@@ -464,6 +467,7 @@ export function showDualInput(x, y, w, h, opts = {}) {
     if (!uiState.dualContainer) return;   // no DOM, no boxes (see showSingleInput)
     resetState();
     uiState.active = true;
+    uiState.owner = opts.owner || null;   // TASK 1034 (see showSingleInput)
     uiState.mode = 'live-dual';
     uiState.dualKind = opts.kind || null;
     uiState.typed = [false, false];
@@ -767,8 +771,12 @@ function handleCommit() {
         detail.expressions = typedExpressions();
         detail.names = typedNames();
         detail.assigns = typedAssigns();
-        window.dispatchEvent(new CustomEvent('liveDimensionApplied', { detail }));
-        if (detail.keepOpen) return;   // a tool that cannot place anything yet (a zero size) keeps its box open
+        if (uiState.owner) {   // TASK 1034: a session's box: THE step at the session's last hover; the box stays open unless the shape was built
+            if (uiState.owner.enter(detail)) return;
+        } else {
+            window.dispatchEvent(new CustomEvent('liveDimensionApplied', { detail }));
+            if (detail.keepOpen) return;   // a tool that cannot place anything yet (a zero size) keeps its box open
+        }
         hideInput();
     }
 }
@@ -958,7 +966,8 @@ function handlePreview(resetIdx = -1) {
         detail.names = typedNames();
         detail.assigns = typedAssigns();
     }
-    window.dispatchEvent(new CustomEvent('liveDimensionPreview', { detail }));
+    if (uiState.owner) uiState.owner.values(detail);   // TASK 1034: a session's box tells its session
+    else window.dispatchEvent(new CustomEvent('liveDimensionPreview', { detail }));
 }
 
 // TASK 769: field `index` of the open creation box (the single box is field 0), and the value its text means (THE one reading of a live box: parseBoxValue,
@@ -1264,6 +1273,7 @@ function resetState() {
     if (uiState.target) uiState.target.__editing = false;
     uiState.active = false;
     uiState.mode = null;
+    uiState.owner = null;
     uiState.target = null;
     uiState.field = null;
     if (uiState.refusing) {   // TASK 782: the refused-size marks go with the box

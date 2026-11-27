@@ -13,7 +13,7 @@ export function setupUI(state){
   state.rectMode = RECT_MODES.TWO_POINT; // default: 2-point corner rect
   state.slotMode = SLOT_MODES.CENTER_TO_CENTER; // default: center-to-center slot
 
-  // Arc: single-mode (Center-Start-End) — no dropdown
+  // Arc: Center Point Arc by default (TASK 1022: the ribbon's Arc variants also offer 3-Point Arc)
   if(!state.arcMode) state.arcMode = ARC_MODES.CENTER_START_END;
 
   // Mount the shared tool ribbon into #toolsRibbon (no host onToolClick override — uses shared switchToTool).

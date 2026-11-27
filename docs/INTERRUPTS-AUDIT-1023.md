@@ -38,6 +38,29 @@ Where Fusion is not known the expectation is marked (unverified). Known Fusion f
 | **I-22** | Rect 3-point, typing in its width box (any interruption after it; DEL-013, PAN-006, P9S-013 ...) | **BUG** | Typing in the box scrolls the WHOLE page (`scrollX 1607, scrollY 922`): the header, ribbon and burger leave the window (burger `y=-915`) and the next clicks land elsewhere. The box `#live-dim-width` opens at `x=1193 y=783 w=158` in a 1280x800 window, partly outside it. Esc puts the page back. Cells marked `*` in the grids are affected. | Rect 3-point, click, move, type `2`, look at the page; click the burger. | misleading UI |
 | **I-23** | Phone: a 750 ms press on the canvas in a draw tool (6 cells) | **FRICTION** | A long press is a plain click in Line / Rect / Circle / Arc / Polygon / Bezier (places or completes). Only Select / Dimension open a context menu on a hold. Expected (unverified): same as a tap, so no bug, but nothing tells the user. | Phone, Rect, tap once, press and hold elsewhere. | friction |
 
+## Status after task 1030
+
+| id | status | where | guard |
+|---|---|---|---|
+| I-01 | fixed (BUG-320) | `input-manager.js` `cancelActiveWork`, run by `leaveActiveTool` | `tests/interrupts-fix-1030-node.test.js` |
+| I-02 | Text / Dimension fixed (BUG-321); the 3-point rectangle half was already fixed by task 1028 | `input-manager.js` `liveDimensionCancelled` listener, `text-tool.js` | node |
+| I-03 | fixed (BUG-322) | `sketch-state.js` (a dropped step gives back the Redo its save cleared) | node |
+| I-04 | fixed (BUG-323) | `input-manager.js` `switchToTool` | node |
+| I-05 | fixed (BUG-324) | `input-manager.js` `sketchHistory`, `TOOL_PENDING`, `restartActiveTool` | node |
+| I-06 | fixed (BUG-325) | as I-05 | node |
+| I-07 | already fixed on main before 1030 (task 1020) | | node (guard) |
+| I-08 | fixed (BUG-326) | `selection-tools.js` `cancelPointDrag` | node |
+| I-09 | fixed (BUG-327) | `cancelActiveWork` (`transform-box.js closeTransformInput`) | `tests/interrupts-fix-1030-live.test.js` |
+| I-12 | fixed (BUG-328) | `cancelActiveWork` | node |
+| I-15 | fixed (BUG-329) | `sketchHistory` redo | node |
+| I-17 | fixed (BUG-330) | `input-manager.js` `rightPressIgnored`, `line-tool.js rightClickLine` | node + live |
+| I-18 | fixed (BUG-331) | as I-17 | node |
+| I-19 | fixed (BUG-332) | `input-manager.js` document `pointerdown` | live |
+| I-20 | already fixed by task 1028 | | node (guard) |
+| I-21 | fixed (BUG-333) | `input-manager.js` svg pointer listeners (the held press) | live (phone) |
+| I-22 | already fixed by task 1028 | | live (guard) |
+| I-10, I-11, I-13, I-14, I-16, I-23 | not in task 1030 (I-13 no longer happens: a re-click does nothing, BUG-323) | | |
+
 ## Causes (grouped; file:line)
 
 - **Draw step: first click clears Redo; cancel does not restore it** (I-03): `packages/core/sketch-state.js:196` (`saveStateForce`: `redoStack.length = 0`), reached from `beginUndoGroup` (`:221`) at the first click of line / rect / circle / arc / polygon / bezier / dimension; `closeDrawStep` (`:260`) drops the step but never restores `redoStack`. Slot never calls `beginDrawStep` (`slot-tool.js:553-578`), so it keeps Redo.

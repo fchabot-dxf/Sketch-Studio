@@ -210,9 +210,9 @@ export function applyParameterChange(state, plan, label = 'change parameter', op
   const bad = patternPlanRefusal(plan, opts.patternChanges);
   if (bad) return { ok: false, reverted: true, clash: '', reason: bad.message, culprit: { index: -1, name: bad.node, reason: bad.message } };
   const saved = opts.snapshot !== false && typeof state.saveState === 'function';
-  // saveState drops the OLDEST entry when the history is at its cap and clears the redo branch: a refused change must lose neither
+  // saveState drops the OLDEST entry when the history is at its cap: a refused change must not lose it (the Redo branch its save cleared comes
+  // back with discardSnapshotAt, #core/sketch-state.js, TASK 1030)
   const evicted = saved && state.history && state.history.length >= state.maxHistory ? state.history[0] : null;
-  const redo = saved && state.redoStack ? [...state.redoStack] : null;
   if (saved) state.saveState(label);
   const length = saved && state.history ? state.history.length : -1; // discardSnapshotAt pops the newest entry only if the history is still this long
   const moved = plan.edits.filter(e => e.value !== entryValue(e));
@@ -230,8 +230,7 @@ export function applyParameterChange(state, plan, label = 'change parameter', op
   if (res.reverted) {
     if (length >= 0 && typeof state.discardSnapshotAt === 'function') state.discardSnapshotAt(length);
     if (evicted) state.history.unshift(evicted);
-    if (redo) state.redoStack.push(...redo);
-    if ((evicted || redo) && typeof state._notifyHistory === 'function') state._notifyHistory();
+    if (evicted && typeof state._notifyHistory === 'function') state._notifyHistory();
     return { ok: false, ...res };
   }
   replaceParameters(state.parameters, plan.paramsAfter);

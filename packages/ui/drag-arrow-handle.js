@@ -9,6 +9,7 @@
 //       state  'idle' | 'hover' | 'drag'   hover / drag draw the arrow darker (CSS: .sk-drag-arrow[data-state=...])
 //       className string  an extra class the host uses to find the arrow (e.g. 'fillet-handle')
 //   dragArrowHit(pointerScreen, pointScreen, isTouch, boost) -> true when the pointer is within the arrow's reach
+//   dragArrowUnder(root, pointerScreen, isTouch, boost) -> true when the pointer is within reach of an arrow drawn under root
 //   dragArrowDirection(pointAt, v) -> unit direction from the points a locus passes through at two values (v, v + dv)
 //
 // Colours come from the CSS tokens --sk-arrow-fill / --sk-arrow-stroke (+ -hover / -drag fills) in packages/ui/sketcher.css. No tooltip.
@@ -26,6 +27,16 @@ export function dragArrowSvg({ point, dir, scale, state = 'idle', className = ''
 
 export function dragArrowHit(pointer, point, isTouch, boost = 1) {
   return Math.hypot(pointer.x - point.x, pointer.y - point.y) <= ARROW_HIT_PX * (isTouch ? Math.max(1, boost) : 1);
+}
+
+// TASK 1030 (I-21): is the pointer (screen) within reach of an arrow drawn under `root` (the canvas)? The arrow's point is its drawn box's centre
+// (the outline is centred on it). A finger pressed there grabs the arrow at once (input-manager does not hold it back as a possible pinch).
+export function dragArrowUnder(root, pointer, isTouch, boost = 1) {
+  for (const el of root.querySelectorAll('.sk-drag-arrow')) {
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && dragArrowHit(pointer, { x: r.left + r.width / 2, y: r.top + r.height / 2 }, isTouch, boost)) return true;
+  }
+  return false;
 }
 
 // the unit direction a value grows along a locus: pointAt(v) is the locus point at value v (null when there is none there)

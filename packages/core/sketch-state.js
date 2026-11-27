@@ -78,6 +78,10 @@ export function createSketchState(engine, view) {
     history: [],  // the last HISTORY_DEPTH states for undo
     maxHistory: HISTORY_DEPTH,
     redoStack: [],  // BURN-DOWN-2: states popped by undo, so redo() can re-apply them (empty until undo() runs)
+    // TASK 1030 (I-03): ONE slot { entry, redo }: the newest save that cleared a non-empty Redo branch, and that branch. Only the newest step can be
+    // dropped (discardSnapshotAt pops the top; a cancelled draw drops its group's start, and saves inside a group find Redo already empty), so one
+    // slot is enough and at most ONE extra branch is ever held (the HISTORY_DEPTH bound stays). The next clearing save overwrites it.
+    _clearedRedo: null,
     // TASK 435: callbacks run after every history change (the shared ribbon's Undo/Redo enable state subscribes).
     _historyListeners: new Set(),
     _undoGroupActive: false,
@@ -157,6 +161,7 @@ export function createSketchState(engine, view) {
     clearHistory: function() {
       this.history.length = 0;
       this.redoStack.length = 0;
+      this._clearedRedo = null;
       this._notifyHistory();
     },
     // Clear All: reset EVERY document store + session UI to a freshly-constructed state, then drop history (NOT undoable).
@@ -191,14 +196,24 @@ export function createSketchState(engine, view) {
     // Force push a snapshot regardless of grouping (used to capture pre-group state)
     // TASK 549: `snapshot` (optional) = a state captured EARLIER with captureUndoSnapshot(), pushed as this step's "before" instead of the live one.
     saveStateForce: function(label, snapshot, opts){
-      this.history.push(this._stamp(snapshot || this._captureSnapshot(!!(opts && opts.host)), label));
+      const entry = this._stamp(snapshot || this._captureSnapshot(!!(opts && opts.host)), label);
+      if(this.redoStack.length) this._clearedRedo = { entry, redo: this.redoStack.slice() }; // TASK 1030 (I-03): what this save clears, given back if the step is dropped
+      this.history.push(entry);
       if(this.history.length > this.maxHistory) this.history.shift();
       this.redoStack.length = 0; // BURN-DOWN-2: any new saved state invalidates the redo branch
       this._notifyHistory();
     },
+    // TASK 1030 (I-03): THE rule for a dropped step (a cancelled draw, a cancelled Dimension placement, a no-op drag, a refused edit): a step
+    // that is dropped changed nothing, so it gives back the Redo branch its save cleared (closeDrawStep and discardSnapshotAt call this).
+    _giveBackRedo: function(entry){
+      const slot = this._clearedRedo;
+      if(!slot || !entry || slot.entry !== entry) return;
+      this._clearedRedo = null;
+      if(this.redoStack.length === 0) this.redoStack.push(...slot.redo);
+    },
     discardSnapshotAt(len) {
       if (this.history.length !== len) return false;
-      this.history.pop();
+      this._giveBackRedo(this.history.pop());
       this._notifyHistory();
       return true;
     },
@@ -266,6 +281,7 @@ export function createSketchState(engine, view) {
       this._undoGroupInfo = null; this._undoGroupActive = false; this._undoGroupDepth = 0;
       this.history.splice(info.startIndex);
       this._restoreSnapshot(start);
+      this._giveBackRedo(start); // TASK 1030 (I-03): a cancelled draw leaves Redo as it was
       this._notifyHistory();
       for(const fn of (this._drawCancelListeners || [])) fn();
       return 'cancelled';

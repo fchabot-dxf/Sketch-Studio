@@ -65,7 +65,7 @@ await run('B-01 arc: radius 25 then empty, start by click: the cursor radius; sw
   try {
     app.tool('arc'); clickW(app, -30, 0); moveW(app, 10, 0);
     app.type('25'); backspaces(app, 2); moveW(app, 10, 0); clickW(app, 10, 0);
-    const start = J(app, app.state.active.start);
+    const start = app.state.active.held.picks.start.at;   // TASK 1039: the start is a held pick of the Arc's session until the build
     near(Math.hypot(start.x + 30, start.y), 40, 1e-3, 'the start is at the cursor radius 40, not 2');
     moveW(app, -30, -40);
     app.type('90'); backspaces(app, 2); moveW(app, -30, -40); clickW(app, -30, -40);

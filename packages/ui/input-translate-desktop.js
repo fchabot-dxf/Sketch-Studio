@@ -7,7 +7,8 @@
 // THE gesture rule (one place, for the mouse, the pen and the finger alike):
 //   - a step that fires on the PRESS (a centre) is made at the press;
 //   - its press released without a drag opens the next step's boxes (a click); a drag past the threshold goes on to the release;
-//   - a step that fires on the RELEASE (a rim) is made at the release of a click, or of a drag (drag-release = click-click);
+//   - a step that fires on the RELEASE (a rim) is made at the release of a click, or of a drag (drag-release = click-click); a press-step's drag
+//     whose release placed nothing (back onto its point) is a click there: the step's boxes open;
 //   - every move is a hover (the preview, the box following the pointer).
 // The device differences are a policy: desktop boxes take the focus; the touch translator (#ui/input-translate-touch.js) declares its own.
 
@@ -41,7 +42,11 @@ export function createPointerTranslator(policy) {
             const p = press;
             press = null;
             if (p && p.stepped && !p.dragging) { session.openBoxes({ screen: screenOf(e), focus: policy.focusBoxes }); return true; }
-            if (session.firesOn() === 'release') session.step({ at: w, snap: stepSnap(state, hitSnap), screen: screenOf(e), via: p && p.dragging ? 'release' : 'click' });
+            if (session.firesOn() !== 'release') return true;
+            const screen = screenOf(e);
+            const made = session.step({ at: w, snap: stepSnap(state, hitSnap), screen, via: p && p.dragging ? 'release' : 'click', focus: policy.focusBoxes });
+            // a press-step dragged back onto its own point placed nothing: that is a click there (its step's boxes open, task 1033 A-1, task 1039)
+            if (made === 'ignored' && p && p.stepped) session.openBoxes({ screen, focus: policy.focusBoxes });
             return true;
         },
     };

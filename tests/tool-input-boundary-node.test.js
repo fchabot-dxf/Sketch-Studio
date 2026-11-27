@@ -1,4 +1,4 @@
-// tests/tool-input-boundary-node.test.js — TASK 1034 (plan docs/INPUT-UNIFY-PLAN-1031.md 5.4): the grep gate of the input unification.
+// tests/tool-input-boundary-node.test.js — TASK 1034, 1039 (plan docs/INPUT-UNIFY-PLAN-1031.md 5.4): the grep gate of the input unification.
 // A migrated tool file is a description (defineTool) plus its ONE build: it never listens to a pointer, a key or a touch, and never reads one.
 // The list only grows (one tool per migration merge); at the close-out it is every file under ui/input-handlers/.
 import assert from 'node:assert';
@@ -11,6 +11,7 @@ const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/
 // the migrated tool files, and the export that holds each one's description
 const MIGRATED = [
   { file: 'packages/ui/input-handlers/circle-tool.js', spec: '#ui/input-handlers/circle-tool.js', description: 'CIRCLE' },
+  { file: 'packages/ui/input-handlers/arc-tool.js', spec: '#ui/input-handlers/arc-tool.js', description: 'ARC' },   // TASK 1039
 ];
 
 // what a tool file never contains (an input event, a DOM listener, a raw device field, a key test, a window box event, a branch on `via`)
@@ -59,6 +60,8 @@ for (const [why, bad] of [
   ['a box with no live value', { ...ok, variants: { v: { steps: [{ ...step, boxes: [{ id: 'd', quantity: 'length', positions: true }] }] } } }],
   ['two steps with one id', { ...ok, variants: { v: { steps: [step, { ...step }] } } }],
   ['an unknown after', { ...ok, after: 'leave' }],
+  ['a refuse that is not a function (task 1039)', { ...ok, variants: { v: { steps: [{ ...step, refuse: 'no' }] } } }],
+  ['a path without along (task 1039)', { ...ok, variants: { v: { steps: [{ ...step, path: { from: () => 0 } }] } } }],
 ]) { assert.throws(() => defineTool(bad), /defineTool/, `defineTool refuses ${why}`); n++; }
 
 console.log(`PASS tool-input-boundary-node (${n} checks, ${MIGRATED.length} migrated file(s))`);

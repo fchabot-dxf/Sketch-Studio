@@ -6,7 +6,8 @@
 import assert from 'node:assert';
 import { updatePreview } from '../packages/ui/preview-manager.js';
 import { draw } from '../packages/ui/svg-renderer.js';
-import { handleArcPointerMove } from '../packages/ui/input-handlers/arc-tool.js';
+import { ARC } from '../packages/ui/input-handlers/arc-tool.js';
+import { toolSession } from '../packages/ui/tool-session.js';
 import { TOOL_MODES } from '../packages/core/constants.js';
 
 const makeSVG = () => ({
@@ -32,15 +33,20 @@ const bad = (markup) => (markup.match(/[a-z0-9-]+="[^"]*(NaN|undefined)[^"]*"/gi
   assert(!state.active.preview, 'a preview whose centre is not a point is not a preview');
 }
 
-// 1b. the REAL producer (arc-tool.js) hands the preview a resolved point, so deleting the joint cannot break the next frame
+// 1b. the REAL producer (arc-tool.js, in its tool session: TASK 1039) hands the preview a resolved point, so a missing joint cannot break the next frame
+//     (mid-draw the centre is not a document joint at all: the session holds it as a plain point until the build)
 {
-  const joints = new Map([['c', { x: 50, y: 50 }], ['s', { x: 80, y: 50 }]]);
-  const state = { joints, snapTarget: null, active: { mode: TOOL_MODES.ARC, phase: 'start', center: 'c', start: 's' } };
-  assert(handleArcPointerMove({ clientX: 0, clientY: 0 }, null, state, { x: 50, y: 80 }), 'the arc tool handled the move');
+  const joints = new Map();
+  const state = { joints, snapTarget: null, arcMode: 'arc-cse', beginDrawStep() {}, endUndoGroup() {}, onDrawCancelled() {} };
+  const s = toolSession(state, ARC);
+  const screen = { x: 0, y: 0 };
+  s.step({ at: { x: 50, y: 50 }, screen, via: 'click' });
+  s.hover({ at: { x: 80, y: 50 }, snap: null, screen });
+  s.step({ at: { x: 80, y: 50 }, screen, via: 'click' });
+  assert(s.hover({ at: { x: 50, y: 80 }, snap: null, screen }), 'the arc tool handled the move');
   const pv = state.active.preview;
   assert(pv && pv.type === 'arc' && typeof pv.center === 'object' && pv.center.x === 50 && pv.center.y === 50, 'the real arc tool previews with a resolved centre point: ' + JSON.stringify(pv && pv.center));
-  joints.delete('c');
-  assert.deepStrictEqual(bad(render(joints, state.active)), [], 'no NaN/undefined after the centre joint is deleted');
+  assert.deepStrictEqual(bad(render(joints, state.active)), [], 'no NaN/undefined with no centre joint in the document');
 }
 
 // 2. the producer hands over a RESOLVED point: the preview is self-contained (the joint may vanish afterwards)

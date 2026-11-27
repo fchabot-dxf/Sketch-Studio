@@ -1354,6 +1354,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **Related:** BUG-079, BUG-090
 - **History:** found in `SOLVER-UX-AUDIT-1000` (`UX-25`) -> fixed in task `1007` (`CURVE_REFUSALS.arc` and `CURVE_REFUSALS.circle`)
+- **History (2026-11-26, task `1018`):** the arc / circle refusal is REPLACED by the owner's ruling (turn 3826): Trim and Break now take arcs and circles (BUG-190); `CURVE_REFUSALS` keeps only the Bezier, whose notice still fires (`tests/trim-break-curve-refusal-ux25-node.test.js`, Bezier only). Status stays `fixed` for the Bezier notice.
 
 ### BUG-094
 - **Date / turn:** 2026-11-26 (audit ID `D-7`; fixed in task `1007`)
@@ -2258,6 +2259,183 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 
 ---
 
+### BUG-190
+- **Date / turn:** 2026-11-26 (audit ID `R1-12` + owner ruling turn 3826; fixed in task `1018`)
+- **Reported by:** audit `1016` (`design-run-audit-1016-partB.mjs` `B8`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R1-12`: Trim refused a circle (`"Trim: not available on a circle (Trim cuts lines only)"`), so a keyway could not be cut into a bore. Owner ruling: Trim cuts circles and arcs and Break splits them, like Fusion: a circle trimmed between two cutters becomes an arc, an arc trimmed becomes a shorter arc.
+- **What was wrong:** `trim.js` / `break.js` handled lines only, and task `1007` (BUG-093) declared a refusal for arcs and circles.
+- **Cause:** no curve maths for arcs / circles: `packages/core/trim.js` and `packages/core/break.js` read lines only; `packages/core/curve-kinds.js` `CURVE_REFUSALS.arc` / `.circle` refused Trim / Break.
+- **Fix:** ONE new module `packages/core/curve-cuts.js` declares a cuttable curve's geometry and parameter (line / CENTER arc / circle), `curveCuts` (where the active sketch's other lines, arcs and circles cross it), `boundsAround`, `heldJointsOn`. `trim.js` `trimPieceAt` (the piece a click removes; also the hover's `trimPreview`), `trimArc` (a leading / trailing piece moves the rim, an interior piece splits it into two arcs on the same centre), `trimCircle` (the circle becomes the remaining arc, the SAME shape id, `break.js` `circleToArc`); `break.js` `breakArc` (two arcs sharing the centre and the split point), `breakCircle` + `breakAt` (a circle splits between the two cut points around the click; fewer than two: the notice `CIRCLE_BREAK_REFUSAL`, nothing written). Kept pieces follow the 1007 rules: each cut end bound to its cutter (`applySnapConstraint` / `onShapeSnap`), each arc piece its own structural equal, constraints on removed rims through `removeGeometry`; `splitArcConstraints` moves point-on-curve / tangent constraints to the piece they sit on and drops an arc midpoint. A circle's DIAMETER dimension stays on the arc, as a diameter (the record is unchanged; Fusion keeps the dimension on the trimmed arc: unverified). `CURVE_REFUSALS` keeps only the Bezier (its text now says "lines, arcs and circles"). UI: `trim-tool.js` / `break-tool.js` pick the nearest line, arc or circle (`curveDistance`) and draw core's piece / points (their line-only copies of the interval maths removed).
+- **Task id(s):** `1018`
+- **Fix merge sha:** open (`agents/trimcurves-1018`, awaiting merge)
+- **Guarding test file(s):** `tests/trim-break-curves-r112-1018-node.test.js`, `tests/trim-break-curve-refusal-ux25-node.test.js` (Bezier only now)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-093, BUG-191
+- **History:** found in `DESIGN-RUN-AUDIT-1016` (`R1-12`) -> owner ruling turn 3826 -> fixed in task `1018`. Probe before: `ROW R1-12 | Part B / B8 | BUG | Trim cannot trim circle/arc for keyway (hoverOverlay=false, toast="⚠️Trim: not available on a circle (Trim cuts lines only)")`.
+
+---
+
+### BUG-191
+- **Date / turn:** 2026-11-26 (audit ID `R2-01`; fixed in task `1018`)
+- **Reported by:** audit `1017` (`design-run-audit-1017-part-d.mjs` `D-05c`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R2-01`: trimming the 15 mm stub of a gusset leg where the R 15 relief arc meets it deleted the WHOLE leg (both legs, with their dimensions).
+- **What was wrong:** an arc was never a cutter, so the stub had no cut and the whole line was the clicked interval.
+- **Cause:** `packages/core/trim.js:57` (before) skipped every cutter that was not a line (`other.type !== 'line'`).
+- **Fix:** `packages/core/curve-cuts.js` `curveCuts` takes lines, arcs and circles as cutters (a carrier crossing counts only on both drawn curves); the cut end is bound to the arc (coincident with its rim where it meets it there, else point-on-curve). The leg's length dimension across the removed stub still goes (task 1007 rule, `trimmedPairs`).
+- **Task id(s):** `1018`
+- **Fix merge sha:** open (`agents/trimcurves-1018`, awaiting merge)
+- **Guarding test file(s):** `tests/trim-curve-cutter-r201-1018-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-092, BUG-190
+- **History:** found in `DESIGN-RUN-AUDIT-1017` (`R2-01`) -> fixed in task `1018`.
+
+---
+
+### BUG-192
+- **Date / turn:** 2026-11-26 (audit ID `R2-03`; fixed in task `1018`)
+- **Reported by:** audit `1017` (`design-run-audit-1017-part-c.mjs` `C-08b`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R2-03`: trimming the tails of a mirrored pair of lines dropped their mirror: editing the angle 30 -> 45 turned one side only (`angR=45deg angL=142.06deg(expected 135deg)`).
+- **What was wrong:** Mirror ties the copy by its two END pairs (point symmetric, Fusion's); Trim removed the tail ends and their pair went with them (THE delete rule), leaving the copy's direction free.
+- **Cause:** `packages/core/trim.js` `keepLineConstraints` transferred only the orientation (H / V) before `removeGeometry` deleted the removed end's constraints.
+- **Fix:** `packages/core/trim.js` `transferMirrorPairs` (called from `keepLineConstraints`, the one place): when a removed end's mirror pair names the end of another line whose OTHER end mirrors this line's kept end (the two lines were mirror images), the pair becomes the symmetric LINE form `{ shapes: [line, other], line }` (#core/symmetric.js: the infinite lines mirror; each segment keeps its own cut). A lone pair still goes, as before.
+- **Task id(s):** `1018`
+- **Fix merge sha:** open (`agents/trimcurves-1018`, awaiting merge)
+- **Guarding test file(s):** `tests/trim-mirror-r203-1018-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-092
+- **History:** found in `DESIGN-RUN-AUDIT-1017` (`R2-03`) -> fixed in task `1018`.
+
+---
+
+### BUG-193
+- **Date / turn:** 2026-11-26 (audit ID `R2-05`; fixed in task `1018`)
+- **Reported by:** audit `1017` (`design-run-audit-1017-extra.mjs` `E-02a/b`, `part-d.mjs` `D-10a`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R2-05`: Break clicked on a hole's centre lying on the line made a new detached joint beside it (`(74.94, -50.04)` next to `(75, -50)`); dragging the break point slid it away from the hole.
+- **What was wrong:** Break always minted a new joint at the click's projection.
+- **Cause:** `packages/ui/input-handlers/break-tool.js` passed only `t` and `packages/core/break.js` `breakShape` always minted a joint.
+- **Fix:** `packages/core/break.js` `breakAt` (the plan the tool's hover and press both read): a joint HELD on the curve (`curve-cuts.js` `heldJointsOn`: a point-on-line, a line midpoint `[a, b, m]`, an arc midpoint) within the joint pick radius (`SNAP.JOINT_PX`) of the click is the split point; `breakShape(state, id, t, { joint })` splits AT it (no new joint) and drops the constraint that held it on the curve (it is both pieces' end now); a line midpoint `[a, b, m]` stays (no geometry removed).
+- **Task id(s):** `1018`
+- **Fix merge sha:** open (`agents/trimcurves-1018`, awaiting merge)
+- **Guarding test file(s):** `tests/break-at-joint-r205-1018-node.test.js`
+- **Status:** fixed
+- **Family:** `snap-not-applied`
+- **Related:** BUG-091
+- **History:** found in `DESIGN-RUN-AUDIT-1017` (`R2-05`) -> fixed in task `1018`.
+
+---
+
+### BUG-194
+- **Date / turn:** 2026-11-26 (audit ID `R1-05`; fixed in task `1018`)
+- **Reported by:** audit `1016` (`design-run-audit-1016-partA.mjs` `A15b/c`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R1-05`: deleting a fillet arc left a 5 x 5 gap, and Fillet then refused the two lines (`"Curves must meet at a corner to fillet"`).
+- **What was wrong:** a two-curve Fillet pick needed the curves to share a corner joint.
+- **Cause:** `packages/core/fillet.js` `findCornerAtJoint` returned null unless exactly two curves touched the corner cluster.
+- **Fix:** Fusion (unverified) keeps the lines cut back when the arc is deleted, and its Fillet takes two curves that do not touch and extends them: matched. `packages/core/fillet.js` `gapCorner` (from `findCornerAtJoint`, two-curve pick only): two LINES whose extensions meet at P beyond the ends nearest P (P inside neither segment, nothing else ending there) are a corner at P; a virtual sharp held on both lines at P (the deleted fillet's) is kept as the new fillet's (`applyFillet` `keptSharp`; its point-on-lines are not doubled).
+- **Task id(s):** `1018`
+- **Fix merge sha:** open (`agents/trimcurves-1018`, awaiting merge)
+- **Guarding test file(s):** `tests/fillet-gap-r105-1018-node.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in `DESIGN-RUN-AUDIT-1016` (`R1-05`) -> fixed in task `1018`.
+
+---
+
+### BUG-195
+- **Date / turn:** 2026-11-26 (audit ID `R1-07`; fixed in task `1018`)
+- **Reported by:** audit `1016` (`design-run-audit-1016-partA.mjs` `A18a`); root of `R1-01`, `R1-02`, `R1-03` (traced by task `1019`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R1-07`: Save + Reload dropped a constraint (`cons 65 -> 64`): `pointOnLine(j9, ref_axis_y)`, the corner (0, -50) snapped on the Y axis, orphaned when the fillet replaced `j9`.
+- **What was wrong:** the fillet deleted the corner joint and left a constraint naming it by its single `joint` field. Its solver residual was NaN, so every later edit that moved geometry was refused (BUG-196..BUG-198). A reload pruned it: `packages/core/document.js` `deserializeDocument` (task 589, `unknownJointOf`), which also cleans any older saved file already holding such an orphan.
+- **Cause:** `packages/core/fillet.js` `applyFillet`, the "Update constraints referencing the corner joints" loop, relinked only constraints with a `joints` ARRAY.
+- **Fix:** the same loop: a constraint naming the corner by `joint` (a point-on-line / point-on-curve, a midpoint) is relinked to the virtual sharp `jV`, like a measurement ("keeps meaning the sharp corner": the sharp stays on the axis; Fusion: unverified); a point-on-line of the corner on one of the two filleted lines is dropped (applyFillet makes V's own).
+- **Task id(s):** `1018`
+- **Fix merge sha:** open (`agents/trimcurves-1018`, awaiting merge)
+- **Guarding test file(s):** `tests/fillet-corner-axis-r107-1018-node.test.js`
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-196, BUG-197, BUG-198
+- **History:** found in `DESIGN-RUN-AUDIT-1016` (`R1-07`) -> cause of R1-01..R1-03 traced by task `1019` -> fixed in task `1018`.
+
+---
+
+### BUG-196
+- **Date / turn:** 2026-11-26 (audit ID `R1-01`; fixed in task `1018`)
+- **Reported by:** audit `1016` (`A11a`, `A11c`, `A13`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R1-01`: a point-to-line dimension from a sized circle (or a slot arc) to an edge or an axis refused every typed value (`"Can't set to 10 mm — conflicts with distance. Reverted."`).
+- **What was wrong:** not the dimension itself: the filleted outline held BUG-195's orphaned point-on-line, whose NaN residual made the solver reject every step (task `1019`'s trace on the probe's documents).
+- **Cause:** `packages/core/fillet.js` `applyFillet` (BUG-195).
+- **Fix:** BUG-195's.
+- **Task id(s):** `1018`
+- **Fix merge sha:** open (`agents/trimcurves-1018`, awaiting merge)
+- **Guarding test file(s):** `tests/fillet-corner-axis-r107-1018-node.test.js` (`R1-01` step)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-195
+- **History:** found in `DESIGN-RUN-AUDIT-1016` (`R1-01`) -> cause traced by task `1019` -> fixed in task `1018`.
+
+---
+
+### BUG-197
+- **Date / turn:** 2026-11-26 (audit ID `R1-02`; fixed in task `1018`)
+- **Reported by:** audit `1016` (`A10b`, `A14`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R1-02`: editing the overall width `d1` 80 -> 100 on the 6-fillet L-bracket was refused (`"Can't set to 100 mm — conflicts with distance. Reverted."`).
+- **What was wrong:** not the dimension itself: the filleted outline held BUG-195's orphaned point-on-line, whose NaN residual made the solver reject every step (task `1019`'s trace on the probe's documents).
+- **Cause:** `packages/core/fillet.js` `applyFillet` (BUG-195).
+- **Fix:** BUG-195's.
+- **Task id(s):** `1018`
+- **Fix merge sha:** open (`agents/trimcurves-1018`, awaiting merge)
+- **Guarding test file(s):** `tests/fillet-corner-axis-r107-1018-node.test.js` (`R1-02` step)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-195
+- **History:** found in `DESIGN-RUN-AUDIT-1016` (`R1-02`) -> cause traced by task `1019` -> fixed in task `1018`.
+
+---
+
+### BUG-198
+- **Date / turn:** 2026-11-26 (audit ID `R1-03`; fixed in task `1018`)
+- **Reported by:** audit `1016` (`A16`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R1-03`: moving Hole 1 by its horizontal dimension `d12` 10 -> 15 was refused (`"Can't set to 15 mm — conflicts with distance. Reverted."`).
+- **What was wrong:** not the dimension itself: the filleted outline held BUG-195's orphaned point-on-line, whose NaN residual made the solver reject every step (task `1019`'s trace on the probe's documents).
+- **Cause:** `packages/core/fillet.js` `applyFillet` (BUG-195).
+- **Fix:** BUG-195's.
+- **Task id(s):** `1018`
+- **Fix merge sha:** open (`agents/trimcurves-1018`, awaiting merge)
+- **Guarding test file(s):** `tests/fillet-corner-axis-r107-1018-node.test.js` (`R1-03` step)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-195
+- **History:** found in `DESIGN-RUN-AUDIT-1016` (`R1-03`) -> cause traced by task `1019` -> fixed in task `1018`.
+
+---
+
+### BUG-199
+- **Date / turn:** 2026-11-26 (audit ID `R2-13`; recorded in task `1018`)
+- **Reported by:** audit `1017` (`design-run-audit-1017-extra.mjs` `E-02c`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R2-13`: no Join / Merge command to reunite two collinear pieces after Break.
+- **What was wrong:** nothing to fix: Fusion has no Join either (unverified); owner: record only, don't build.
+- **Cause:** none (Fusion parity).
+- **Task id(s):** `1018` (record only)
+- **Fix merge sha:** none
+- **Guarding test file(s):** none
+- **Status:** parked (Fusion parity: no Join)
+- **Family:** `ui-input`
+- **History:** found in `DESIGN-RUN-AUDIT-1017` (`R2-13`) -> recorded, not built, task `1018`.
+
+---
+
 ## Family index
 
 Entries in each family are listed in chronological date order (`MM-DD`, oldest first) so recurring patterns read as a timeline.
@@ -2270,8 +2448,8 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
-| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-146 (11-26) |
+| `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-146 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -2279,7 +2457,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 
 ---
@@ -2291,3 +2469,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
 - [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-150..BUG-154 fixed in task `1011`; BUG-160..BUG-161 fixed in task `1012`; BUG-170..BUG-174 fixed in task `1014`; BUG-180..BUG-183 fixed in task `1013`; BUG-140..BUG-147 fixed in task `1008`).
+- [docs/DESIGN-RUN-AUDIT-1016.md](DESIGN-RUN-AUDIT-1016.md), [docs/DESIGN-RUN-AUDIT-1017.md](DESIGN-RUN-AUDIT-1017.md) — real-design audits (tasks `1016`, `1017`; BUG-190..BUG-199 from task `1018`: R1-01, R1-02, R1-03, R1-05, R1-07, R1-12, R2-01, R2-03, R2-05, R2-13).

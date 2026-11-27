@@ -199,6 +199,53 @@ export const CLEAN_DISPLAY = Object.freeze({ grid: false, axes: false, points: f
 // TASK 429: the last {total, visible} constraint summary draw() logged (-1 never matches a real count).
 let lastLoggedConstraints = { total: -1, visible: -1 };
 
+// THE spot of a tangent's glyph (task 1038, audit 1037 N-C: every tangent draws one): the touch point { x, y } and the unit normal { nx, ny }
+// to push the glyph along, or null when an operand is missing. The operands are { line, circle } or shapes [s1, s2] (a line and a circle /
+// arc, or two circles / arcs; the Tangent tool's seam and the arc slot store two circular operands as shapes).
+//   line + circle / arc: the foot of the perpendicular from the centre onto the line, pushed away from the centre (outside the curve).
+//   two circles / arcs: their shared rim joint (an arc slot's corner, a fillet between arcs), else the point on the line of centres; pushed
+//   away from the centre of the smaller (outside it, the larger is past the touch point) or, internal (one inside the other), of the larger
+//   (outside both).
+function tangentGlyphSpot(c, opShapes, opJoints) {
+  const shapeOf = (id) => opShapes.find(s => s.id === id);
+  const circular = (s) => !!s && (s.type === 'circle' || s.type === 'arc') && !!s.joints && s.joints.length >= 1;
+  const pair = c.line && c.circle ? [shapeOf(c.line), shapeOf(c.circle)] : Array.isArray(c.shapes) && c.shapes.length === 2 ? c.shapes.map(shapeOf) : [];
+  if (pair.length !== 2 || !pair[0] || !pair[1]) return null;
+  const lineShape = pair.find(s => s.type === 'line');
+  if (lineShape) {
+    const circleShape = pair.find(s => s !== lineShape);
+    if (!circular(circleShape) || !lineShape.joints) return null;
+    const la = opJoints.get(lineShape.joints[0]); const lb = opJoints.get(lineShape.joints[1]); const center = opJoints.get(circleShape.joints[0]);
+    if (!la || !lb || !center) return null;
+    const { nx, ny } = perpendicularNormal(la, lb);
+    const ldx = lb.x - la.x, ldy = lb.y - la.y, ll = ldx * ldx + ldy * ldy;
+    const tt = ll > 1e-9 ? ((center.x - la.x) * ldx + (center.y - la.y) * ldy) / ll : 0.5;
+    const tx = la.x + ldx * tt, ty = la.y + ldy * tt;
+    const side = ((center.x - tx) * nx + (center.y - ty) * ny) > 0 ? -1 : 1;
+    return { x: tx, y: ty, nx: nx * side, ny: ny * side };
+  }
+  if (!pair.every(circular)) return null;
+  const ops = pair.map(s => {
+    const centre = opJoints.get(s.joints[0]);
+    const rim = s.type === 'arc' && s.joints.length >= 2 ? opJoints.get(s.joints[1]) : null;
+    return { s, centre, r: typeof s.radius === 'number' ? s.radius : (centre && rim ? getDist(centre, rim) : 0) };
+  });
+  if (!ops[0].centre || !ops[1].centre) return null;
+  const internal = c.branch === 'internal';
+  const [small, large] = ops[1].r < ops[0].r ? [ops[1], ops[0]] : [ops[0], ops[1]];
+  const away = internal ? large : small;   // the centre the glyph is pushed away from
+  const sharedId = ops[0].s.type === 'arc' && ops[1].s.type === 'arc' ? ops[0].s.joints.slice(1).find(id => ops[1].s.joints.slice(1).includes(id)) : undefined;
+  let touch = sharedId !== undefined ? opJoints.get(sharedId) : null;
+  if (!touch) { // on the line of centres: r from `away` toward the other centre (external: `away` is the smaller; internal: the larger)
+    const other = away === small ? large : small;
+    const dx = other.centre.x - away.centre.x, dy = other.centre.y - away.centre.y, d = Math.hypot(dx, dy);
+    const ux = d > 1e-12 ? dx / d : 1, uy = d > 1e-12 ? dy / d : 0;
+    touch = { x: away.centre.x + ux * away.r, y: away.centre.y + uy * away.r };
+  }
+  const nx = touch.x - away.centre.x, ny = touch.y - away.centre.y, nl = Math.hypot(nx, ny);
+  return nl > 1e-12 ? { x: touch.x, y: touch.y, nx: nx / nl, ny: ny / nl } : { x: touch.x, y: touch.y, nx: 0, ny: -1 };
+}
+
 function radiusLabelPos(c, center, offset) {
   if (c && c.__pos) return { x: c.__pos.x, y: c.__pos.y };
   const legacy = (c && c.labelPos && !Number.isFinite(c.labelAngle)) ? polarPointToParams(center, c.labelPos) : null;
@@ -2296,19 +2343,12 @@ switch(c.type){
       }
 
       case CONSTRAINT_TYPES.TANGENT: {
-        const lineShape = opShapes.find(s => s.id === c.line); const circleShape = opShapes.find(s => s.id === c.circle);
-        if(!lineShape || !circleShape || !lineShape.joints || !circleShape.joints) return;
-        const la = opJoints.get(lineShape.joints[0]); const lb = opJoints.get(lineShape.joints[1]); const center = opJoints.get(circleShape.joints[0]);
-        if(!la || !lb || !center) return;
-        const { nx, ny } = perpendicularNormal(la, lb);
-        // The ONE tangent glyph sits at the tangency point (foot of the perpendicular from the centre onto the line),
-        // pushed TANGENT_GLYPH_OFFSET_PX off it, away from the centre (outside the curve).
-        const ldx = lb.x - la.x, ldy = lb.y - la.y, ll = ldx * ldx + ldy * ldy;
-        const tt = ll > 1e-9 ? ((center.x - la.x) * ldx + (center.y - la.y) * ldy) / ll : 0.5;
-        const tx = la.x + ldx * tt, ty = la.y + ldy * tt;
-        const side = ((center.x - tx) * nx + (center.y - ty) * ny) > 0 ? -1 : 1;
+        // The ONE tangent glyph sits at the touch point, pushed TANGENT_GLYPH_OFFSET_PX off it along the curves' normal there
+        // (tangentGlyphSpot: every tangent, line-circle and circle / arc pairs, task 1038).
+        const spot = tangentGlyphSpot(c, opShapes, opJoints);
+        if (!spot) return;
         const offset = scale(TANGENT_GLYPH_OFFSET_PX);
-        const gx = tx + nx * offset * side, gy = ty + ny * offset * side;
+        const gx = spot.x + spot.nx * offset, gy = spot.y + spot.ny * offset;
         const isHovered = !preview && highlight.kind === 'constraint' && (highlight.id === c || (opts && opts.parent && highlight.id === opts.parent));
         const isSelected = !preview && selectedConstraints && selectedConstraints.has(c);
         const pos = c.__pos ? { x: c.__pos.x, y: c.__pos.y } : { x: gx, y: gy };
@@ -2875,29 +2915,8 @@ switch(c.type){
         }
       }
     } else if(c.type === CONSTRAINT_TYPES.TANGENT){
-      // Circle touching a line for tangent constraint
-      const lineShape = opShapes.find(s => s.id === c.line);
-      const circleShape = opShapes.find(s => s.id === c.circle);
-      if(lineShape && circleShape && lineShape.joints && circleShape.joints){
-        const la = opJoints.get(lineShape.joints[0]);
-        const lb = opJoints.get(lineShape.joints[1]);
-        const center = opJoints.get(circleShape.joints[0]);
-        if(la && lb && center){
-          // Position glyph at the midpoint of the line
-          const mx = (la.x + lb.x) / 2, my = (la.y + lb.y) / 2;
-          const { nx, ny } = perpendicularNormal(la, lb);
-          const offset = scale(GLYPH_OFFSET_PX);
-          const gx = mx + nx * offset, gy = my + ny * offset;
-          
-          const isHovered = highlight.kind === 'constraint' && highlight.id === c;
-          const isSelected = selectedConstraints && selectedConstraints.has(c);
-          const stroke = (isHovered || isSelected) ? '#1e40af' : '#f59e0b';
-          const bgOpacity = (isHovered || isSelected) ? '0.95' : '0.85';
-          const bgColor = '#fbbf24'; // yellow for tangent
-          const symbolSize = glyphSize * 0.6; // Smaller symbols
-          drawConstraintGlyph(svg, c);
-        }
-      }
+      // every tangent (line-circle, circle / arc pairs): its spot and operands are resolved by drawConstraintGlyph (tangentGlyphSpot, task 1038)
+      drawConstraintGlyph(svg, c);
     }
     else if(c.type === CONSTRAINT_TYPES.HORIZONTAL && c.joints && c.joints.length >= 2){
       // Horizontal constraint glyph (single midpoint glyph)

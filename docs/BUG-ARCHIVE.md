@@ -3480,6 +3480,69 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Related:** BUG-371
 - **History:** found and fixed in task `1036`.
 
+### BUG-380
+- **Date / turn:** 2026-11-27 (audit `1037` appendix `N-A`; fixed in task `1038`)
+- **Reported by:** audit `1037` (probe `tests/audits/recipe-parity-1037-node.mjs`, `P-03`, `P-03b`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab: every branch-locked Perpendicular, the 3-Point Rectangle)
+- **Report:** `N-A`: `P-03 rect-3pt as built: solver nullity 8 | Design panel DOF 8 | model (ours) 5`; `P-03b ... + Horizontal(base): model 2 solver 1`; a dimension on the side opposite a dimensioned side placed DRIVING (a redundant driver).
+- **What was wrong:** a perpendicular that holds exactly counted as no constraint: the DOF was too high (8 for a fresh 3-point rectangle, true 5) or, mid-sequence, too low (1 shown, 2 free); the rank test let a redundant dimension in as driving; the solve stopped short of 90 degrees (node test before: `at 89.9871 deg`).
+- **Cause:** `packages/core/solver/definitions.js` `perpendicular`: with a branch (+-1, on every perpendicular `ConstraintManager.createConstraint` makes) the row was `u x v - branch |u||v|`, never above 0 and 0 at the solution: a double root, so its Jacobian row vanished there.
+- **Fix:** ONE right-angle rule, `rightAngleRow` (`definitions.js`): without a branch `u . v`; with a branch it IS the angle constraint's row (`angleGrad`, extracted from `angle` and shared) at 90 degrees with that turn: `-turn (u . v)` where the pair turns the locked way (regular at the solution), folded on the other half-plane, so the mirrored right angle is still no solution (`tests/verifier-perpendicular-branch.test.js` unchanged and green). The shared-end tangent (BUG-381) uses the same rule. That row's least-change solve would shorten a line that must turn far (fusion-oracle `perpendicular|LR|0,0` 61.85 -> 15.00; main 45.26), so the ONE creation placement (`#core/creation-placement.js PLACE.perpendicular`, task 525) now turns the mover rigidly to 90 degrees with a branch too (its SOLVE_ALONE stand-in for the stationary row is gone): LR|0,0 keeps 61.846584 (Fusion), SL|0,0 rotates (86.023253 kept). Creation only: a load / undo restore never places. Advisor rulings (c) + placement, task 1038.
+- **Task id(s):** `1038`
+- **Fix merge sha:** open (`agents/dof-fix-1038`, awaiting merge)
+- **Guarding test file(s):** `tests/dof-fix-1038-node.test.js` (`N-A`: engine DOF 3 on both branches, the branch kept from 60 deg, the 3-point rectangle 5, the opposite-side dimension a reference, 3/2/1/0 step by step), `tests/jacobian-fd-guard.test.js` (both branches, every shared-corner pattern), `tests/verifier-perpendicular-branch.test.js`, `tests/fusion-oracle.test.js` (37 graded perpendicular cells (39 -> 2) and 2 drawing rows moved off the KNOWN lists: they now agree with Fusion)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-381
+- **History:** found in audit `1037` (`N-A`) -> fixed in task `1038`. Probe after: `P-03 rect-3pt as built: solver nullity 5 | Design panel DOF 5 | model (ours) 5 | ... opposite side L2 (equal by the rectangle) reference`; `P-03b ... coincident(corner, origin): model 3 solver 3 | + Horizontal(base): model 2 solver 2 | + base 40: model 1 solver 1 | + side 20: model 0 solver 0`.
+
+### BUG-381
+- **Date / turn:** 2026-11-27 (audit `1037` appendix `N-B`; fixed in task `1038`)
+- **Reported by:** audit `1037` (probe `P-07`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (an arc-arc Tangent at a shared end: the arc slots' corners, a fillet between arcs)
+- **Report:** `N-B`: `P-07 ShapeArcSlotThreePoint: ours model rank 10 DOF 6; ... | solver nullity 9 | Design panel DOF 9`.
+- **What was wrong:** an arc-arc tangent at the arcs' shared end counted as no constraint (an arc slot showed DOF 9, true 5) and solved loosely (node test from a corner: `sin -4.8e-3` before, `-9.2e-10` after).
+- **Cause:** `definitions.js` `tangent`, circle-circle form: `|C1C2| - (r1 + r2)` (or `|r1 - r2|`) with both radii read through the shared joint P is an extremum where the curves touch at P (the triangle inequality): a double root, a zero row. The line-arc case already switched to a regular row at a shared end (`sharedEnd`); arc-arc had none.
+- **Fix:** ONE shared-end rule for both: `engine.js _sharedEndTangent` finds the shared joint (a line's end or an arc's rim on the arc's rim) and `definitions.js sharedEndTangent` is the row: the arc's radius `C -> P` at a right angle to the other curve's direction at P (a line's `B - A`; an arc's `P - C2` turned 90 degrees, its side as the branch: external -1, internal +1), through `rightAngleRow` (BUG-380). The line-arc form gives the same values as before (no branch); `engine.js operandsOf` lists the shared end's joints.
+- **Task id(s):** `1038`
+- **Fix merge sha:** open (`agents/dof-fix-1038`, awaiting merge)
+- **Guarding test file(s):** `tests/dof-fix-1038-node.test.js` (`N-B`: DOF 7 external / internal, line-arc 6, each side kept from a corner; the arc slots), `tests/jacobian-fd-guard.test.js` (a shared rim, an internal shared rim, a shared END rim)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-380, BUG-383
+- **History:** found in audit `1037` (`N-B`) -> fixed in task `1038`. Probe after: `DOF ShapeArcSlotThreePoint: fusion 6 | ours 5 (model 5, rotated 5)` (the remaining 6 vs 5 is the width dimension, audit D-6, an owner decision).
+
+### BUG-382
+- **Date / turn:** 2026-11-27 (audit `1037` appendix `N-C`; fixed in task `1038`)
+- **Reported by:** audit `1037` (probes `P-07`, `P-08`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (the glyph of a Tangent between two circles / arcs)
+- **Report:** `N-C`: `P-07 ShapeArcSlotThreePoint: tangent constraints 3, tangent glyphs drawn 0`; `P-08 two circles + Tangent ...: created true fields shapes,branch; glyphs drawn {}`.
+- **What was wrong:** a circle-circle / arc-arc tangent (the Tangent tool's, the arc slots') drew no glyph, so it could not be seen or picked through one; a line-circle tangent stored as `shapes` only drew none either.
+- **Cause:** `packages/ui/svg-renderer.js`: both the glyph dispatch (`c.type === TANGENT`) and the TANGENT glyph case read only `c.line` / `c.circle` and returned without them.
+- **Fix:** ONE spot rule, `tangentGlyphSpot` (`svg-renderer.js`): the operands from `{ line, circle }` or `shapes`; line-circle as before (the foot of the centre on the line, pushed away from the centre); two circles / arcs: the shared rim joint, else the touch point on the line of centres, pushed away from the smaller one's centre (internal: the larger's). The dispatch draws every tangent; the case returns when an operand is missing.
+- **Task id(s):** `1038`
+- **Fix merge sha:** open (`agents/dof-fix-1038`, awaiting merge)
+- **Guarding test file(s):** `tests/dof-fix-1038-node.test.js` (`N-C`: the circle-circle glyph at its touch point, line-circle as shapes, 4 per arc slot each picked by `glyphAt`, 6 on two saved slots), `tests/tangent-glyph-1038-live.test.js` (desktop 1280x800 mouse, phone 390x844 touch: the arc slot's 4 glyphs and the Tangent tool's circle-circle glyph)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1037` (`N-C`) -> fixed in task `1038`. Live before: `desktop: arc slot drawn, tangent glyphs 0`; after: `desktop: arc slot drawn, tangent glyphs 4`, `+ two circles and the Tangent tool, tangent glyphs 5` (the phone the same). Seen in task `1038`, not changed: a click on a tangent glyph at a SHARED corner (every slot, the straight ones too) selects the corner point, which is picked before the glyph.
+
+### BUG-383
+- **Date / turn:** 2026-11-27 (audit `1037` divergence `D-7`; fixed in task `1038`)
+- **Reported by:** audit `1037` (probe `P-07`; Fusion measured by the advisor: `Tangent x4` on both arc slots)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Slot tool: Three Point Arc Slot, Center Point Arc Slot)
+- **Report:** `D-7`: `P-07 ...: ours model rank 10 DOF 6; + the 4th tangent (inner arc - end cap 2, Fusion has it): rank 11 DOF 5`.
+- **What was wrong:** the arc slot had 3 tangents (Fusion 4): the inner arc and end cap 2 met only as two circles made tangent by the other rows (a tangential intersection), so the DOF counted one more than can move.
+- **Cause:** `packages/core/slot.js` `buildArcSlotCore` added outer-cap1, inner-cap1 and outer-cap2 only.
+- **Fix:** the 4th tangent (inner arc - cap 2, `external`) beside the other three; with BUG-381 it is a real row: DOF 5, each of the 4 counts (DOF 6 without any one), no conflict, no notice. Saved slots keep their 3 (a load restores exactly, task 1019): they solve as before and now show DOF 6 each (was 9).
+- **Task id(s):** `1038`
+- **Fix merge sha:** open (`agents/dof-fix-1038`, awaiting merge)
+- **Guarding test file(s):** `tests/dof-fix-1038-node.test.js` (`D-7`: both arc slots 4 tangents, DOF 5, none redundant, a width edit; the saved 3-tangent slots, `tests/fixtures/arc-slots-3-tangents-1038.document.json`, load exactly and solve)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-381
+- **History:** found in audit `1037` (`D-7`) -> fixed in task `1038`. Probe after: `P-07 ShapeArcSlotThreePoint: ours model rank 11 DOF 5; ... | solver nullity 5 | Design panel DOF 5`, `tangent constraints 4, tangent glyphs drawn 4`.
+
 ### BUG-360
 - **Date / turn:** 2026-11-27 (plan ID `C-1`, part of `X-01`; fixed in task `1034`)
 - **Reported by:** task `1031` plan (docs/INPUT-UNIFY-PLAN-1031.md, probe `.evidence/1031/probe-enter-snap.out`)
@@ -3525,7 +3588,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27), BUG-350 (11-27), BUG-352 (11-27), BUG-360 (11-27) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -3533,7 +3596,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22), BUG-374 (11-27, open) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-370 (11-27), BUG-361 (11-27) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 

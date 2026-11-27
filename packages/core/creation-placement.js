@@ -199,10 +199,11 @@ const turnPerpendicular = turnLine(perpendicularTurn, true);
 
 export const PLACE = {
   parallel: { operands: (s, c) => shapesOp(c), place: turnLine(parallelTurn, true) },
-  // perpendicular: the mover turns to 90 degrees. With a handedness locked (createConstraint's lockPerpendicularBranch) the solver row
-  // u x v - branch|u||v| is stationary at EXACTLY 90 degrees (its Jacobian row vanishes and the DOF count loses it), so then the mover
-  // reaches it by the least-change solve of the mover alone instead of the exact turn.
-  perpendicular: { operands: (s, c) => shapesOp(c), place: (state, M, A, c) => (c.branch === 1 || c.branch === -1 ? SOLVE_ALONE : turnPerpendicular(state, M, A, c)) },
+  // perpendicular: the mover turns rigidly to 90 degrees (Fusion), with or without a locked handedness (createConstraint's
+  // lockPerpendicularBranch, read from the same geometry: the smaller turn lands on the locked side; a turn that did not would not satisfy
+  // the constraint and is not taken). TASK 1038: the branched solver row is regular at 90 degrees now (definitions.js rightAngleRow, the angle
+  // row), so the least-change solve that stood in for the turn while it was stationary there is gone.
+  perpendicular: { operands: (s, c) => shapesOp(c), place: turnPerpendicular },
   // collinear: turn parallel about the hard pivot (else the midpoint), then slide onto the anchor's line (only when nothing holds the mover)
   collinear: {
     operands: (s, c) => shapesOp(c),

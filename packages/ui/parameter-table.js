@@ -148,6 +148,12 @@ export function planTableEdit(state, edit, { unit = 'mm' } = {}) {
       if (!p.ok && p.code === 'ASSIGN_NOT_TOP') return refusal(p, { message: `"=" is not allowed here: use the Name cell to rename ${name}` });
       return p.ok ? done(p, `change parameter ${name}`, `= ${valueAfter(p, name)}${also(p)}`) : refusal(p);
     }
+    if (edit.column === 'unit') {   // R1-16: the Unit cell of a user row
+      const cur = (state.parameters || []).find((x) => x.name === name);
+      const to = edit.text == null ? '' : String(edit.text);
+      if (cur && (cur.unit || '') === to) return UNCHANGED;
+      return done(plan({ type: 'setUnit', name, unit: to }), `unit of parameter ${name}: ${to || 'none'}`, `${name} is read in ${to || 'no unit'}${follow(name)}`);
+    }
     if (edit.column === 'comment') return done(plan({ type: 'setComment', name, comment: t }), `comment on parameter ${name}`, '');
     if (edit.column === 'delete') return done(plan({ type: 'deleteParameter', name }), `delete parameter ${name}`, '');
   }
@@ -245,7 +251,7 @@ function injectStyles() {
 .sk-ptable .pt-fx { flex: 0 0 auto; display: inline-block; font: italic 700 0.85em Georgia, serif; padding: 0 4px; margin-right: 2px; border-radius: 4px;
   background: var(--sk-info-head, rgba(127,127,127,0.2)); }
 .sk-ptable .pt-fx[hidden] { display: none; } /* TASK 699: the rule above sets display, which beats the [hidden] attribute */
-.sk-ptable .pt-ref { display: inline-block; font-size: 0.75em; padding: 0 4px; margin-left: 4px; border-radius: 4px; border: 1px solid currentColor; font-style: normal; }
+.sk-ptable .pt-ref { flex: 0 0 auto; white-space: nowrap; display: inline-block; font-size: 0.75em; padding: 0 4px; margin-left: 4px; border-radius: 4px; border: 1px solid currentColor; font-style: normal; }
 .sk-ptable .pt-empty { opacity: 0.6; font-style: italic; padding: 6px; }
 /* TASK 677: the editable cells: a faint box to signal editability, stronger on hover / focus; pending dashed, invalid red (aria-invalid) */
 .sk-ptable .pt-in { flex: 1 1 auto; width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: inherit; background: rgba(127,127,127,0.06);
@@ -554,6 +560,10 @@ export function createParameterTable({ state, getUnit = () => 'mm', history = nu
     const comment = cell('pt-comment'); comment.appendChild(refs.inputs.comment = makeInput(refs, 'comment', r.comment, `Comment of ${r.name}`));
     refs.inputs.comment.placeholder = 'comment';
     refs.valueTd = cell('pt-val'); refs.unitTd = cell('pt-unit');
+    const usel = refs.unitSelect = el('select', 'pt-in'); usel.dataset.col = 'unit';   // R1-16: the unit can be changed after creation
+    for (const u of PARAMETER_UNITS) { const o = el('option', null, u || 'none'); o.value = u; usel.appendChild(o); }
+    usel.addEventListener('change', () => applyUnit(refs));
+    refs.unitTd.appendChild(usel);
     const bin = cell('pt-bin');
     refs.bin = el('button', 'pt-del', '🗑'); refs.bin.type = 'button';
     refs.bin.addEventListener('click', () => deleteRow(refs));
@@ -571,11 +581,20 @@ export function createParameterTable({ state, getUnit = () => 'mm', history = nu
     setClean(refs.inputs.name, r.name); setClean(refs.inputs.expression, r.expression); setClean(refs.inputs.comment, r.comment);
     refs.inputs.name.setAttribute('aria-label', `Name of ${r.name}`); refs.inputs.expression.setAttribute('aria-label', `Expression of ${r.name}`);
     refs.inputs.comment.setAttribute('aria-label', `Comment of ${r.name}`);
-    refs.valueTd.textContent = r.value; refs.valueTd.dataset.unit = r.unit; refs.unitTd.textContent = r.unit;
+    refs.valueTd.textContent = r.value; refs.valueTd.dataset.unit = r.unit; refs.unitSelect.value = r.unit;
+    refs.unitSelect.setAttribute('aria-label', `Unit of ${r.name}`);
     const inUse = r.users.length > 0;
     refs.bin.setAttribute('aria-disabled', inUse ? 'true' : 'false');
     refs.bin.title = inUse ? `${r.name} is used by ${r.users.join(', ')}: it cannot be deleted` : `Delete ${r.name}`;
     refs.bin.setAttribute('aria-label', refs.bin.title);
+  }
+  // R1-16: the Unit cell of a user row applies at once (a select has no half-typed state): refused, it goes back and says why
+  function applyUnit(refs) {
+    const planned = planTableEdit(state, { kind: 'parameter', column: 'unit', name: refs.data.name, text: refs.unitSelect.value }, { unit: unitNow() });
+    const res = planned.ok ? commitTableEdit(state, planned) : planned;
+    if (!res.ok) { refs.unitSelect.value = refs.data.unit; showMessage(refs, null, res.message, 'error'); return; }
+    clearMessage(refs);
+    refresh();
   }
   function deleteRow(refs) {
     const planned = planTableEdit(state, { kind: 'parameter', column: 'delete', name: refs.data.name }, { unit: unitNow() });

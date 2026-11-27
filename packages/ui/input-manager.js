@@ -46,7 +46,7 @@ import { setupBezierTool, handleBezierPointerDown, handleBezierPointerMove, hand
 import { setupBreakTool, handleBreakPointerDown, handleBreakPointerMove, handleBreakPointerUp, resetBreakState } from '#ui/input-handlers/break-tool.js';  // TRACE-1
 import { setupTrimTool, handleTrimPointerDown, handleTrimPointerMove, handleTrimPointerUp, resetTrimState } from '#ui/input-handlers/trim-tool.js';   // TRACE-1
 import { setupFilletTool, handleFilletPointerDown, handleFilletPointerMove, handleFilletPointerUp, handleFilletKeyDown, resetFilletState, filletInputOpen, filletInputValid, filletCornerPoint, commitFilletInput } from '#ui/input-handlers/fillet-tool.js';
-import { setupOffsetTool, handleOffsetPointerDown, handleOffsetPointerMove, handleOffsetPointerUp, handleOffsetKeyDown, resetOffsetState, offsetInputOpen, offsetAnchorPoint, commitOffsetInput, OFFSET_INPUT_ID } from '#ui/input-handlers/offset-tool.js'; // TASK 650
+import { setupOffsetTool, handleOffsetPointerDown, handleOffsetPointerMove, handleOffsetPointerUp, resetOffsetState, offsetInputOpen, offsetAnchorPoint, commitOffsetInput, OFFSET_INPUT_ID } from '#ui/input-handlers/offset-tool.js'; // TASK 650
 import { isDimension } from '#core/parameters.js';
 import { setupPatternTool, beginCircularPattern, beginRectangularPattern, patternSessionOpen, handlePatternPointerDown, handlePatternPointerMove, handlePatternPointerUp, handlePatternKeyDown, resetPatternState, commitPattern, patternAnchorPoint, patternDoneOpen, patternDoneLabel, PATTERN_DIALOG_CLASS, PATTERN_INLINE_CLASS } from '#ui/input-handlers/pattern-tool.js'; // TASK 658 + 662
 import { initCursors } from '#ui/cursor-manager.js';
@@ -1222,6 +1222,7 @@ function setupKeyboardShortcuts(state, opts = {}) {
     window.addEventListener('liveDimensionCancelled', () => {
         if (!isActiveFn()) return;
         if (state.active && [TOOL_MODES.RECT, TOOL_MODES.SLOT, TOOL_MODES.CIRCLE, TOOL_MODES.POLYGON, TOOL_MODES.ARC, TOOL_MODES.LINE].includes(state.currentTool)) handleEscape(state);
+        else if (state.currentTool === TOOL_MODES.OFFSET || state.currentTool === TOOL_MODES.FILLET) handleEscape(state); // R2-07 / R1-09: the Offset and Fillet distance boxes (no state.active): one Esc cancels and leaves the tool
     });
     document.addEventListener('keydown', (e) => {
         if (!isActiveFn()) return; // P5b gate (default-on)
@@ -1296,7 +1297,6 @@ function setupKeyboardShortcuts(state, opts = {}) {
             if (handleFilletKeyDown(e, inputCtx.getCanvasSvg(), state)) { e.preventDefault(); return; }
         }
         if (state.currentTool === TOOL_MODES.MIRROR && matchesShortcut(e, 'mirror.finish')) { finishMirrorStep(state); e.preventDefault(); return; } // TASK 585
-        if (state.currentTool === TOOL_MODES.OFFSET && handleOffsetKeyDown(e)) { e.preventDefault(); return; } // TASK 650
         if (patternSessionOpen() && handlePatternKeyDown(e)) { e.preventDefault(); return; } // TASK 658: Enter = OK, Esc = Cancel
         // TASK 756: Group / Ungroup in every app (moved here from apps/shaper/src/main.js): the same functions as the menus' entries
         if (matchesShortcut(e, 'sketch.group')) { e.preventDefault(); groupSelection(state, notifyFn); return; }

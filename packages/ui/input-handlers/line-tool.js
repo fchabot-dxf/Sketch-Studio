@@ -53,8 +53,9 @@ function closeLineBoxes() {
 function redrawLinePreview(state) {
     const spt = startOf(state);
     if (!spt || !state.active || state.active.mode !== TOOL_MODES.LINE) return;
-    if (hasLock()) { state.activeInference = null; state.inference = null; }   // a typed size beats the inferred H / V / parallel
-    const pt = lockedEnd(spt, live.cursor || spt);
+    if (lineState.lockedAngle !== null) { state.activeInference = null; state.inference = null; }   // a typed angle beats the inferred H / V / parallel; a typed length alone keeps it (R2-04)
+    const inferredPt = state.activeInference && state.activeInference.pos;   // the inferred direction a typed length runs along
+    const pt = lockedEnd(spt, inferredPt || live.cursor || spt);
     safeUpdatePreview(state, 'line', [state.active.start], pt, { lockedLength: lineState.lockedLength || undefined });
 }
 
@@ -131,6 +132,43 @@ function canPreviewLineInference(state, startId, endId, newShapeId, activeInf) {
         return ConstraintManager.canAddConstraint(state, CONSTRAINT_TYPES.MIDPOINT, { joints: [j0, j1, endId] }, { full: false }).ok;
     }
     return true;
+}
+
+/** THE inference apply of a drawn segment (the Line tool's two commit paths and the Slot's centreline): the inferred H / V / perpendicular / parallel / tangent / midpoint becomes a constraint on the segment startId -> endId (shape newShapeId) when it can be added. */
+export function applyLineInference(state, activeInf, startId, endId, newShapeId) {
+    try{
+        if (activeInf && canApplyLineInference(state, startId, endId, newShapeId, activeInf)) {
+            if (activeInf.type === INFERENCE_TYPES.HORIZONTAL) {
+                ConstraintManager.addHorizontal(state, [startId, endId], { source: 'inference', autoSolve: true });
+            } else if (activeInf.type === INFERENCE_TYPES.VERTICAL) {
+                ConstraintManager.addVertical(state, [startId, endId], { source: 'inference', autoSolve: true });
+            } else if (activeInf.type === INFERENCE_TYPES.PERPENDICULAR) {
+                const target = activeInf.targetId || null;
+                if (target) {
+                    ConstraintManager.addPerpendicular(state, newShapeId, target, { source: 'inference', autoSolve: true });
+                }
+            } else if (activeInf.type === INFERENCE_TYPES.PARALLEL) {
+                const target = activeInf.targetId || null;
+                if (target) {
+                    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.PARALLEL, { shapes: [newShapeId, target] }, { source: 'inference', autoSolve: true });
+                }
+            } else if (activeInf.type === INFERENCE_TYPES.TANGENT) {
+                const target = activeInf.targetId || (activeInf.refCircle && activeInf.refCircle.id) || null;
+                if (target) {
+                    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.TANGENT, { line: newShapeId, circle: target }, { source: 'inference', autoSolve: true });
+                }
+            } else if (activeInf.type === INFERENCE_TYPES.MIDPOINT) {
+                const target = activeInf.targetId || null;
+                if (target) {
+                    const targetShape = state.shapes.find(s => s && s.id === target);
+                    if (targetShape && targetShape.joints && targetShape.joints.length >= 2) {
+                        const [j0, j1] = targetShape.joints;
+                        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.MIDPOINT, { joints: [j0, j1, endId] }, { source: 'inference', autoSolve: true });
+                    }
+                }
+            }
+        }
+    }catch(_){ }
 }
 
 function canApplyLineInference(state, startId, endId, newShapeId, activeInf) {
@@ -307,7 +345,7 @@ export function handleLinePointerMove(e, svg, state, w) {
         let previewPt = rawPreviewPt;
         
         live.cursor = rawPreviewPt;
-        if (hasLock()) {   // a typed length / angle holds (the other still follows the cursor); no inference then
+        if (lineState.lockedAngle !== null) {   // a typed angle holds (the length still follows the cursor unless typed); no inference then
             const spt = startOf(state);
             if (spt) previewPt = lockedEnd(spt, rawPreviewPt);
             state.activeInference = null; state.inference = null;
@@ -330,6 +368,8 @@ export function handleLinePointerMove(e, svg, state, w) {
                 } else { state.activeInference = null; state.inference = null; }
                 if (state.activeInference && state.activeInference.pos) previewPt = state.activeInference.pos;
             } catch (_) { state.activeInference = null; state.inference = null; }
+            const lenStart = startOf(state);
+            if (lineState.lockedLength !== null && lenStart) previewPt = lockedEnd(lenStart, previewPt);   // a typed length alone runs along the inferred (or cursor) direction
         }
 
         safeUpdatePreview(state, 'line', [state.active.start], previewPt, { lockedLength: lineState.lockedLength || undefined });
@@ -470,47 +510,14 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
         }
     }catch(_){ }
 
-    try{
-        const activeInf = state.activeInference || state.inference || null;
-        if (activeInf && canApplyLineInference(state, startId, endId, newShapeId, activeInf)) {
-            if (activeInf.type === INFERENCE_TYPES.HORIZONTAL) {
-                ConstraintManager.addHorizontal(state, [startId, endId], { source: 'inference', autoSolve: true });
-            } else if (activeInf.type === INFERENCE_TYPES.VERTICAL) {
-                ConstraintManager.addVertical(state, [startId, endId], { source: 'inference', autoSolve: true });
-            } else if (activeInf.type === INFERENCE_TYPES.PERPENDICULAR) {
-                const target = activeInf.targetId || null;
-                if (target) {
-                    ConstraintManager.addPerpendicular(state, newShapeId, target, { source: 'inference', autoSolve: true });
-                }
-            } else if (activeInf.type === INFERENCE_TYPES.PARALLEL) {
-                const target = activeInf.targetId || null;
-                if (target) {
-                    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.PARALLEL, { shapes: [newShapeId, target] }, { source: 'inference', autoSolve: true });
-                }
-            } else if (activeInf.type === INFERENCE_TYPES.TANGENT) {
-                const target = activeInf.targetId || (activeInf.refCircle && activeInf.refCircle.id) || null;
-                if (target) {
-                    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.TANGENT, { line: newShapeId, circle: target }, { source: 'inference', autoSolve: true });
-                }
-            } else if (activeInf.type === INFERENCE_TYPES.MIDPOINT) {
-                const target = activeInf.targetId || null;
-                if (target) {
-                    const targetShape = state.shapes.find(s => s && s.id === target);
-                    if (targetShape && targetShape.joints && targetShape.joints.length >= 2) {
-                        const [j0, j1] = targetShape.joints;
-                        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.MIDPOINT, { joints: [j0, j1, endId] }, { source: 'inference', autoSolve: true });
-                    }
-                }
-            }
-        }
-    }catch(_){ }
+    applyLineInference(state, state.activeInference || state.inference || null, startId, endId, newShapeId);
 
     if(state.previewConstraint){
         const idx = state.constraints.indexOf(state.previewConstraint);
         if(idx >= 0) state.constraints.splice(idx,1);
         state.previewConstraint = null;
     }
-    state.inference = null;
+    state.inference = null; state.activeInference = null;   // the next segment infers afresh
     endSegmentStep(state);
 
     try{
@@ -588,44 +595,12 @@ export function finalizeLineFromActive(svg, state) {
     lineState.lengthName = null;
     lineState.lengthAssign = null;
     
-    try{
-        const activeInf = state.activeInference || state.inference || null;
-        if (activeInf && canApplyLineInference(state, startId, endId, newShapeId, activeInf)) {
-            if (activeInf.type === INFERENCE_TYPES.HORIZONTAL) {
-                ConstraintManager.addHorizontal(state, [startId, endId], { source: 'inference', autoSolve: true });
-            } else if (activeInf.type === INFERENCE_TYPES.VERTICAL) {
-                ConstraintManager.addVertical(state, [startId, endId], { source: 'inference', autoSolve: true });
-            } else if (activeInf.type === INFERENCE_TYPES.PERPENDICULAR) {
-                const target = activeInf.targetId || null;
-                if (target) {
-                    ConstraintManager.addPerpendicular(state, newShapeId, target, { source: 'inference', autoSolve: true });
-                }
-            } else if (activeInf.type === INFERENCE_TYPES.PARALLEL) {
-                const target = activeInf.targetId || null;
-                if (target) {
-                    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.PARALLEL, { shapes: [newShapeId, target] }, { source: 'inference', autoSolve: true });
-                }
-            } else if (activeInf.type === INFERENCE_TYPES.TANGENT) {
-                const target = activeInf.targetId || (activeInf.refCircle && activeInf.refCircle.id) || null;
-                if (target) {
-                    ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.TANGENT, { line: newShapeId, circle: target }, { source: 'inference', autoSolve: true });
-                }
-            } else if (activeInf.type === INFERENCE_TYPES.MIDPOINT) {
-                const target = activeInf.targetId || null;
-                if (target) {
-                    const targetShape = state.shapes.find(s => s && s.id === target);
-                    if (targetShape && targetShape.joints && targetShape.joints.length >= 2) {
-                        const [j0, j1] = targetShape.joints;
-                        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.MIDPOINT, { joints: [j0, j1, endId] }, { source: 'inference', autoSolve: true });
-                    }
-                }
-            }
-        }
-    }catch(_){ }
+    applyLineInference(state, state.activeInference || state.inference || null, startId, endId, newShapeId);
 
     try{ applyLockedSnap(state, startId, state.active && state.active.startSnapTarget, [endId]); }catch(_){ }
     try{ applyLockedSnap(state, endId, state.active && state.active.preview && state.active.preview.snapTarget, [startId]); }catch(_){ }
 
+    state.inference = null; state.activeInference = null;   // the next segment infers afresh
     endSegmentStep(state);
     try{
         const ep = state.joints.get(endId);

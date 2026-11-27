@@ -1,5 +1,6 @@
 // Slot tool (TASK 673) — supports Fusion 360's five slot types using real lines, makeArc, and a diameter width dim.
-import { TOOL_MODES, SLOT_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
+import { TOOL_MODES, SLOT_MODES, CONSTRAINT_TYPES, INFERENCE_TYPES } from '#core/constants.js';
+import { findInference } from '#core/inference-engine.js';
 import { addConstraint } from '#core/constraints.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import {
@@ -34,6 +35,7 @@ import {
     liveAssign,
     applyLiveAssign,
 } from '#ui/input-handlers/base-tool.js';
+import { applyLineInference } from '#ui/input-handlers/line-tool.js';   // R1-08: the Line tool's ONE inference apply
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 const MIN_SPAN = 0.1;
@@ -77,8 +79,18 @@ function snapPoint(snap, fallback) {
 const spanFactor = (mode) => (mode === SLOT_MODES.CENTER_POINT ? 2 : 1);
 const spanLength = (mode, p1, pt) => Math.hypot(pt.x - p1.x, pt.y - p1.y) * spanFactor(mode);
 
-function resolveSpanEnd(p1, pt, mode) {
+// R1-08: a straight slot's centreline infers Horizontal / Vertical like the Line tool does (the Line tool's findInference); clicked and typed spans alike.
+// The inferred end: the cursor moved onto the axis through p1. null: no H / V inferred (or an arc slot).
+function spanInference(state, p1, pt, mode) {
+    if (isArcMode(mode) || !p1 || !pt) return null;
+    const inf = findInference(p1, pt, state.shapes, state.joints, state.snapTarget);
+    return inf && (inf.type === INFERENCE_TYPES.HORIZONTAL || inf.type === INFERENCE_TYPES.VERTICAL) ? inf : null;
+}
+
+function resolveSpanEnd(state, p1, pt, mode) {
     if (!p1 || !pt) return pt;
+    const inf = spanInference(state, p1, pt, mode);
+    if (inf && inf.pos) pt = inf.pos;
     if (!(localState.lockedSpan > MIN_SPAN)) return pt;
     const reach = localState.lockedSpan / spanFactor(mode);
     const dx = pt.x - p1.x, dy = pt.y - p1.y;
@@ -204,7 +216,7 @@ function redrawPreview(state, cursorPt) {
     if (!p1) return;
 
     if (active.phase === 'span' || active.phase === 'span2') {
-        const p2 = resolveSpanEnd(p1, cursorPt || p1, mode);
+        const p2 = resolveSpanEnd(state, p1, cursorPt || p1, mode);
         let cl1 = p1, cl2 = p2;
         if (mode === SLOT_MODES.CENTER_POINT) {
             cl1 = { x: 2 * p1.x - p2.x, y: 2 * p1.y - p2.y };
@@ -340,6 +352,11 @@ function commitSlot(svg, state, cursorPt) {
     for (const s of built.shapes) state.shapes.push(s);
     for (const c of built.constraints) addConstraint(state, c.type, c);
     for (const [jid, snap] of snapsToApply) applyLockedSnap(state, jid, snap);
+    // R1-08: the centreline lies on the inferred Horizontal / Vertical: the constraint (the Line tool's apply)
+    const centreJoints = mode === SLOT_MODES.OVERALL
+        ? (built.meta && built.meta.t1Id && built.meta.t2Id ? [built.meta.t1Id, built.meta.t2Id] : null)
+        : (built.meta && !isArcMode(mode) && built.meta.c1Id && built.meta.c2Id ? [built.meta.c1Id, built.meta.c2Id] : null);
+    if (centreJoints && active.spanInference) applyLineInference(state, active.spanInference, centreJoints[0], centreJoints[1], null);
     // TASK 782 / 1013 (B-19c): a typed span length becomes a driving span dimension in ALL straight slot modes (C2C, Overall, Center-Point) and Center-Point Arc
     if (active.typedSpan > 0 && built.meta) {
         const spanJoints = mode === SLOT_MODES.OVERALL
@@ -384,6 +401,7 @@ function advanceFromSpan(e, svg, state, endPt, snap) {
     active.typedSpanExpression = localState.spanExpression;
     active.typedSpanName = localState.spanName;
     active.typedSpanAssign = localState.spanAssign;
+    active.spanInference = spanInference(state, active.picks[0].pt, endPt, active.slotMode);   // R1-08: H / V the finished span lies on
     active.typedSpan = localState.lockedSpan;   // what was typed in the length box (null: the clicks set it): the dimension the slot keeps
     localState.lockedSpan = null;
     localState.spanExpression = null;
@@ -464,7 +482,7 @@ export function setupSlotTool(svg, state) {
                     localState.spanAssign = liveAssign(detail, 0);
                 }   // TASK 782: only a TYPED length locks the span (and becomes a dimension), never the displayed rounding
                 const p1 = active.picks[0].pt;
-                const endPt = resolveSpanEnd(p1, localState.cursor || { x: p1.x + (localState.lockedSpan || 0) / spanFactor(active.slotMode), y: p1.y }, active.slotMode);
+                const endPt = resolveSpanEnd(state, p1, localState.cursor || { x: p1.x + (localState.lockedSpan || 0) / spanFactor(active.slotMode), y: p1.y }, active.slotMode);
                 if (!(Math.hypot(endPt.x - p1.x, endPt.y - p1.y) > MIN_SPAN)) {
                     detail.keepOpen = true;
                     return;
@@ -584,7 +602,7 @@ export function handleSlotPointerMove(e, svg, state, w) {
         const p1 = active.picks[0] && active.picks[0].pt;
         const p2 = active.picks[1] && active.picks[1].pt;
         if ((active.phase === 'span' || active.phase === 'span2') && p1) {
-            const effP2 = resolveSpanEnd(p1, pt, active.slotMode);
+            const effP2 = resolveSpanEnd(state, p1, pt, active.slotMode);
             followCreationBoxes(e, [spanLength(active.slotMode, p1, effP2)]);
         } else if (active.phase === 'arc3') {
             const arc = currentArcParams(active, pt);
@@ -620,7 +638,7 @@ export function handleSlotPointerUp(e, svg, state, hitSnap, w) {
             return true;
         }
         const p1 = active.picks[0].pt;
-        const endPt = resolveSpanEnd(p1, rawPt, active.slotMode);
+        const endPt = resolveSpanEnd(state, p1, rawPt, active.slotMode);
         if (!(Math.hypot(endPt.x - p1.x, endPt.y - p1.y) > MIN_SPAN)) {
             return true;
         }

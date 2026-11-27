@@ -280,7 +280,6 @@ export function handleFilletPointerUp(e) {
 }
 
 export function handleFilletKeyDown(e, svg, state) {
-  if (matchesShortcut(e, 'edit.cancel') && (_pick || _input)) { cancelAll(); return true; }
   if (matchesShortcut(e, 'fillet.radius')) {
     const unit = docUnit();
     const input = prompt('Enter Fillet Radius (' + unit + '):', formatLenLabel(currentRadius));
@@ -346,7 +345,7 @@ function openInput(svg, state, viewState, corner) {
     if (_input && _input.completion && _input.completion.handleKey(ev)) { ev.stopImmediatePropagation(); return; }
     if (handleBoxUndoKey(ev, el, defaultValue, () => { applyInputValue(); if (_input && _input.completion) _input.completion.close(); })) return;
     if (ev.key === 'Enter') { ev.preventDefault(); commitFilletInput(); }
-    else if (ev.key === 'Escape') { ev.preventDefault(); cancelAll(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); window.dispatchEvent(new CustomEvent('liveDimensionCancelled')); }   // the canvas Esc (handleEscape) cancels and leaves the tool: ONE Esc
   });
   refreshPreview();
   syncRadiusBox(); // after the preview: the box keeps off the drag arrow it draws

@@ -71,6 +71,8 @@ try {
   app.esc();
   ok(!box() && !app.svg.querySelector('#offset-tool-overlay'), 'Esc: the box and the preview are gone');
   ok(st.shapes.length === n0 && st.constraints.length === c0 && st.history.length === h0, 'Esc: nothing made, no undo step');
+  ok(st.currentTool === 'select', 'R2-07: ONE Esc left the Offset tool');
+  app.tool('offset'); // the owner's ruling (BUG-105): Esc leaves the tool, so the next pick starts from the tool button again
 
   // ---- pick, type 5, Enter: ONE undo step
   click(onVertical); app.move(inside.x, inside.y);

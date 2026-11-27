@@ -9,6 +9,7 @@ import { SolverConfig } from './solver-config.js';
 import { isDimension, nextDimensionName } from './parameters.js';
 import { angleSectorOf } from './angle-sector.js';
 import { offsetConstraintRecord } from './offset.js';
+import { defaultLabelPlacement } from './dim-label.js';
 import { patternConstraintRecord, patternRefs } from './pattern.js';
 
 /**
@@ -551,6 +552,13 @@ export function addConstraint(state, type, params) {
     // TASK 535: every dimension has a name; one without (a new dimension, or a version-1 file) gets the next automatic one HERE, the
     // only place. It goes in BEFORE createConstraint so withDimensionState writes name and expression in one fixed order (byte-stable saves).
     if (isDimension({ ...normalized, type }) && !normalized.name) normalized.name = nextDimensionName(state.constraints, state.parameters);
+
+    // R1-15 / R1-11: a distance born with no placement of its own (a draw-time box, a tool's typed size) takes the default placement among the existing
+    // labels and shapes (#core/dim-label.js), HERE, the one place every creator reaches (ConstraintManager included), not the one fixed offset that
+    // piled concentric diameters on +X. A dimension a tool places itself (the Dimension tool) carries its offset and is untouched.
+    if (type === CONSTRAINT_TYPES.DISTANCE && !Number.isFinite(normalized.offset) && !normalized.glyphPos && !normalized.__pos && !normalized.labelPos && !Number.isFinite(normalized.labelAngle) && !Number.isFinite(normalized.labelSlide)) {
+        Object.assign(normalized, defaultLabelPlacement({ type, ...normalized }, state) || {});
+    }
 
     // Create validated constraint
     const constraint = createConstraint(type, normalized);

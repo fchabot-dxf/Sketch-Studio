@@ -176,12 +176,12 @@ function expandSketch(container) {
     // 2. Driven / reference dimensions (parenthesized)
     SettingsManager.set('DOC_UNIT', 'in');
     assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, value: VAL_76_2, isDriven: true }) === '(3)', 'driven distance in inches');
-    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, isRadius: true, value: VAL_76_2, isDriven: true }) === 'R (3)', 'driven radius in inches');
+    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, isRadius: true, value: VAL_76_2, isDriven: true }) === '(R 3)', 'driven radius in inches');
     assert(formatConstraintValue({ type: CONSTRAINT_TYPES.ANGLE, value: ANGLE_45, isDriven: true }) === '(45°)', 'driven angle in inches');
 
     SettingsManager.set('DOC_UNIT', 'mm');
     assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, value: VAL_76_2, isDriven: true }) === '(76.2)', 'driven distance in mm');
-    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, isRadius: true, value: VAL_76_2, isDriven: true }) === 'R (76.2)', 'driven radius in mm');
+    assert(formatConstraintValue({ type: CONSTRAINT_TYPES.DISTANCE, isRadius: true, value: VAL_76_2, isDriven: true }) === '(R 76.2)', 'driven radius in mm');
     assert(formatConstraintValue({ type: CONSTRAINT_TYPES.ANGLE, value: ANGLE_45, isDriven: true }) === '(45°)', 'driven angle in mm');
     console.log('✓ Driven / reference dimensions format with parentheses in both units');
 

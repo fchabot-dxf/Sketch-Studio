@@ -1,7 +1,7 @@
 // tests/construction-toggle-output-node.test.js — TASK 619:
-// 1. Construction toggle (.sk-canvas-corner #btn-construct-toggle + K shortcut) is shared via #ui/design-browser.js
+// 1. Construction toggle (.sk-canvas-corner #btn-construct-toggle + X shortcut) is shared via #ui/design-browser.js
 //    across SketchStudio, Shaper, and Trace (NOT in app-footer), and is mounted in Pen Plotter too (TASK 641: construction is never plotted).
-// 2. K key and button toggle isConstructionMode, mark drawn shapes as construction, and toggle selected shape
+// 2. X key and button toggle isConstructionMode, mark drawn shapes as construction, and toggle selected shape
 //    isConstruction in one undo step (when Design view is active; ignored while input focused or tab hidden).
 // 3. Safety / exclusion checks:
 //    - Shaper: construction geometry is excluded from findLoops, findOpenChains, and exportShaperSVG cut output.
@@ -20,7 +20,7 @@ import { collectToolpathShapes } from '../apps/penplotter/src/core-geometry.js';
 import { buildGcodeEntries } from '../apps/penplotter/src/export.js';
 import { downloadSVG, downloadDXF } from '../apps/trace/src/export.js';
 
-// ---- 1. Enabled node-app hosts (SketchStudio + Shaper): toggle in .sk-canvas-corner (NOT footer), K & button work
+// ---- 1. Enabled node-app hosts (SketchStudio + Shaper): toggle in .sk-canvas-corner (NOT footer), X & button work
 for (const host of ['sketchstudio', 'shaper']) {
   const app = await open({ host, designBrowser: true });
   try {
@@ -33,13 +33,13 @@ for (const host of ['sketchstudio', 'shaper']) {
     assert.strictEqual(cBtn.closest('footer'), null, host + ': button is NOT in footer');
     assert(!footer.querySelector('#btn-construct-toggle'), host + ': footer contains no construction button');
     assert.strictEqual(cBtn.getAttribute('aria-pressed'), 'false', host + ': initially OFF');
-    assert.strictEqual(cBtn.title, 'Construction: OFF (K)', host + ': title advertises K shortcut');
+    assert.strictEqual(cBtn.title, 'Construction: OFF (X)', host + ': title advertises X shortcut');
 
-    // K toggles mode ON -> draws construction line -> K toggles OFF -> draws solid line
-    app.key('k');
-    assert.strictEqual(app.state.isConstructionMode, true, host + ': K toggles isConstructionMode ON');
-    assert.strictEqual(cBtn.getAttribute('aria-pressed'), 'true', host + ': aria-pressed updates on K');
-    assert.strictEqual(cBtn.title, 'Construction: ON (K)', host + ': title updates on K');
+    // X toggles mode ON -> draws construction line -> X toggles OFF -> draws solid line
+    app.key('x');
+    assert.strictEqual(app.state.isConstructionMode, true, host + ': X toggles isConstructionMode ON');
+    assert.strictEqual(cBtn.getAttribute('aria-pressed'), 'true', host + ': aria-pressed updates on X');
+    assert.strictEqual(cBtn.title, 'Construction: ON (X)', host + ': title updates on X');
 
     const r = app.svg.getBoundingClientRect();
     const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
@@ -58,13 +58,13 @@ for (const host of ['sketchstudio', 'shaper']) {
     assert.strictEqual(app.state.shapes.length, 2, host + ': second line drawn');
     assert.strictEqual(!!app.state.shapes[1].isConstruction, false, host + ': line drawn while OFF is solid');
 
-    // Selecting a shape + K toggles that shape's isConstruction in 1 undo step
+    // Selecting a shape + X toggles that shape's isConstruction in 1 undo step
     app.tool('select');
     app.click(cx, cy + 40);
     assert.strictEqual(app.state.selectedShapes.size, 1, host + ': solid line selected');
     const histBefore = app.state.history.length;
-    app.key('k');
-    assert.strictEqual(app.state.shapes[1].isConstruction, true, host + ': K toggles selected shape to construction');
+    app.key('x');
+    assert.strictEqual(app.state.shapes[1].isConstruction, true, host + ': X toggles selected shape to construction');
     assert.strictEqual(app.state.history.length, histBefore + 1, host + ': toggling selection is 1 undo step');
     app.undo();
     assert.strictEqual(!!app.state.shapes[1].isConstruction, false, host + ': Undo restores shape construction flag');
@@ -74,16 +74,16 @@ for (const host of ['sketchstudio', 'shaper']) {
     doc.body.appendChild(inp);
     inp.focus();
     const modeBefore = app.state.isConstructionMode;
-    app.key('k');
-    assert.strictEqual(app.state.isConstructionMode, modeBefore, host + ': K inside input does not toggle construction');
+    app.key('x');
+    assert.strictEqual(app.state.isConstructionMode, modeBefore, host + ': X inside input does not toggle construction');
     inp.blur(); inp.remove();
 
-    // Shaper hidden Design tab: K does NOT toggle while Prepare is active
+    // Shaper hidden Design tab: X does NOT toggle while Prepare is active
     if (host === 'shaper') {
       app.modes.showMode('prepare');
       const m0 = app.state.isConstructionMode;
-      app.key('k');
-      assert.strictEqual(app.state.isConstructionMode, m0, 'shaper: K ignored when Design stage is hidden');
+      app.key('x');
+      assert.strictEqual(app.state.isConstructionMode, m0, 'shaper: X ignored when Design stage is hidden');
       app.modes.showMode('design');
     }
   } finally {
@@ -91,7 +91,7 @@ for (const host of ['sketchstudio', 'shaper']) {
   }
 }
 
-// ---- 2. Shaper output exclusion: construction line drawn via K inside a closed square never splits loops, never forms chains, never exports
+// ---- 2. Shaper output exclusion: construction line drawn via X inside a closed square never splits loops, never forms chains, never exports
 {
   const app = await open({ host: 'shaper', designBrowser: true });
   try {
@@ -105,8 +105,8 @@ for (const host of ['sketchstudio', 'shaper']) {
     assert.strictEqual(solidIds.length, 4, 'shaper: 4 solid rectangle sides');
     assert(app.state.shapes.every((s) => !s.isConstruction), 'shaper: rectangle sides are solid');
 
-    // Turn construction ON with K and draw a construction diagonal bisecting the rectangle
-    app.key('k');
+    // Turn construction ON with X and draw a construction diagonal bisecting the rectangle
+    app.key('x');
     assert.strictEqual(app.state.isConstructionMode, true);
     app.tool('line');
     app.click(cx - 50, cy - 40); app.click(cx + 50, cy + 40); app.esc();
@@ -145,8 +145,8 @@ for (const host of ['sketchstudio', 'shaper']) {
   const app = await open({ host: 'penplotter' });
   try {
     assert(app.document.getElementById('btn-construct-toggle'), 'penplotter: Construction button is mounted');
-    app.key('k');
-    assert.strictEqual(app.state.isConstructionMode, true, 'penplotter: K enables construction mode');
+    app.key('x');
+    assert.strictEqual(app.state.isConstructionMode, true, 'penplotter: X enables construction mode');
 
     const mk = (id, x, isConstruction) => {
       const j1 = app.engine.genJ(), j2 = app.engine.genJ();
@@ -221,13 +221,13 @@ for (const host of ['sketchstudio', 'shaper']) {
     const cBtn = doc.getElementById('btn-construct-toggle');
     assert(cBtn && cBtn.closest('.sk-canvas-corner'), 'trace: #btn-construct-toggle mounted in .sk-canvas-corner');
 
-    // K toggles ON on visible Edit tab -> hidden Edit tab ignores K
-    doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'k', bubbles: true }));
-    assert.strictEqual(st.isConstructionMode, true, 'trace: K turns Construction ON when Edit tab visible');
+    // X toggles ON on visible Edit tab -> hidden Edit tab ignores X
+    doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'x', bubbles: true }));
+    assert.strictEqual(st.isConstructionMode, true, 'trace: X turns Construction ON when Edit tab visible');
     assert.strictEqual(cBtn.getAttribute('aria-pressed'), 'true');
     tabEdit.hidden = true;
-    doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'k', bubbles: true }));
-    assert.strictEqual(st.isConstructionMode, true, 'trace: K ignored while Edit tab is hidden');
+    doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'x', bubbles: true }));
+    assert.strictEqual(st.isConstructionMode, true, 'trace: X ignored while Edit tab is hidden');
     tabEdit.hidden = false;
 
     // Button toggles OFF then ON, draw a line in Edit with construction ON (distinct coords 777..888)

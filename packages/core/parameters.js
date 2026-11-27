@@ -337,6 +337,8 @@ function numberText(base, unit) {
 //           { type:'renameParameter' | 'renameDimension', name, to }
 //           { type:'deleteParameter', name }
 //           { type:'setComment', name, comment }
+// R1-16: the name of a count box in a message: the pattern value's own label ("quantity" -> "Quantity"), else "Count"
+const countLabel = (d) => { const s = d.slot && d.c ? patternSlot(d.c, d.slot) : null; const l = s && s.label ? s.label : 'count'; return l.charAt(0).toUpperCase() + l.slice(1); };
 export function planChange(state, change, { unit = 'mm' } = {}) {
   const m0 = modelOf(state);
   const e0 = evaluateModel(m0, unit);
@@ -390,7 +392,7 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
         d.value = r.v; newExpression = null;
       } else {
         const r = canon(parsed.ast, dctx);
-        if (!r.ok) return r;
+        if (!r.ok) return r.code === 'UNIT_MISMATCH' && d.kind === 'count' ? { ...r, message: `${countLabel(d)} ${r.message}` } : r;   // R1-16: "Quantity needs a plain number, not a length"
         newExpression = r.text;
       }
       // OWNER RULING (task 677, Fusion measured): `name = expr` with a name that is no user parameter NAMES THIS DIMENSION (Fusion makes it a model
@@ -462,6 +464,28 @@ export function planChange(state, change, { unit = 'mm' } = {}) {
       const users = usersInModel(graphOf(m0), foldName(p.name));
       if (users.length) return { ok: false, code: 'IN_USE', message: `${p.name} is used by ${users.join(', ')}`, users };
       m1.params.splice(m1.params.indexOf(p), 1);
+      break;
+    }
+    case 'setUnit': {   // R1-16: the unit of a user parameter is editable after creation
+      const p = paramOf(change.name);
+      if (!p) return noSuch('parameter', change.name);
+      const unit = change.unit == null ? '' : change.unit;
+      if (!PARAMETER_UNITS.includes(unit)) return { ok: false, code: 'UNIT_MISMATCH', message: `'${unit}' is not a unit a parameter can have`, at: { start: 0, end: 0 } };
+      const parsed = parseInput(p.expression, { allowAssign: false });
+      if (!parsed.ok) return parsed;
+      let ast = parsed.ast;
+      if (parameterKind({ unit }) !== parameterKind(p)) {   // length <-> angle <-> plain number
+        const users = usersInModel(graphOf(m0), foldName(p.name));
+        if (users.length) return { ok: false, code: 'IN_USE', message: `${p.name} is used by ${users.join(', ')}: they would read ${parameterKind({ unit }) === 'none' ? 'a plain number' : parameterKind({ unit }) === 'angle' ? 'an angle' : 'a length'} instead of ${parameterKind(p) === 'none' ? 'a plain number' : parameterKind(p) === 'angle' ? 'an angle' : 'a length'}. Change them first`, users };
+        const lit = ast.t === 'unit' && ast.arg.t === 'num' ? ast.arg : ast.t === 'num' ? ast : null;   // a typed number keeps its number in the new unit
+        if (!lit) return { ok: false, code: 'UNIT_MISMATCH', message: `${p.name} is the formula ${p.expression}: type its expression again for the new unit`, at: { start: 0, end: 0 } };
+        ast = lit;
+      }
+      p.unit = unit;
+      const r = canon(ast, paramCtx(p));
+      if (!r.ok) return r;
+      p.expression = r.text;
+      roots.add(foldName(p.name));
       break;
     }
     case 'setComment': {

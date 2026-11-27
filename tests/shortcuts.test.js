@@ -51,7 +51,7 @@ for (const s of SHORTCUTS) {
   assert(GROUPS.includes(s.group), 'group: ' + s.id + ' ' + s.group);
   assert(s.hosts.length && s.hosts.every((h) => APP_HOSTS.includes(h)), 'hosts: ' + s.id);
   assert(/^(app|canvas|tool:[a-z]+|stage:[a-z]+)$/.test(s.scope), 'scope: ' + s.id + ' ' + s.scope);
-  assert(s.keys.length, 'keys: ' + s.id);
+  assert(s.keys.length || s.id === 'tool.coincident', 'keys: ' + s.id);   // R1-17: Coincident has no default key (owner ruling turn 3830)
   for (const c of s.keys) {
     assert.strictEqual(['key', 'code', 'chars'].filter((k) => c[k] !== undefined).length, 1, 'one of key / code / chars: ' + s.id);
     for (const m of ['mod', 'shift', 'alt']) assert([undefined, true, false].includes(c[m]), m + ': ' + s.id);
@@ -186,8 +186,8 @@ assert.strictEqual(matchShortcut(ev('m'), LETTER_IDS), 'tool.mirror'); assert.st
 assert.strictEqual(matchShortcut(ev('p'), [...LETTER_IDS, 'view.parameters']), 'tool.polygon');
 assert.strictEqual(matchShortcut(ev('P', { shift: true }), [...LETTER_IDS, 'view.parameters']), 'view.parameters');
 assert(!matchesShortcut(ev('p', { ctrl: true, shift: true }), 'view.parameters') && !matchesShortcut(ev('p'), 'view.parameters'), 'Ctrl+Shift+P / P are not Parameters');
-assert(matchesShortcut(ev('k'), 'sketch.construction') && matchesShortcut(ev('K', { shift: true }), 'sketch.construction'), 'K / Shift+K');
-assert(!matchesShortcut(ev('k', { ctrl: true }), 'sketch.construction') && !matchesShortcut(ev('k', { alt: true }), 'sketch.construction'), 'Ctrl+K / Alt+K are not Construction');
+assert(matchesShortcut(ev('x'), 'sketch.construction') && matchesShortcut(ev('X', { shift: true }), 'sketch.construction'), 'X / Shift+X');
+assert(!matchesShortcut(ev('x', { ctrl: true }), 'sketch.construction') && !matchesShortcut(ev('x', { alt: true }), 'sketch.construction'), 'Ctrl+X / Alt+X are not Construction');
 assert(matchesShortcut(ev('s', { ctrl: true }), 'file.save') && matchesShortcut(ev('S', { meta: true }), 'file.save'), 'Ctrl+S / Cmd+S');
 assert(!matchesShortcut(ev('s', { ctrl: true, shift: true }), 'file.save') && !matchesShortcut(ev('s'), 'file.save'), 'Ctrl+Shift+S / S are not Save');
 assert.deepStrictEqual(['z', 'Z', 'y', 'Y'].map((k) => undoRedoKeyAction(ev(k, { ctrl: true }))), ['undo', 'undo', 'redo', 'redo']);

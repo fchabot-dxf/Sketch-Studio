@@ -14,7 +14,7 @@
 // #core never inspects it; this keeps host-specific state out of the shared geometry, matching the
 // existing rule that plotter pen colors etc. stay plotter-side.
 
-import { addConstraintObject } from '#core/constraints.js';
+import { restoreConstraintObject } from '#core/constraints.js';
 import { DEFAULT_SKETCH_ID, DEFAULT_SKETCH_NAME } from '#core/sketch-model.js';
 import { cloneProfiles } from '#core/profile-model.js';
 import { cloneParameters, replaceParameters, namePatternValues } from '#core/parameters.js';
@@ -111,7 +111,8 @@ function removedVcarveCount(doc) {
  * deserializeDocument(doc, state) → { ok: true, hosts, removedVcarves } | { ok: false, reason }
  *   Replaces state's ENTIRE geometry with doc's (lesson: opening a document replaces the whole state,
  *   never blends with what was there — clear every store to default FIRST). Constraints are re-added via
- *   addConstraintObject (the SAME validated-add path undo/redo's _restoreSnapshot already uses — not the
+ *   restoreConstraintObject (the SAME validated path undo/redo's _restoreSnapshot uses, with no duplicate check: a saved drawing comes back
+ *   exactly, task 1019 — not the
  *   raw engine.addConstraint the load()-only test harness uses, since a persisted document may have
  *   traveled through storage and deserves the same safety net a redo step gets).
  *   A document whose version is NEWER than this build understands is REJECTED (ok:false), never
@@ -149,7 +150,7 @@ export function deserializeDocument(doc, state) {
     if (raw.labelPos) projectDimLabel(raw, raw.labelPos, state.joints, state.shapes);
     // TASK 553: an angle dimension saved by an older build (no `sector`) is converted here, the one load path, from the loaded geometry
     const proto = legacyAngleSector(raw, state.joints, state.shapes);
-    addConstraintObject(state, proto);
+    restoreConstraintObject(state, proto);
   }
   // TASK 694 (migration): a pattern saved before its values were named gets their names now, in constraint order, after the whole file is
   // loaded (a name is never one a later constraint of the file carries). Names only: no value, no geometry changes.

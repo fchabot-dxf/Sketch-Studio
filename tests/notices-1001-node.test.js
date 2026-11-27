@@ -103,7 +103,8 @@ try {
   eq(notices(doc).length, 0, 'numeric-input-manager shows no toast for driven dim');
   ok(logHas('ERR-DRIVEN-02'), 'numeric-input-manager logs ERR-DRIVEN-02');
 
-  // dimension-tool.js placement on fixed joints where sandbox cannot satisfy value -> ERR-DIM-02 logged, no toast
+  // dimension-tool.js placement on fixed joints -> the one rank test (numeric-input-manager, at the drop) makes it a reference: ERR-DRIVEN-02 logged, no toast
+  // (TASK 1019, R1-04: the tool's own fixed-joints sandbox, which logged ERR-DIM-02, is gone)
   clear(doc);
   logs.length = 0;
   st.currentTool = TOOL_MODES.DIMENSION;
@@ -118,9 +119,9 @@ try {
   pending.driven = false;
   pending.value = 999;
   handleDimensionPointerDown(ev, app.svg, st, null, null, { x: 230, y: -20 });
-  eq(pending.isDriven, true, 'dimension-tool marks unsatisfiable dim on fixed joints as driven');
+  eq(pending.isDriven, true, 'a dimension placed on fixed joints is driven (a reference)');
   eq(notices(doc).length, 0, 'dimension-tool placement on fixed joints shows no toast');
-  ok(logHas('ERR-DIM-02'), 'dimension-tool logs ERR-DIM-02');
+  ok(logHas('ERR-DRIVEN-02'), 'the rank test logs ERR-DRIVEN-02');
 
   // 4. ConstraintManager auto-driven on fixed joints -> no toast, reference logged; math-rejected -> no [ERR-CMATH-01]
   clear(doc);

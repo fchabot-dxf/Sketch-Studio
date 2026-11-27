@@ -4,7 +4,7 @@
 // shape. Pure relocation — no field changed. TASK 679: moved from packages/ui to packages/core (it imports only core
 // modules) so core code can build a headless sketch; each state rides its own engine store (constraint-solver.js).
 // Params: `engine` (the constraint engine) + `view` (the viewBox state object, shared with the host's view loop).
-import { addConstraintObject } from './constraints.js';
+import { restoreConstraintObject } from './constraints.js';
 import { removeOrphanJoints } from './joints.js';
 import { dbg } from './debug.js';
 import { createSketches, stampSketch } from './sketch-model.js'; // SKETCH-1a/2a: the sketch-container overlay + stamping
@@ -118,9 +118,9 @@ export function createSketchState(engine, view) {
       this.shapes.push(...snapshot.shapes.map(s => ({...s, joints: s.joints ? [...s.joints] : []})));
       this.constraints.length = 0;
       for(const c of snapshot.constraints){
-        // Normalize arrays to avoid shared references and run validation via helper
+        // Normalize arrays to avoid shared references; restoreConstraintObject validates it and puts it back as saved (no duplicate check, task 1019)
         const proto = {...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined};
-        const added = addConstraintObject(this, proto);
+        const added = restoreConstraintObject(this, proto);
         if(!added){
           dbg.log('undo', '[undo] skipped restoring constraint', proto);
         }
@@ -289,7 +289,7 @@ export function createSketchState(engine, view) {
         this.constraints.length = 0;
         for(const c of snapshot.constraints){
           const proto = {...c, joints: c.joints ? [...c.joints] : undefined, shapes: c.shapes ? [...c.shapes] : undefined};
-          addConstraintObject(this, proto);
+          restoreConstraintObject(this, proto);
         }
         // SKETCH-2a: restore the sketch container with the rest of the snapshot
         if(snapshot.sketches && Array.isArray(this.sketches)){ this.sketches.length = 0; this.sketches.push(...snapshot.sketches.map(s => ({...s}))); }

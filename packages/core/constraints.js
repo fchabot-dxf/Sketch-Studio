@@ -533,7 +533,13 @@ export function addConstraint(state, type, params) {
         dbg.log('constraints', '[addConstraint] Duplicate constraint rejected:', type, params);
         return false;
     }
-    
+    return pushConstraint(state, type, params);
+}
+
+// Validate, name and push ONE constraint (no duplicate check): addConstraint after its duplicate check, and restoreConstraintObject
+// (its object form refuses a preview first, addObjectWith). ONLY what a restore needs too: a step for a NEW constraint (a default, a
+// placement) belongs in addConstraint, never here (a restore puts back exactly what was saved, task 1019).
+function pushConstraint(state, type, params) {
     // Normalize params for robustness (accept Sets or joint objects)
     const normalized = Object.assign({}, params || {});
     try{
@@ -577,6 +583,22 @@ export function addConstraint(state, type, params) {
  * @returns {boolean} True if added
  */
 export function addConstraintObject(state, constraintObj) {
+    return addObjectWith(state, constraintObj, addConstraint);
+}
+
+/**
+ * TASK 1019 (R2-02): put back a constraint object that was IN the state (an undo / redo snapshot, sketch-state.js _restoreSnapshot; a saved
+ * document, document.js deserializeDocument): the same validation as addConstraintObject (createConstraint's fields, the multi-joint
+ * coincident expansion, a missing dimension name) but NO duplicate check, so what was saved comes back exactly. The duplicate check
+ * belongs to creation (addConstraintObject, ConstraintManager): it took a reference dimension placed beside an edge's driving one, or a
+ * second reference of the same edge, for a duplicate and dropped it.
+ * @returns {boolean} True if added
+ */
+export function restoreConstraintObject(state, constraintObj) {
+    return addObjectWith(state, constraintObj, pushConstraint);
+}
+
+function addObjectWith(state, constraintObj, add) {
     if (!constraintObj || typeof constraintObj !== 'object') return false;
     if (constraintObj.__isPreview) {
         dbg.log('constraints', '[addConstraintObject] Ignoring preview constraint object', constraintObj);
@@ -595,15 +617,15 @@ export function addConstraintObject(state, constraintObj) {
             const anchor = ids[0];
             let added = false;
             for (let i = 1; i < ids.length; i++) {
-                const ok = addConstraint(state, constraintObj.type, { ...constraintObj, joints: [anchor, ids[i]] });
+                const ok = add(state, constraintObj.type, { ...constraintObj, joints: [anchor, ids[i]] });
                 added = added || ok;
             }
             return added;
         }
     }
 
-    // Use the canonical addConstraint path to validate, dedupe and push
-    return addConstraint(state, constraintObj.type, constraintObj);
+    // the canonical path: validate (and, for addConstraintObject, dedupe) and push
+    return add(state, constraintObj.type, constraintObj);
 }
 
 // Convenience helpers for common constraints operating on shapes or joints

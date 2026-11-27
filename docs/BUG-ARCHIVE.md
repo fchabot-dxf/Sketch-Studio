@@ -2527,6 +2527,40 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 
 ---
 
+### BUG-200
+- **Date / turn:** 2026-11-26 (audit ID `R1-04`; fixed in task `1019`)
+- **Reported by:** audit `1016` (`R1-04`, Part A `A11b`, `A12`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R1-04`: a 2nd orthogonal point-point dimension (Vertical `Origin -> Hole 1` after Horizontal `d12 = 10`; Vertical `(50,-30) -> Hole 2` after aligned `d15 = 10`) is born `[ref]` while the point can still move (`nullity = 1`). Fusion places it driving (`bracket.json` `hole x` + `hole y`).
+- **What was wrong:** the rank test (`isDimensionDetermined`) answers right (`d13 vertical redundant false`); two other demotions overrode it at birth.
+- **Cause:** (1) `packages/ui/input-handlers/dimension-tool.js` (finalize placement and `anchorPlacingDimension`): a legacy "both joints fixed" sandbox read `analyzeConstraintStatus` WITH the new dimension in it (so its last free point read fixed), then solved an ALIGNED test distance at the H / V value, which cannot hold, and forced the dimension driven (`ERR-DIM-02`). (2) `packages/core/dim-label.js` `updateConstraintOffset`: the same-edge `hasConflict` reference flag was sticky during placement, so a pointer passing through the mode of the pair's driving dimension on its way to another mode left the new dimension a reference.
+- **Fix:** both sandbox blocks removed: the ONE rank test (`numeric-input-manager.js` `showEditInput` -> `isDimensionDetermined`) decides at birth. A dimension born in the placement keeps only ConstraintManager's decision (it carries `drivenReason`); `hasConflict` follows the current mode.
+- **Task id(s):** `1019`
+- **Fix merge sha:** open (`agents/dimsolve-1019`, awaiting merge)
+- **Guarding test file(s):** `tests/dimsolve-1019-node.test.js` (`R1-04a`, `R1-04b`, `R1-04c`); `tests/notices-1001-node.test.js` (fixed joints: now `ERR-DRIVEN-02`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-120..126 (task 1006 birth rule)
+- **History:** found in audit `1016` -> fixed in task `1019`. Probe before: `ROW R1-04 | ... | BUG | 2nd orthogonal point-to-point dim born [ref] while Y free (A11b d13Ref=true nullity=1; A12 d16Ref=true)`. After: `ROW R1-04 | Part A / A11b,A12 | OK | ... (A11b d13Ref=false nullity=1; A12 d16Ref=false)`.
+
+---
+### BUG-201
+- **Date / turn:** 2026-11-26 (audit ID `R2-02`; fixed in task `1019`)
+- **Reported by:** audit `1017` (`R2-02`, `E-01a`, `E-01b`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R2-02`: a reference dimension `(80)` placed beside an edge's driving `80` is lost by one Undo + Redo (`["80","(80)"] -> ["80"] -> ["80"]`), and on undo-all + redo-all.
+- **What was wrong:** undo / redo (`sketch-state.js` `_restoreSnapshot`) and loading a file (`document.js` `deserializeDocument`) rebuilt each constraint through `addConstraintObject` -> `addConstraint` -> `hasConstraint`, which took the reference for a duplicate and dropped it.
+- **Cause:** the restore paths applied CREATION's duplicate rule: `hasConstraint` (`packages/core/constraints.js`, DISTANCE, joint form) ignores `isDriven`, and two references of one edge are alike, so a reference beside the driving dimension, or a second reference, was dropped as a duplicate.
+- **Fix:** ONE `restoreConstraintObject` in `packages/core/constraints.js` (addConstraintObject's validation: createConstraint's fields, the coincident expansion, a missing name; NO duplicate check), called by `sketch-state.js` `_restoreSnapshot` and `cancelUndoGroup` and `document.js` `deserializeDocument`: what was saved comes back exactly. Creation (addConstraintObject, ConstraintManager, paste, mirror) keeps its duplicate check. Behaviour change: a file that holds a real duplicate (two driving distances on one pair) now loads both instead of silently dropping the second; equal values solve, different ones show as a conflict.
+- **Task id(s):** `1019`
+- **Fix merge sha:** open (`agents/dimsolve-1019`, awaiting merge)
+- **Guarding test file(s):** `tests/dimsolve-1019-node.test.js` (`R2-02a` undo + redo, `R2-02b` undo of a later step, `R2-02c` save + reload, `R2-02d` a second reference, `R2-02 behaviour change` a file with a duplicate driving distance)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in audit `1017` -> fixed in task `1019`. Probe before: `ROW E-01a.autoRefUndoRedo | afterPlace=["80","(80)"] ... afterRedo=["80"]`. After: `ROW E-01a.autoRefUndoRedo | ... afterRedo=["80","(80)"]`, `ROW E-01b.singleUndoAutoRef | before=["80","(80)","(80)"] after1Undo=["80","(80)"] after1Redo=["80","(80)","(80)"]`.
+
+---
+
 ## Family index
 
 Entries in each family are listed in chronological date order (`MM-DD`, oldest first) so recurring patterns read as a timeline.
@@ -2540,7 +2574,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-146 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -2548,7 +2582,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 
 ---
@@ -2560,4 +2594,6 @@ Audit-only findings live in their dedicated audit documents rather than being du
 - [docs/SNAP-CONSTRAINT-AUDIT-869.md](SNAP-CONSTRAINT-AUDIT-869.md) — Snap / pick constraint audit (`424` live cells, `102` failures across causes A–J; paired with BUG-073, BUG-074, BUG-075).
 - [docs/STOCK-MODEL-890.md](STOCK-MODEL-890.md) — Unified Stock model inventory findings `F1`–`F5` (empty Stock thickness, `reviewSig`, Stock loop depth, per-selection `thicknessMm`, multi-body thickness).
 - [docs/SOLVER-UX-AUDIT-1000.md](SOLVER-UX-AUDIT-1000.md), [docs/SOLVER-UX-AUDIT-1000B.md](SOLVER-UX-AUDIT-1000B.md), [docs/DIMENSION-AUDIT-1003.md](DIMENSION-AUDIT-1003.md) — Solver UI/UX & Dimension audits (tasks `1000`, `1000B`, `1003`; paired with BUG-091..BUG-095 fixed in task `1007`; BUG-100..BUG-105 fixed in task `1004`; BUG-120..BUG-126 fixed in task `1006`; BUG-130..BUG-138 fixed in task `1010`; BUG-150..BUG-154 fixed in task `1011`; BUG-160..BUG-161 fixed in task `1012`; BUG-170..BUG-174 fixed in task `1014`; BUG-180..BUG-183 fixed in task `1013`; BUG-140..BUG-147 fixed in task `1008`).
+- [docs/FILES-AUDIT-1024.md](FILES-AUDIT-1024.md) — Files and documents audit (task `1024`: Save / Open / tabs / import / templates / export / file dialog; rows `F-01`..).
 - [docs/DESIGN-RUN-AUDIT-1016.md](DESIGN-RUN-AUDIT-1016.md), [docs/DESIGN-RUN-AUDIT-1017.md](DESIGN-RUN-AUDIT-1017.md) — Real-design audits, parts A-D (tasks `1016`, `1017`; rows `R1-*` / `R2-*`; fixes in tasks `1018`-`1021`; BUG-190..BUG-199 from task `1018`: R1-01, R1-02, R1-03, R1-05, R1-07, R1-12, R2-01, R2-03, R2-05, R2-13).
+- [docs/DRAWBOX-AUDIT-1026.md](DRAWBOX-AUDIT-1026.md) — Draw-box audit (task `1026`; every typed size input of the drawing and modify tools, `425` live cells, rows `B-01`..`B-19`; audit-only, nothing registered above).

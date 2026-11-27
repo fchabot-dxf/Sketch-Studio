@@ -225,17 +225,35 @@ export function cubicPathD(p0, c1, c2, p3) {
     return `M ${p0.x} ${p0.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p3.x} ${p3.y}`;
 }
 
-// NEW HELPER: Calculate Center and Radius from 3 points
-export function getArcParams(p1, p2, p3) {
-    const x1 = p1.x, y1 = p1.y;
-    const x2 = p2.x, y2 = p2.y;
-    const x3 = p3.x, y3 = p3.y;
-    const D = 2 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
-    if (Math.abs(D) < 0.00001) return null; // Collinear
-    const centerX = ((x1*x1 + y1*y1) * (y2 - y3) + (x2*x2 + y2*y2) * (y3 - y1) + (x3*x3 + y3*y3) * (y1 - y2)) / D;
-    const centerY = ((x1*x1 + y1*y1) * (x3 - x2) + (x2*x2 + y2*y2) * (x1 - x3) + (x3*x3 + y3*y3) * (x2 - x1)) / D;
-    const radius = Math.hypot(x1 - centerX, y1 - centerY);
-    return { center: { x: centerX, y: centerY }, radius };
+// TASK 1022: THE circle through three points, the one function behind every 3-point arc (the Arc tool's 3-Point mode and the 3-point arc slot).
+// Moved here from #core/slot.js unchanged (it replaces getArcParams, a second copy nothing called). { center, radius } of three non-collinear
+// points, or null (collinear, or a radius under 0.1).
+const MIN_3PT_RADIUS = 0.1;
+export function circumcenter3Pt(p1, p2, p3) {
+    if (!p1 || !p2 || !p3) return null;
+    const ax = p1.x, ay = p1.y;
+    const bx = p2.x, by = p2.y;
+    const cx = p3.x, cy = p3.y;
+    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+    if (!Number.isFinite(d) || Math.abs(d) < 1e-6) return null;
+    const a2 = ax * ax + ay * ay;
+    const b2 = bx * bx + by * by;
+    const c2 = cx * cx + cy * cy;
+    const ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
+    const uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
+    const radius = Math.hypot(ax - ux, ay - uy);
+    if (!Number.isFinite(radius) || radius < MIN_3PT_RADIUS) return null;
+    return { center: { x: ux, y: uy }, radius };
+}
+
+/** TASK 1022 (moved from #core/slot.js): true if the increasing-angle sweep from p1 to p2 around center passes through p3 (an arc shape's `sweep`). */
+export function arcSweepFor3Pt(center, p1, p2, p3) {
+    const TAU = Math.PI * 2;
+    const mod = (v) => ((v % TAU) + TAU) % TAU;
+    const a1 = Math.atan2(p1.y - center.y, p1.x - center.x);
+    const a2 = Math.atan2(p2.y - center.y, p2.x - center.x);
+    const a3 = Math.atan2(p3.y - center.y, p3.x - center.x);
+    return mod(a3 - a1) <= mod(a2 - a1);
 }
 
 

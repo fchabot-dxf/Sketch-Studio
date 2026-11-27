@@ -174,9 +174,10 @@ export const SLOT_MODES = {
   CENTER_POINT_ARC: 'slot-arc-center'
 };
 
-// Arc drawing modes
+// Arc drawing modes (TASK 1022: declared ONCE here; the Arc tool and the ribbon's Arc variants import it)
 export const ARC_MODES = {
-  CENTER_START_END: 'arc-cse'    // Center + start angle + end angle
+  CENTER_START_END: 'arc-cse',   // Center + start angle + end angle (Fusion's Center Point Arc)
+  THREE_POINT: 'arc-3pt'         // Start, end, then a point the arc passes through (Fusion's 3-Point Arc)
 };
 
 // Drag types for input handling

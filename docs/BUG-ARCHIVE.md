@@ -3199,7 +3199,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Fix:** `cancelPointDrag` (`selection-tools.js:542`): the drag's ONE snapshot is restored and its step dropped (Redo given back, BUG-322). `cancelActiveWork` runs it with `cancelTransformGesture`, so Esc and a tool switch (BUG-328) both put a drag back.
 - **Task id(s):** `1030`
 - **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
-- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-08`)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-08`), `tests/drag-target-release-live.test.js` (its Esc mid-drag step now asserts the put-back, owner ruling)
 - **Status:** fixed
 - **Family:** `ui-input`
 - **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `ESC-027 | select-drag | midDrag | Esc | base(U:1,R:1) -> ... hist=(U:2,R:0)`; after: `ESC-027 | select-drag | midDrag | Esc | base(U:1,R:1) -> ... hist=(U:1,R:1)`.
@@ -3302,10 +3302,10 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** `I-21`: the first finger of a two-finger pinch / pan acted as a press: it started a Line, completed a Rect / Polygon / Bezier, trimmed, picked in Coincident / Dimension, before the second finger made it a pinch.
 - **What was wrong:** the canvas handled a finger's press at once; the second finger only stopped LATER presses. The second finger's own release then reached the tool as a click.
 - **Cause:** `packages/ui/input-manager.js` svg `pointerdown` / `pointerup` listeners.
-- **Fix:** a finger's press is held back (`input-manager.js:1046`) until it is the press of ONE finger: it lifts, leaves the `LONG_PRESS_SLOP` circle, or `LONG_PRESS_MS` pass (the hold's own window, `#ui/long-press.js`; no new number). A second finger in that time drops the held press; the pinch fingers' releases go to the pan / zoom only. The finger is known to the pinch at once. A long press is unchanged (the held press runs first, then the hold decides; a finger on a transform-box handle is never a hold).
+- **Fix:** a finger's press is held back (`input-manager.js:1046`) until it is the press of ONE finger: it lifts, leaves the `LONG_PRESS_SLOP` circle, or `LONG_PRESS_MS` pass (the hold's own window, `#ui/long-press.js`; no new number). A second finger in that time drops the held press; the pinch fingers' releases go to the pan / zoom only. The finger is known to the pinch at once. A long press is unchanged (the held press runs first, then the hold decides; a finger on a transform-box handle is never a hold). A finger on a tool's drag arrow (Fillet / Offset / Pattern) grabs it at once, not held (`drag-arrow-handle.js dragArrowUnder`, the arrow's own reach rule; merge-gate fix: `offset-arrow-652`, `fillet-arc-arc-648` read the drag state at the press).
 - **Task id(s):** `1030`
 - **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
-- **Guarding test file(s):** `tests/interrupts-fix-1030-live.test.js` (`I-21`, phone 390x844, real touch)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-live.test.js` (`I-21`, phone 390x844, real touch); `tests/offset-arrow-652.test.js`, `tests/fillet-arc-arc-648.test.js` (a finger on the arrow drags at once)
 - **Status:** fixed
 - **Family:** `ui-input`
 - **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `PH-003 | rect-2pt | after1st | pinch zoom (2 fingers) | ... active=no shapes=12`; after: `PH-003 | rect-2pt | after1st | pinch zoom (2 fingers) | ... active=rect shapes=8`.

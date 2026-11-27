@@ -37,6 +37,7 @@ import { curveRefusal } from '#core/curve-kinds.js'; // TASK 762: the uses a cur
 import { updatePreview, clearPreview, getPreviewData } from '#ui/preview-manager.js';
 import { handleLineKeyDown, finishLineChain, lineChainAnchor, rightClickLine } from '#ui/input-handlers/line-tool.js';
 import { createLongPress, LONG_PRESS_MS, LONG_PRESS_SLOP } from '#ui/long-press.js';
+import { dragArrowUnder } from '#ui/drag-arrow-handle.js';
 import { createDoneButton } from '#ui/done-button.js';
 import { handleMirrorPointerDown, mirrorDone, mirrorStep, beginMirror } from '#ui/input-handlers/mirror-tool.js'; // TASK 585
 import { handleRectKeyDown } from '#ui/input-handlers/rect-tool.js';
@@ -1040,7 +1041,8 @@ function setupEventListeners(svg, state) {
         };
         // TASK 1030 (I-21): a finger's press is held back until it is the press of ONE finger: the finger lifts, leaves the LONG_PRESS_SLOP circle,
         // or LONG_PRESS_MS pass (the hold's own window, #ui/long-press.js). A second finger in that time makes the gesture a pinch / pan: the held
-        // press never reaches the tool (no point, no completed shape, no trim, no pick). The finger is known to the pinch at once.
+        // press never reaches the tool (no point, no completed shape, no trim, no pick). The finger is known to the pinch at once. A finger on a tool's
+        // drag arrow (Fillet / Offset / Pattern, #ui/drag-arrow-handle.js) is a drag of that arrow: its press is not held.
         // The fingers of a pinch / pan (every finger after the first, and a first finger whose held press was dropped) are the pinch's only: their
         // releases go to the pan / zoom alone, never to the tool as a click.
         let heldTouch = null; // { e, timer }
@@ -1063,7 +1065,7 @@ function setupEventListeners(svg, state) {
                     pinchFingers.add(e.pointerId);
                     if (heldTouch) { pinchFingers.add(heldTouch.e.pointerId); dropHeldTouch(); }
                 }
-                else {
+                else if (!dragArrowUnder(svg, { x: e.clientX, y: e.clientY }, true, snapBoostFor(true))) { // a finger on a drag arrow grabs it at once
                     e.preventDefault();
                     handlePanZoomPointerDown(e, svg, state);
                     heldTouch = { e, timer: setTimeout(releaseHeldTouch, LONG_PRESS_MS) };

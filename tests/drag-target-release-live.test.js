@@ -3,7 +3,8 @@
 // construction lines through the origin, a 10 deg angle between them; one DOF left = the rotation about the origin).
 //  1. Esc while dragging, then another drag: a drag ended by Esc kept its solver targets (joint.dragTarget) on its joints, and every later
 //     solve pulled them back toward that old cursor position: after the NEXT drag (another joint) was released, the drawing rotated back
-//     on its own. Now no target outlives its drag: the drawing stays where the second drag left it.
+//     on its own. Now no target outlives its drag: the drawing stays where the second drag left it. TASK 1030 (owner ruling I-08): the Esc puts
+//     the first drag back (the drawing returns to where it was, no undo step).
 //  2. A drag held past the autosave poll: the stored design held the drag targets (a reload / tab switch / Open put them back). Now the
 //     stored document never carries one.
 //  3. A side's end (j9, on the construction line through the collinear) dragged along its line toward the origin snaps to the construction
@@ -59,7 +60,7 @@ await (async () => {
     await mouse('mouseReleased', end[0], end[1], 0); await sleep(300); await frames(5);
     g = await geo();
     const a1 = deg(at(g, J3));
-    assert.ok(Math.abs(a1 - a0) > 1, `the first drag rotated the drawing (j3 ${a0.toFixed(3)} -> ${a1.toFixed(3)} deg)`);
+    assert.ok(Math.abs(a1 - a0) < 1e-3, `Esc put the first drag back (j3 ${a0.toFixed(3)} -> ${a1.toFixed(3)} deg; TASK 1030, I-08)`);
     p = toS(g, at(g, J2)); await press(p); end = await pull(p, tangent(g, at(g, J2), -80), 20); await sleep(100); await frames(3);
     g = await geo(); const aHeld = deg(at(g, J3));
     await mouse('mouseReleased', end[0], end[1], 0); await sleep(300); await frames(30); await sleep(1000); await frames(10);

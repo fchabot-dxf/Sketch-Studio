@@ -6,6 +6,78 @@ import { CONSTRAINT_TYPES, AXIS_SNAP_TARGETS, ORIGIN_JOINT_ID } from './constant
 import { dbg } from './debug.js';
 import { ConstraintManager } from './constraint-manager.js';
 import { SolverConfig } from './solver-config.js';
+import { curveEnds } from './loop-finder.js';
+import { mergeJoints } from './joints.js';
+import { inActiveSketch } from './sketch-model.js';
+
+/**
+ * TASK 1045: WHAT KIND OF JOIN a snap on an existing point makes, the caller's intent (passed explicitly by every caller of applySnapConstraint):
+ *   DRAW  a drawing tool places a NEW point of a new curve (Line, Rectangle, Arc, Circle, Polygon, Slot, Bezier): on an existing curve END POINT
+ *         the new point is that point, SHARED (Fusion, MEASURED by the advisor 2026-11-27 with real clicks: "every DRAWING tool joins meeting
+ *         ends with ONE shared point"; a 2-point rectangle's first corner clicked on a line's end -> 1 point used by 3 curves). On any other point
+ *         (a circle's or an arc's centre, a lone point, the origin) it is GLUED, a separate point + Coincident (Fusion measured the same day: a
+ *         line end on a circle centre, a line end on a lone point, a line start at the origin: separate point + Coincident).
+ *   GLUE  an edit joins an EXISTING point (the drag-snap of a point onto another, Trim / Break's cut on its cutter, a text's anchor): always a
+ *         Coincident constraint (the Coincident tool's kind of join: Fusion's Coincident tool never merges).
+ */
+export const SNAP_JOIN = Object.freeze({ DRAW: 'draw', GLUE: 'glue' });
+
+/**
+ * TASK 1045: may the new point `jointId` (a drawing tool's, SNAP_JOIN.DRAW) be SHARED with the existing point `targetId`? Yes when the target is an END
+ * POINT of a curve (#core/loop-finder.js curveEnds: a line's ends, an arc's start / end, a bezier's first / last; never a centre, a lone point or the
+ * origin) of the ACTIVE sketch, and no shape already uses both points (sharing them would collapse it).
+ */
+function sharesEndPoint(state, jointId, targetId) {
+    if (targetId === ORIGIN_JOINT_ID || !state.joints || !state.joints.has(jointId)) return false;
+    const target = state.joints.get(targetId);
+    if (!target || !inActiveSketch(state, target)) return false;
+    const shapes = state.shapes || [];
+    if (shapes.some((s) => Array.isArray(s.joints) && s.joints.includes(jointId) && s.joints.includes(targetId))) return false;
+    return shapes.some((s) => (curveEnds(s) || []).includes(targetId));
+}
+
+// the joints of the shape a 'line' / 'shape' snap names (its own `shape` object's, else the state's shape of that id)
+function snapShapeJoints(state, snapTarget) {
+    if (snapTarget.shape && Array.isArray(snapTarget.shape.joints)) return snapTarget.shape.joints;
+    const shapeId = (snapTarget.shape && snapTarget.shape.id) ? snapTarget.shape.id : (snapTarget.targetId || snapTarget.id || null);
+    const s = shapeId && state && state.shapes ? state.shapes.find((xx) => xx.id === shapeId) : null;
+    return (s && s.joints) || [];
+}
+
+/**
+ * THE existing POINT a snap puts the point `jointId` on, or null: a 'joint' / 'point' snap's joint (not `jointId` itself, not one of
+ * options.excludeJoints); a 'line' / 'shape' snap whose point is within SolverConfig.SNAP_WORLD_EPS of one of that shape's joints (the snap was
+ * effectively on its end; not when `jointId` is already one of them). applySnapConstraint joins the point there (shared or glued, SNAP_JOIN).
+ */
+export function pointUnderSnap(state, jointId, snapTarget, options = {}) {
+    if (!snapTarget || !jointId) return null;
+    if (snapTarget.type === 'joint' || snapTarget.type === 'point') {
+        const t = snapTarget.id || snapTarget.targetId || (snapTarget.target && snapTarget.target.id);
+        return t && t !== jointId && !(options.excludeJoints || []).includes(t) ? t : null;
+    }
+    if (snapTarget.type !== 'line' && snapTarget.type !== 'shape') return null;
+    if (options.allowPointOnLine === false) return null;
+    const lineJoints = snapShapeJoints(state, snapTarget);
+    if (lineJoints.includes(jointId)) return null;
+    const snapPt = snapTarget.pt || (snapTarget.shape && snapTarget.shape.pt) || null;
+    if (!snapPt || !state || !state.joints) return null;
+    const EPS = SolverConfig.SNAP_WORLD_EPS || 0.1; // world-space proximity threshold (configurable via SolverConfig)
+    for (const lid of lineJoints) {
+        const lj = state.joints.get(lid);
+        if (lj && Math.hypot(lj.x - snapPt.x, lj.y - snapPt.y) < EPS) return lid;
+    }
+    return null;
+}
+
+/**
+ * TASK 1045: the existing curve end point that applySnapConstraint (same arguments) will SHARE the new point `jointId` with, or null (it glues it, binds it
+ * otherwise, or nothing). A caller that keeps using the point's id after its snap reads its id here first: a shared point's new joint is gone.
+ */
+export function sharedEndTarget(state, jointId, snapTarget, options = {}) {
+    if (options.join !== SNAP_JOIN.DRAW) return null;
+    const t = pointUnderSnap(state, jointId, snapTarget, options);
+    return t && sharesEndPoint(state, jointId, t) ? t : null;
+}
 
 /**
  * The snap target that says "this point lies on the shape `shapeId`, at `pt`": the one applySnapConstraint's 'shape' case reads. For a caller whose shape
@@ -23,7 +95,9 @@ export const onShapeSnap = (shapeId, pt) => ({ type: 'shape', isLocked: true, ta
  * @param {object} options - Optional settings
  * @param {boolean} options.allowPointOnLine - Allow point-on-line constraints (default: true)
  * @param {string[]} options.excludeJoints - Joint IDs to exclude from snapping
- * @returns {boolean} True if constraint was created
+ * @param {string} options.join - SNAP_JOIN.DRAW (a drawing tool's new point: an existing curve end point is SHARED, the new joint merged into it
+ *                                and gone) or SNAP_JOIN.GLUE (a Coincident); the caller's intent, see SNAP_JOIN
+ * @returns {boolean} True if constraint was created (or the point shared)
  */
 export function applySnapConstraint(state, jointId, snapTarget, options = {}) {
     try{ dbg.debug('app', '[snap-constraints] applySnapConstraint called', { jointId, snapTarget: snapTarget && snapTarget.type ? { type: snapTarget.type, targetId: snapTarget.targetId || snapTarget.id, isLocked: snapTarget.isLocked } : snapTarget, options }); }catch(_){ }
@@ -53,69 +127,49 @@ export function applySnapConstraint(state, jointId, snapTarget, options = {}) {
         const created = ConstraintManager.createConstraint(state, type, params, { source: 'snap' });
         return !!created;
     };
+    // a snap ON an existing point: shared (a drawing tool's new point on a curve end point, TASK 1045) or glued by a Coincident
+    const joinPoint = (targetId) => {
+        if (sharedEndTarget(state, jointId, snapTarget, opts) === targetId) {
+            mergeJoints(state, jointId, targetId);
+            dbg.debug('app', '[snap-constraints] new point shared with the end point it was placed on', { jointId, targetId });
+            return true;
+        }
+        return addViaManager(CONSTRAINT_TYPES.COINCIDENT, { joints: [jointId, targetId] });
+    };
 
     switch (snapTarget.type) {
         case 'joint':
-        case 'point': // Handle 'point' type if it refers to a joint ID
-            // Joint-to-Joint → COINCIDENT constraint
+        case 'point': { // Handle 'point' type if it refers to a joint ID
+            // Joint-to-Joint → the joined point (shared, or a COINCIDENT constraint)
             // Support multiple snap target shapes: {id} or {targetId}
-            const targetJointId = snapTarget.id || snapTarget.targetId || (snapTarget.target && snapTarget.target.id);
+            const targetJointId = pointUnderSnap(state, jointId, snapTarget, opts); // not self, not excluded
             if (!targetJointId) { return false; }
-            if (targetJointId === jointId) { return false; } // Can't snap to self
-            if (opts.excludeJoints.includes(targetJointId)) { return false; }
 
             try{
-                return addViaManager(CONSTRAINT_TYPES.COINCIDENT, { joints: [jointId, targetJointId] });
+                return joinPoint(targetJointId);
             }catch(e){ return false; }
+        }
 
         case 'line':
-        case 'shape':
-            // Joint-to-Line → POINT_ON_LINE constraint (or COINCIDENT if snapping to an endpoint)
+        case 'shape': {
+            // Joint-to-Line → POINT_ON_LINE constraint (or the joined point if snapping to an endpoint)
             if (!opts.allowPointOnLine) return false;
             // Accept either full shape object or a targetId reference
             const shapeId = (snapTarget.shape && snapTarget.shape.id) ? snapTarget.shape.id : (snapTarget.targetId || snapTarget.id || null);
-            if (!shapeId) {
-                // Try to resolve by searching state.shapes if available
-                if (snapTarget.shape && typeof snapTarget.shape === 'string') {
-                    // Already a string id
-                } else if (state && state.shapes && snapTarget && snapTarget.shape && snapTarget.shape.id) {
-                    // already handled above
-                } else {
-                    return false;
-                }
-            }
-
-            // Retrieve shape joints if needed
-            let lineJoints = [];
-            if (snapTarget.shape && Array.isArray(snapTarget.shape.joints)) lineJoints = snapTarget.shape.joints;
-            else if (state && state.shapes) {
-                const s = state.shapes.find(xx => xx.id === shapeId);
-                if (s && s.joints) lineJoints = s.joints;
-            }
+            if (!shapeId) return false;
 
             // Don't create point-on-line if joint is already an endpoint of the line
-            if (lineJoints.includes(jointId)) return false;
+            if (snapShapeJoints(state, snapTarget).includes(jointId)) return false;
 
-            // If the snap point is very close to an endpoint joint, create a COINCIDENT with that endpoint
             try{
-                const snapPt = snapTarget.pt || (snapTarget.shape && snapTarget.shape.pt) || null;
-                if (snapPt && state && state.joints && Array.isArray(lineJoints) && lineJoints.length > 0) {
-                    // world-space proximity threshold (configurable via SolverConfig)
-                    const EPS = SolverConfig.SNAP_WORLD_EPS || 0.1;
-                    for (const lid of lineJoints) {
-                        const lj = state.joints.get(lid);
-                        if (!lj) continue;
-                        const dx = lj.x - snapPt.x; const dy = lj.y - snapPt.y;
-                        if (Math.hypot(dx, dy) < EPS) {
-                            // Snap was effectively on an endpoint — create COINCIDENT to endpoint
-                            try{ return addViaManager(CONSTRAINT_TYPES.COINCIDENT, { joints: [jointId, lid] }); }catch(_){ return false; }
-                        }
-                    }
-                }
+                // If the snap point is very close to an endpoint joint, join the point there
+                const endpoint = pointUnderSnap(state, jointId, snapTarget, opts);
+                if (endpoint) return joinPoint(endpoint);
 
                 // Otherwise, add a POINT_ON_LINE constraint
                 return addViaManager(CONSTRAINT_TYPES.POINT_ON_LINE, { joint: jointId, shape: shapeId });
             }catch(e){ return false; }
+        }
 
         case 'midpoint':
             // Joint-to-Line midpoint -> MIDPOINT constraint on the line's own endpoints

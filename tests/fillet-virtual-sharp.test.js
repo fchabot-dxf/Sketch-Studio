@@ -187,10 +187,11 @@ globalThis.document = globalThis.document || { getElementById: () => null };
       const { engine, state } = build();
       const lineAt = (f) => state.shapes.find(sh => sh.type === 'line' && f(state.joints.get(sh.joints[0]), state.joints.get(sh.joints[1])));
       const top = lineAt((a, b) => Math.abs(a.y - 40) < 1e-6 && Math.abs(b.y - 40) < 1e-6);
-      ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: top.joints.slice(), value: 60 }, { source: 'dim' });
+      const topDim = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: top.joints.slice(), value: 60 }, { source: 'dim' });
       const nBefore = state.constraints.filter(c => c.type === 'distance').length;
       state.selectedShapes.clear(); state.selectedShapes.add(top.id); deleteSelection(state);
-      const dimOnTop = state.constraints.some(c => c.type === 'distance' && c.joints && c.joints.some(j => top.joints.includes(j)));
+      // TASK 1045: the rectangle's corners are SHARED, so the diagonal / side dimensions name a top corner too (and stay): the top's own dimension goes
+      const dimOnTop = state.constraints.includes(topDim) || state.constraints.some(c => c.type === 'distance' && c.joints && c.joints.length === 2 && top.joints.every(j => c.joints.includes(j)));
       assert(!dimOnTop && state.constraints.filter(c => c.type === 'distance').length < nBefore, 'without a virtual sharp, deleting a line still drops its dimension (unchanged behaviour)');
     }
   }

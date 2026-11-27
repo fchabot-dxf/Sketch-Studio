@@ -156,7 +156,7 @@ function buildShapeKinds() {
     { kind: 'arc (centre, start, end)', where: must('packages/core/shapes.js', /type: 'arc'/), note: 'makeArc(subType CENTER); both ARC_MODES (arc-cse, TASK 1022 arc-3pt) make it through the one commit of the Arc tool' },
     { kind: 'fillet arc', where: must('packages/core/fillet.js', /filletSharp/) },
     { kind: 'polygon side', where: must('packages/core/shapes.js', /type: 'line', joints: \[corners\[i\]/) },
-    { kind: 'rect side', where: must('packages/core/shapes.js', /type: 'line', joints: \[j1A, j2A\]/) },
+    { kind: 'rect side', where: must('packages/core/shapes.js', /type: 'line', joints: \[c1, c2\]/), note: 'rectSides (TASK 1045: its corners are SHARED joints)' },
     { kind: 'bezier', where: must('packages/core/shapes.js', /type: 'bezier'/), note: 'joints = the two endpoints only; control points are shape data' },
     { kind: 'point / joint', where: must('packages/ui/input-handlers/line-tool.js', /genJ\(\)/) },
   ];

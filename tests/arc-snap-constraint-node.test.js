@@ -1,11 +1,14 @@
 // TASK 632: every click of the Arc tool (centre, start, end) snaps and adds the constraint the Line tool adds for the same target:
 // on a point COINCIDENT, on a line POINT-ON-LINE, on a line's midpoint MIDPOINT; one constraint, one undo step. Node kit (the real input path).
+// TASK 1045 (Fusion measured 2026-11-27: a drawing tool's new point on an existing curve END point is that point, shared; on a centre / a lone point /
+// the origin a separate point + Coincident): the 'point' target here is a line's END: the click's point is SHARED with it (no constraint).
 // With ARC_SNAP_TABLE=1 it prints the measurement table (arc clicks vs the Line tool's first / second clicks).
 import assert from 'node:assert';
 import { open, createProfile } from './helpers/node-app.js';
 
 const TARGETS = { point: [303, 207], line: [333, 207], midpoint: [353, 207] };   // on the line (300,200)-(400,200)
-const EXPECT = { point: 'coincident', line: 'pointOnLine', midpoint: 'midpoint' };
+const EXPECT = { point: 'shared', line: 'pointOnLine', midpoint: 'midpoint' };
+const lineEnd = () => app.state.shapes.find((x) => x.type === 'line').joints[0];   // the 'point' target: the first line's start (303, 207)
 const R = 100;
 let app = null, failed = null;
 const rows = [];
@@ -37,7 +40,8 @@ for (const kind of Object.keys(TARGETS)) {
     else { app.click(far.x + 40, far.y); app.click(t.x, t.y); }
     app.esc();
     const added = app.state.constraints.slice(before).map((c) => c.type);
-    rows.push({ tool: 'line', click, kind, added });
+    const drawn = app.state.shapes.filter((x) => x.type === 'line')[1];
+    rows.push({ tool: 'line', click, kind, added, sharedEnd: !!drawn && drawn.joints.includes(lineEnd()) });
   }
   // Arc: each of the three clicks on the target
   for (const click of ['centre', 'start', 'end']) {
@@ -62,7 +66,7 @@ for (const kind of Object.keys(TARGETS)) {
     const j = snapOf(joint);
     const onTarget = !!j && Math.hypot(j.x - T[0], j.y - T[1]) < 0.5;
     const cons = app.state.constraints.slice(before);
-    rows.push({ tool: 'arc', click, kind, added, onTarget, made: !!arc, cons, arc, S });
+    rows.push({ tool: 'arc', click, kind, added, onTarget, made: !!arc, cons, arc, S, sharedEnd: !!arc && arc.joints.includes(lineEnd()) && joint === lineEnd() });
   }
 }
 
@@ -74,13 +78,18 @@ try {
   for (const r of rows) {
     const label = `${r.tool} ${r.click} on ${r.kind}`;
     const want = wantType(r.kind);
-    if (r.tool === 'line') {   // reference: the Line tool's first click on a point reuses that joint (no constraint); the drawn segment is vertical here
+    if (r.tool === 'line') {   // reference: the Line tool's click on a line END shares it (no constraint); the drawn segment is vertical here
       const snapAdded = r.added.filter((t) => norm(t) !== 'vertical');
-      assert.deepStrictEqual(snapAdded.map(norm), r.kind === 'point' && r.click === 'first' ? [] : [want], label + ': line reference, got ' + JSON.stringify(r.added));
+      assert.deepStrictEqual(snapAdded.map(norm), r.kind === 'point' ? [] : [want], label + ': line reference, got ' + JSON.stringify(r.added));
+      if (r.kind === 'point') assert.ok(r.sharedEnd, label + ': the line SHARES the end point');
       continue;
     }
     assert.ok(r.made, label + ': arc made');
     assert.ok(r.onTarget, label + ': the click snaps to the target');
+    if (r.kind === 'point') {   // TASK 1045: the arc's point IS the line's end: shared, no snap constraint
+      assert.ok(r.sharedEnd && !r.cons.some((c) => norm(c.type) === 'coincident'), label + ': the arc SHARES the line end, got ' + JSON.stringify(r.added));
+      continue;
+    }
     // the arc's own constraints (arc radius equalities etc.) are not snap constraints: look at the ones that reference the target
     const snapCons = r.cons.filter((c) => norm(c.type) === want);
     assert.strictEqual(snapCons.length, 1, label + ': one ' + want + ' constraint, got ' + JSON.stringify(r.added));
@@ -107,7 +116,8 @@ try {
       const arc = app.state.shapes.filter((x) => x.type === 'arc').pop();
       const mine = arc.joints[click === 'centre' ? 0 : click === 'start' ? 1 : 2];
       const co = app.state.constraints.slice(before).filter((x) => norm(x.type) === 'coincident' && x.joints.includes(mine) && x.joints.includes(target));
-      assert.strictEqual(co.length, 1, label + ': one COINCIDENT with that point, got ' + JSON.stringify(app.state.constraints.slice(before).map((x) => x.type)));
+      if (pname === 'centre') assert.strictEqual(co.length, 1, label + ': one COINCIDENT with that point (a centre is glued), got ' + JSON.stringify(app.state.constraints.slice(before).map((x) => x.type)));
+      else assert.ok(mine === target && !co.length, label + ': the arc point IS that end point (TASK 1045: shared), got ' + JSON.stringify([mine, target, app.state.constraints.slice(before).map((x) => x.type)]));
     }
   }
 
@@ -119,7 +129,7 @@ try {
   const P = (p) => S(p[0], p[1]);
   const c = [T[0], T[1] + R];
   app.click(P(c).x, P(c).y); app.click(P(T).x, P(T).y); app.click(P([c[0] + R, c[1]]).x, P([c[0] + R, c[1]]).y); app.esc();
-  assert.ok(app.state.constraints.length > base, 'arc with a snap start added constraints');
+  assert.ok(app.state.constraints.length > base, 'the arc added constraints (its equal radius; TASK 1045: the snapped start is shared, no constraint)');
   app.undo();
   assert.strictEqual(app.state.shapes.length, baseShapes, 'undo removes the arc');
   assert.strictEqual(app.state.constraints.length, base, 'undo removes the arc\'s constraints too, got ' + JSON.stringify(kinds()));

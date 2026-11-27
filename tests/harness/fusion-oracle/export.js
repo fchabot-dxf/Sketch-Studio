@@ -36,6 +36,27 @@ export function serDoc(S, uids) {
 
 const dimsOf = (S) => L.dimensionsOf(S);
 
+/**
+ * TASK 1045: WHICH recorded Fusion point each of our points is. A recording stores positions by INDEX of the document Fusion was sent (joints in
+ * document order minus the origin). The recordings were made before the drawing tools SHARED their joins (task 1045: a rectangle's corner and a
+ * Line-tool chain's vertex were two stacked joints + a coincident): such a recording lists, in the same order, our points plus a STACKED copy of
+ * some of them (a point at the very place of a recorded point already taken: they were coincident in Fusion and moved together). So the points
+ * are taken in order and a recorded point is skipped while it is such a copy and our next point is not at its place (`ours`, `recorded`: [x, y]
+ * by index, before any step; the recorded initial places can differ from ours otherwise: an arc's start / end are listed swapped there, an older
+ * build placed a point elsewhere, so only a copy's place is read). Identical documents map 1:1. -> [recorded index of our point i].
+ */
+export function recordedPointIndex(ours, recorded, tol = 1e-6) {
+  const same = (p, q) => !!p && !!q && Math.hypot(p[0] - q[0], p[1] - q[1]) <= tol;
+  const taken = [];
+  let k = 0;
+  return ours.map((p, i) => {
+    while (k < recorded.length && !same(recorded[k], p) && taken.some((q) => same(q, recorded[k]))) k++;
+    if (k >= recorded.length) return i;
+    taken.push(recorded[k]);
+    return k++;
+  });
+}
+
 // OUR side of the comparison: the state after a step as plain arrays indexed like the Fusion fixtures (joints: document order without the origin; shapes: document order)
 export function oursSnap(S, jointIds, shapeIds) {
   const P = (id) => { const j = S.state.joints.get(id); return j ? [j.x, j.y] : null; };
@@ -58,9 +79,9 @@ export function oursSnap(S, jointIds, shapeIds) {
 // A drawing's jobs. Returns { name, title, doc, ops, jobs } where each job = { id, ops: [...], record: 'all' | 'last' }.
 // ops: { op:'add', label, type, ...resolved params, target?, measuredFirst? } | { op:'delete', uid } | { op:'edit', uid, value }
 // put Fusion's coordinates (and circle radii) into our sketch, measure the residual of every driving constraint, put ours back
-export function fusionResidual(S, jointIds, shapeIds, snap) {
+export function fusionResidual(S, jointIds, shapeIds, snap, ix = jointIds.map((_, i) => i)) {
   const saved = L.snapshot(S), radii = new Map();
-  jointIds.forEach((id, i) => { const j = S.state.joints.get(id), p = snap.pts[i]; if (j && p) { j.x = p[0]; j.y = p[1]; } });
+  jointIds.forEach((id, i) => { const j = S.state.joints.get(id), p = snap.pts[ix[i]]; if (j && p) { j.x = p[0]; j.y = p[1]; } });
   shapeIds.forEach((id, i) => { const sh = S.state.shapes.find(x => x.id === id); if (sh && sh.type === 'circle' && snap.radii[i] != null) { radii.set(sh, sh.radius); sh.radius = snap.radii[i]; } });
   const r = L.residuals(S).max;
   L.restore(S, saved); for (const [sh, v] of radii) sh.radius = v;
@@ -74,6 +95,7 @@ export function exportDrawing(mod, opts = {}) {
   const uids = new Map();
   const doc = serDoc(S, uids);
   const jointIds = Object.keys(doc.joints).filter(j => j !== ORIGIN), shapeIds = doc.shapes.map(x => x.id);
+  const fusionIx = opts.fusion && opts.fusion.initial ? recordedPointIndex(jointIds.map((id) => { const j = S.state.joints.get(id); return [j.x, j.y]; }), opts.fusion.initial.pts) : jointIds.map((_, i) => i);
   const steps = [], oursSteps = [];
   for (const step of mod.RECIPE) {
     const isDel = step.op === 'delete';
@@ -83,7 +105,7 @@ export function exportDrawing(mod, opts = {}) {
     const so = { accepted: !!row.accepted, driven: !!row.driven, converged: !!row.converged, ...oursSnap(S, jointIds, shapeIds) };
     // does FUSION's solved geometry satisfy OUR constraint set at this step? (another valid branch is not a disagreement; a violation is)
     const fs_ = opts.fusion && opts.fusion.steps[oursSteps.length];
-    if (fs_ && fs_.accepted && fs_.snap) so.fusionResidual = fusionResidual(S, jointIds, shapeIds, fs_.snap);
+    if (fs_ && fs_.accepted && fs_.snap) so.fusionResidual = fusionResidual(S, jointIds, shapeIds, fs_.snap, fusionIx);
     oursSteps.push(so);
     if (isDel) steps.push({ op: 'delete', label: step.label, uid: hit ? uids.get(hit) : null, oursAccepted: row.accepted });
     else {
@@ -140,5 +162,5 @@ export function exportDrawing(mod, opts = {}) {
       S.state.undo(); S.engine.solve(L.ITER);
     }
   }
-  return { name: mod.NAME, title: mod.TITLE, doc, jobs, edits, ours, jointIds, shapeIds };
+  return { name: mod.NAME, title: mod.TITLE, doc, jobs, edits, ours, jointIds, shapeIds, fusionIx };
 }

@@ -35,11 +35,10 @@
   // The end joint should not have been constrained to a grid joint (grid snaps are visual only)
   const s = state.shapes[0];
   const endJointId = s.joints[1];
-  // The line tool always creates an internal coincident between the end joint and the newly created start
-  // for the next segment — that's expected. Ensure no *extra* coincident constraints were created by the grid snap.
+  // TASK 1045: the chain's next segment starts ON this end point (shared): no internal coincident any more. The grid snap adds none either.
   const coincidents = state.constraints.filter(c => c.type === 'coincident' && c.joints && c.joints.includes(endJointId));
-  // Expect only the internal successor coincident (1)
-  assert(coincidents.length === 1, 'Only internal coincident should exist; grid snap must not create extra coincident constraints');
+  assert(coincidents.length === 0, 'grid snap must not create a coincident constraint (and the chain shares its point: no internal one)');
+  assert(state.active && state.active.start === endJointId, 'the next segment starts on the end point itself (TASK 1045)');
 
   console.log('grid-snap-apply tests passed ✅');
 })().catch(e => { console.error('grid-snap-apply tests failed ❌', e); process.exit(1); });

@@ -71,34 +71,13 @@
    "4,3"
   ]
  },
- "collinear|LR": {
-  "reason": "after task 525: Fusion refuses (task 526) or moves both lines; a corner line: Fusion stretches it, ours turns it rigidly; a rect side: Fusion translates the rect, ours deforms it",
-  "total": 8,
-  "cells": [
-   "7,0"
-  ]
- },
- "collinear|RL": {
-  "reason": "after task 525: Fusion refuses (task 526) or moves both lines; a corner line: Fusion stretches it, ours turns it rigidly; a rect side: Fusion translates the rect, ours deforms it",
-  "total": 8,
-  "cells": [
-   "0,7"
-  ]
- },
- "collinear|RR": {
-  "reason": "after task 525: Fusion refuses (task 526) or moves both lines; a corner line: Fusion stretches it, ours turns it rigidly; a rect side: Fusion translates the rect, ours deforms it",
+ "equal-line-line|RR": {
+  "reason": "after task 525: two rect sides: Fusion deforms one rect, ours both (0,0); after task 1045 (shared rectangle corners): a rect side made equal to a held line or rect side, the rect giving way: Fusion stretches that side, ours scales the whole rectangle (its 'shape' body grows through the shared corners, core/creation-placement.js bodyOf)",
   "total": 4,
   "cells": [
    "0,0",
    "0,8",
    "8,0"
-  ]
- },
- "equal-line-line|RR": {
-  "reason": "after task 525: two rect sides: Fusion deforms one rect, ours both",
-  "total": 4,
-  "cells": [
-   "0,0"
   ]
  },
  "dim-angle|LL": {
@@ -1127,6 +1106,20 @@
   "total": 2,
   "cells": [
    "8"
+  ]
+ },
+ "equal-line-line|LR": {
+  "reason": "after task 1045 (shared rectangle corners): a rect side made equal to a held line or rect side, the rect giving way: Fusion stretches that side, ours scales the whole rectangle (its 'shape' body grows through the shared corners, core/creation-placement.js bodyOf)",
+  "total": 8,
+  "cells": [
+   "7,0"
+  ]
+ },
+ "equal-line-line|RL": {
+  "reason": "after task 1045 (shared rectangle corners): a rect side made equal to a held line or rect side, the rect giving way: Fusion stretches that side, ours scales the whole rectangle (its 'shape' body grows through the shared corners, core/creation-placement.js bodyOf)",
+  "total": 8,
+  "cells": [
+   "0,7"
   ]
  }
 }

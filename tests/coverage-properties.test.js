@@ -14,6 +14,10 @@ import inventory from './harness/coverage/inventory.js';
 const KNOWN = {
   // N-U1's standalone repro passes since task 525 (entry deleted); N-F7 (arc/arc tangent at a shared rim degenerate) and its scurve/C, scurve/D
   // checks pass since task 1038 (the shared-end tangent row, definitions.js sharedEndTangent: entries deleted)
+  // TASK 1045: the Line tool's polyline SHARES its corners now, so the orientation signature (#tests/harness/audit/lib.js signature, which reads only
+  // lines that SHARE a joint) sees its corners: the N-F6 repro's dimension edit flips a polyline corner (L: -1 -> 1). Measured on main with the corners as
+  // coincident pairs counted as corners: the same flip (N-F6 fails there too, I7 241/300 vs 242/300 here): it was not seen, not new.
+  'N-F6': 'a dimension edit flips a polyline corner (seen since task 1045: the corners are shared joints)',
 };
 // expected final nullity per drawing (what the recipe is designed to reach; every-kind is deliberately loose, it is the drag test's subject)
 const NULLITY = { plate: 0, trapezoid: 0, bracket: 0, triangle: 0, polygon: 0, scurve: 0, slot: 0, 'collinear-concentric': 0, 'axis-symmetry': 0, 'welded-T': 0, 'filleted-polygon': 0, 'every-kind': 9, 'two-sketches': 0 };

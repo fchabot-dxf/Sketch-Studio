@@ -21,8 +21,8 @@
 // DERIVED from the shapes (sharedPointCoincidents), one per non-owner curve at a shared joint, { type: SHARED_POINT_COINCIDENT, joints: [J],
 // shape: the curve }; the renderer draws it with the coincident glyph's look and show-on-select rule, a pick selects it like any glyph, and
 // Delete (#core/delete-manager.js deleteSelection: the Delete key, the context menu, the phone's footer Delete) runs detachFromSharedPoint.
-// Stacked corners (two joints + a stored COINCIDENT: today's rectangle and Line-tool chain) are not shared points: their coincident is a real
-// constraint, deleted as before.
+// Stacked corners (two joints + a stored COINCIDENT: the Coincident tool's join, a rectangle / Line-tool chain saved before task 1045, which shares its
+// corners now) are not shared points: their coincident is a real constraint, deleted as before.
 
 import { EXPORTED_TYPES } from './curve-kinds.js';
 import { CONSTRAINT_TYPES } from './constants.js';

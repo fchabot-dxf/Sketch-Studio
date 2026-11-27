@@ -45,10 +45,9 @@
   // Joints picked by ROLE per fresh build (fillet joint ids are random per call).
   const at = (S, x, y) => [...S.joints.entries()].filter(([, j]) => !j.fixed && Math.abs(j.x - x) < 1e-6 && Math.abs(j.y - y) < 1e-6).map(([id]) => id);
   const cases = [
-    ['left-edge corner A', (S) => at(S, 0, 40)[0], 0, 6, 0, 6],   // free corner on the left edge: height only
-    ['left-edge corner B', (S) => at(S, 0, 40)[1], 0, 6, 0, 6],
-    ['bottom-edge corner A', (S) => at(S, 60, 0)[0], 3, 0, 3, 0], // free corner on the bottom edge: width only
-    ['bottom-edge corner B', (S) => at(S, 60, 0)[1], 3, 0, 3, 0],
+    // TASK 1045: a rectangle corner is ONE shared joint (it was two stacked joints A / B + a coincident, each dragged here)
+    ['left-edge corner', (S) => at(S, 0, 40)[0], 0, 6, 0, 6],   // free corner on the left edge: height only
+    ['bottom-edge corner', (S) => at(S, 60, 0)[0], 3, 0, 3, 0], // free corner on the bottom edge: width only
     ['virtual-sharp V', (S) => S.res.virtualSharp, 3, 6, 3, 6],
     ['arc centre', (S) => S.res.arc.joints[0], 3, 6, 3, 6],
     ['tangent joint 1', (S) => S.res.arc.joints[1], 3, 6, 3, 6],

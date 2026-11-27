@@ -1,21 +1,19 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// LINE TOOL - Handles line and polyline behavior with Auto-Coincident snapping
+// LINE TOOL - Handles line and polyline behavior; its points join what they are placed on (TASK 1045: joinSegment)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shared UI (#ui/input-handlers/). Relocated VERBATIM from apps/sketchstudio in slice S4d.
 // TODO(shaper): parameterize the DOM reaches before Shaper adopts this — relocation only for now.
 
 import { dbg } from '#core/debug.js';
 import { TOOL_MODES, SNAP, CONSTRAINT_TYPES, INFERENCE_TYPES } from '#core/constants.js';
-import { addConstraint } from '#core/constraints.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { findNearbyJoint } from '#core/joints.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
 import { hideInput, setupNumericInput, refuseLiveValue, cantSetText } from '#ui/numeric-input-manager.js';
 import { quantityText } from '#core/parameters.js';
 import { docUnit } from '#core/settings-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
-import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, shownSnap, MIN_SHAPE_SIZE, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, isBindingSnap, joinPointUnder, shownSnap, MIN_SHAPE_SIZE, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { newShapeId as mintShapeId } from '#core/shape-id.js';
 import { clearHover } from '#ui/hover-manager.js';
 import SettingsManager from '#core/settings-manager.js';
@@ -61,15 +59,22 @@ function redrawLinePreview(state) {
     safeUpdatePreview(state, 'line', [state.active.start], pt, { lockedLength: lineState.lockedLength || undefined });
 }
 
-/** TASK 1028 (B-06): THE merge rule of a committed segment's end, the click's and Enter's: the end joint is made coincident with an existing joint
- *  within 0.01 of it (a typed end 0.3 mm from an unrelated point is never merged with it: Enter used 0.5 and the solver then moved that point). */
-const END_MERGE_TOL = 0.01;
-function mergeEndWithNearby(state, endId, endPt, startId) {
-    const nearby = findNearbyJoint(state.joints, endPt, startId, END_MERGE_TOL);
-    if (nearby && nearby !== endId) {
-        addConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [endId, nearby] });
-        dbg.log('line-tool', '[line-tool] auto coincident to nearby', { endId, nearby });
-    }
+/**
+ * TASK 1045: THE join of a committed segment's two points, the click's and Enter's (Fusion, MEASURED by the advisor 2026-11-27: a line ending, or
+ * starting, ON an existing curve END POINT shares that point, by a click and by Enter; on a curve's middle it is a point-on-curve; on a circle
+ * centre, a lone point or the origin a separate point + Coincident). The segment is pushed first, then its start takes the snap its first click
+ * showed and its end the snap shown now (`endSnap`, null when a typed size placed it); an end with no binding snap that lies on an existing
+ * point is joined there the same way (base-tool joinPointUnder, TASK 1028 B-06: within 0.01; a typed end 0.3 mm from an unrelated point is never
+ * joined with it). Then the typed sizes become dimensions between them, on the joined points (TASK 1028 B-08: a length a locked point cannot hold
+ * is refused and the caller puts the document back). Every join is applyLockedSnap's (SNAP_JOIN.DRAW): a shared point's new joint is gone, so the
+ * segment's joints are read back from the shape.
+ * -> the refusal text of a typed length ('' = kept).
+ */
+function joinSegment(state, seg, startSnap, endSnap) {
+    applyLockedSnap(state, seg.joints[0], startSnap, [seg.joints[1]]);
+    if (isBindingSnap(endSnap)) applyLockedSnap(state, seg.joints[1], endSnap, [seg.joints[0]]);
+    else joinPointUnder(state, seg.joints[1], [seg.joints[0]]);
+    return addTypedSizes(state, seg.joints[0], seg.joints[1]);
 }
 /** The typed length of the segment startId -> endId becomes its driving dimension (THE constraint path: a redundant size is placed as a reference), and
  *  TASK 1028 (B-13) a `param = value` typed in the angle box updates that parameter. TASK 1028 (B-08): a typed length the sketch cannot hold (it came in as
@@ -97,9 +102,9 @@ const localState = { isDragging: false, dragStartScreen: null };
 let justCreatedActive = false;
 let lastLineCommitTime = 0;
 // TASK 549 (undo): ONE drawn segment = ONE undo step. The step opens at the segment's FIRST click and closes at its commit. A CHAIN's next
-// segment starts with a floating start joint (+ a coincident) made right after the previous commit; the document as it was just BEFORE
-// those two is kept here and becomes the next step's "before", so Undo removes the segment's start joint, end joint, shape and
-// constraints together and leaves no orphan. LINE_CHAIN_UNDO = 'per-tool-session' keeps ONE step open for the whole chain instead.
+// segment starts ON the previous segment's end point (TASK 1045: shared, nothing is made for it); the document as it was right after the
+// previous commit is kept here and becomes the next step's "before", so Undo removes the segment's end joint, shape and constraints together
+// and leaves no orphan. LINE_CHAIN_UNDO = 'per-tool-session' keeps ONE step open for the whole chain instead.
 let pendingStepSnapshot = null;
 const chainPerSession = () => SettingsManager.get('LINE_CHAIN_UNDO') === 'per-tool-session';
 // open the step of a chain's next segment (its first click / typed length) unless one is already open
@@ -108,7 +113,7 @@ function ensureSegmentStep(state){
     state.beginDrawStep(undefined, pendingStepSnapshot || undefined);
     pendingStepSnapshot = null;
 }
-// the segment is committed: close its step (per-segment) and remember the document BEFORE the floating next-start joint is made
+// the segment is committed: close its step (per-segment) and remember the document as it is now (the next segment's "before")
 function endSegmentStep(state){
     if (chainPerSession()) return;
     state.endUndoGroup();
@@ -291,8 +296,8 @@ export function handleLineKeyDown(e, svg, state) {
     // Enter: end the polyline chain, keeping only segments that were already
     // committed by clicks. The current preview segment (the rubber-band from
     // the last click to the cursor) is DISCARDED — same as Escape but more
-    // ergonomic to reach for. deactivateLineTool removes the in-flight start
-    // joint and any pending coincident constraint that the polyline auto-added.
+    // ergonomic to reach for. deactivateLineTool removes a floating start
+    // joint (a first click with no segment yet).
     if (matchesShortcut(e, 'line.finish')) {
         try { finishLineChain(state); } catch (err) { console.error('[line-tool] Enter deactivate error:', err); }
         return true;
@@ -323,13 +328,10 @@ export function handleLinePointerDown(e, svg, state, hitSnap, w) {
         ensureSegmentStep(state);
         const prevId = state.continueFrom;
         const prevPt = state.joints.get(prevId) || { x: 0, y: 0 };
-        const newStartId = state.genJ();
-        state.joints.set(newStartId, { x: prevPt.x, y: prevPt.y, fixed: false });
-        try{ addConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [prevId, newStartId] }); }catch(_){ }
 
-        state.active = {
+        state.active = {   // TASK 1045: the chain goes on from that point, shared (continueChain's rule)
             mode: TOOL_MODES.LINE,
-            start: newStartId,
+            start: prevId,
             startPt: { x: prevPt.x, y: prevPt.y },
             preview: null,
             polylineOrigin: state.polylineOrigin
@@ -342,20 +344,10 @@ export function handleLinePointerDown(e, svg, state, hitSnap, w) {
     state.beginDrawStep();
     const startPt = hitSnap ? hitSnap.pt : w;
 
-    if (hitSnap && hitSnap.type === 'joint'){
-        const resolvedId = hitSnap.targetId;
-        const anchorIds = new Set(['j_origin']);
-        if (anchorIds.has(resolvedId)) {
-            // If the hit is the anchored origin, use it directly as the start (do not create a synthetic coincident joint)
-            state.active = { mode: TOOL_MODES.LINE, start: resolvedId, startPt: startPt, preview: null, polylineOrigin: resolvedId, startSnapTarget: hitSnap };
-            state.polylineOrigin = resolvedId;
-        } else {
-            state.active = { mode: TOOL_MODES.LINE, start: resolvedId, startPt: startPt, preview: null, polylineOrigin: resolvedId, startSnapTarget: hitSnap };
-            state.polylineOrigin = resolvedId;
-        }
-    } else {
-        state.active = { mode: TOOL_MODES.LINE, start: null, startPt: startPt, preview: null, polylineOrigin: null, _tempStart: true, startSnapTarget: hitSnap };
-    }
+    // TASK 1045: the start is ALWAYS a new point, joined to what the first click hit when the segment is committed (joinSegment: an existing curve end
+    // point shared; a circle centre, a lone point, the origin glued by a Coincident; Fusion measured 2026-11-27: a line from the origin is a separate
+    // point + Coincident). It used to BE any joint hit, the origin included.
+    state.active = { mode: TOOL_MODES.LINE, start: null, startPt: startPt, preview: null, polylineOrigin: null, _tempStart: true, startSnapTarget: hitSnap };
 
     justCreatedActive = true;
     // Reset per-call drag flag so `justCreatedActive` semantics are deterministic
@@ -457,7 +449,10 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
         justCreatedActive = false;
         localState.dragStartScreen = null;
 
-        if (state.active && state.active._tempStart) {
+        // a press on an existing POINT released elsewhere draws the segment at once (as when the start used to BE that point); otherwise the release
+        // of the first press only places the start
+        const pressedOnPoint = !!(state.active && state.active.startSnapTarget && state.active.startSnapTarget.type === 'joint');
+        if (state.active && state.active._tempStart && !(movedSinceStart && pressedOnPoint)) {
             const startId = state.genJ();
             const sp = state.active.startPt || { x: 0, y: 0 };
             state.joints.set(startId, { x: sp.x, y: sp.y, fixed: false });
@@ -514,15 +509,14 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
         return true;
     }
 
-    mergeEndWithNearby(state, endId, endPt, state.active.start);
-
     state.saveState();
     // startId has already been created above if missing — reuse the variable
     // (avoids creating duplicate joints when dragging the start on empty canvas).
 
     const newShapeId = mintShapeId('s');   // THE shape-id generator (#core/shape-id.js)
-    state.shapes.push({ id: newShapeId, type: 'line', joints: [startId, endId], isConstruction: !!state.isConstructionMode });
-    const refused = addTypedSizes(state, startId, endId);
+    const seg = { id: newShapeId, type: 'line', joints: [startId, endId], isConstruction: !!state.isConstructionMode };
+    state.shapes.push(seg);
+    const refused = joinSegment(state, seg, state.active.startSnapTarget, typedLock ? null : hitSnap);
     if (refused) { refuseSegment(state, before, refused); return true; }
     lastLineCommitTime = Date.now();
 
@@ -533,18 +527,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     lineState.lengthAssign = null;
     lineState.angleAssign = null;
 
-    try{
-        if (state.active && state.active.startSnapTarget) {
-            applyLockedSnap(state, startId, state.active.startSnapTarget, [endId]);
-        }
-    }catch(_){ }
-    try{
-        if (!typedLock) {
-            applyLockedSnap(state, endId, hitSnap, [startId]);
-        }
-    }catch(_){ }
-
-    applyLineInference(state, state.activeInference || state.inference || null, startId, endId, newShapeId);
+    applyLineInference(state, state.activeInference || state.inference || null, seg.joints[0], seg.joints[1], newShapeId);
 
     if(state.previewConstraint){
         const idx = state.constraints.indexOf(state.previewConstraint);
@@ -553,26 +536,25 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     }
     state.inference = null; state.activeInference = null;   // the next segment infers afresh
     endSegmentStep(state);
-
-    try{
-        const ep = state.joints.get(endId);
-        const newStart = state.genJ();
-        if(ep) state.joints.set(newStart, { x: ep.x, y: ep.y, fixed: false });
-        try{ addConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [endId, newStart] }); }catch(_){ }
-
-        state.active = {
-            mode: TOOL_MODES.LINE,
-            start: newStart,
-            startPt: ep ? { x: ep.x, y: ep.y } : (state.active.startPt || { x: 0, y: 0 }),
-            preview: { type: 'line', pt: ep ? { x: ep.x, y: ep.y } : w },
-            polylineOrigin: state.polylineOrigin || newStart
-        };
-        justCreatedActive = false;
-        openLineBoxes(e);   // TASK 597: the next segment of the chain has its boxes at once
-        localState.dragStartScreen = null;
-    }catch(_){ }
+    continueChain(state, seg, w);
+    justCreatedActive = false;
+    openLineBoxes(e);   // TASK 597: the next segment of the chain has its boxes at once
+    localState.dragStartScreen = null;
 
     return true;
+}
+
+/** TASK 1045: the chain goes on FROM the segment's end point: the next segment STARTS ON IT, one point shared by both (Fusion measured 2026-11-27:
+ *  a Line chain's consecutive segments share their point; it used to be a new start joint + a coincident). */
+function continueChain(state, seg, fallbackPt) {
+    const endId = seg.joints[1], ep = state.joints.get(endId);
+    state.active = {
+        mode: TOOL_MODES.LINE,
+        start: endId,
+        startPt: ep ? { x: ep.x, y: ep.y } : (state.active.startPt || { x: 0, y: 0 }),
+        preview: { type: 'line', pt: ep ? { x: ep.x, y: ep.y } : fallbackPt },
+        polylineOrigin: state.polylineOrigin || endId
+    };
 }
 
 /**
@@ -609,11 +591,11 @@ export function finalizeLineFromActive(svg, state) {
         return true;
     }
 
-    mergeEndWithNearby(state, endId, endPt, startId);
     const newShapeId = mintShapeId('s');   // THE shape-id generator (#core/shape-id.js)
-    state.shapes.push({ id: newShapeId, type: 'line', joints: [startId, endId], isConstruction: !!state.isConstructionMode });
+    const seg = { id: newShapeId, type: 'line', joints: [startId, endId], isConstruction: !!state.isConstructionMode };
+    state.shapes.push(seg);
 
-    const refused = addTypedSizes(state, startId, endId);
+    const refused = joinSegment(state, seg, state.active && state.active.startSnapTarget, typedLock ? null : shownSnap(state));
     if (refused) { refuseSegment(state, before, refused); return false; }
 
     lineState.lockedLength = null;
@@ -623,35 +605,19 @@ export function finalizeLineFromActive(svg, state) {
     lineState.lengthAssign = null;
     lineState.angleAssign = null;
 
-    applyLineInference(state, state.activeInference || state.inference || null, startId, endId, newShapeId);
-
-    try{ applyLockedSnap(state, startId, state.active && state.active.startSnapTarget, [endId]); }catch(_){ }
-    try{ if (!typedLock) applyLockedSnap(state, endId, shownSnap(state), [startId]); }catch(_){ }
+    applyLineInference(state, state.activeInference || state.inference || null, seg.joints[0], seg.joints[1], newShapeId);
 
     state.inference = null; state.activeInference = null;   // the next segment infers afresh
     endSegmentStep(state);
-    try{
-        const ep = state.joints.get(endId);
-        const newStart = state.genJ();
-        if(ep) state.joints.set(newStart, { x: ep.x, y: ep.y, fixed: false });
-        try{ addConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [endId, newStart] }); }catch(_){ }
-
-        state.active = {
-            mode: TOOL_MODES.LINE,
-            start: newStart,
-            startPt: ep ? { x: ep.x, y: ep.y } : (state.active.startPt || { x: 0, y: 0 }),
-            preview: { type: 'line', pt: ep ? { x: ep.x, y: ep.y } : endPt },
-            polylineOrigin: state.polylineOrigin || newStart
-        };
-        justCreatedActive = false;
-        if (live.screen) openLineBoxes({ clientX: live.screen.x, clientY: live.screen.y });   // TASK 597: the next segment of the chain has its boxes at once
-        localState.dragStartScreen = null;
-    }catch(_){ }
+    continueChain(state, seg, endPt);
+    justCreatedActive = false;
+    if (live.screen) openLineBoxes({ clientX: live.screen.x, clientY: live.screen.y });   // TASK 597: the next segment of the chain has its boxes at once
+    localState.dragStartScreen = null;
 
     return true;
 }
 
-// Deactivate/Cleanup the line tool: remove floating start joint and any coincident constraints
+// Deactivate/Cleanup the line tool: remove a floating start joint and any constraint naming it
 export function deactivateLineTool(state) {
     try{
         if(!state) return;
@@ -661,20 +627,18 @@ export function deactivateLineTool(state) {
             state.active = null; state.continueFrom = null; state.polylineOrigin = null; return;
         }
 
+        // TASK 1045: only a FLOATING start (the first click's new point, no segment made from it yet) goes, with any constraint naming it; a chain's
+        // start is the last segment's shared end point and stays with everything on it
         const curStart = state.active.start;
-        if(state.constraints && curStart){
-            for(let i = state.constraints.length - 1; i >= 0; i--) {
-                const c = state.constraints[i];
-                if(!c) continue;
-                if(c.joints && c.joints.includes(curStart)){
-                    state.constraints.splice(i,1);
+        const used = !!curStart && state.shapes && state.shapes.some(s => s.joints && s.joints.includes(curStart));
+        if(curStart && !used){
+            if(state.constraints){
+                for(let i = state.constraints.length - 1; i >= 0; i--) {
+                    const c = state.constraints[i];
+                    if(c && c.joints && c.joints.includes(curStart)) state.constraints.splice(i,1);
                 }
             }
-        }
-
-        if(curStart && state.joints && state.joints.has(curStart)){
-            const used = state.shapes && state.shapes.some(s => s.joints && s.joints.includes(curStart));
-            if(!used) state.joints.delete(curStart);
+            if(state.joints && state.joints.has(curStart)) state.joints.delete(curStart);
         }
 
         state.active = null;

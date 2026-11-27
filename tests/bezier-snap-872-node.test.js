@@ -1,6 +1,6 @@
 // tests/bezier-snap-872-node.test.js — TASK 872: the Bezier pen's anchors snap and attach as the Line tool's points do (audit 869 cause J), node kit,
 // SketchStudio and Shaper. A line, a circle and the origin: each anchor pressed 4 px off a target lies on it with the Line tool's constraint
-// (a joint: coincident, mid-span: point-on-line, a circle centre: coincident, the origin: coincident, the X axis: point-on-line); the snap marker
+// (a line's end point: SHARED, TASK 1045 (Fusion measured 2026-11-27: a drawing tool's new point on an existing curve END point is that point); mid-span: point-on-line, a circle centre: coincident, the origin: coincident, the X axis: point-on-line); the snap marker
 // is shown on hover; the tangent handle of a dragged anchor is not snapped; a press on the path's last anchor makes no zero-length segment.
 import assert from 'node:assert';
 import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
@@ -25,7 +25,7 @@ for (const host of ['sketchstudio', 'shaper']) {
     };
     const far = S(70, -10); // a free anchor, away from everything
     const cases = [
-      ['joint', [10, 20], 'coincident'], ['mid-span', [20, 20], 'pointOnLine'], ['circle centre', [30, -30], 'coincident'],
+      ['joint', [10, 20], 'shared'], ['mid-span', [20, 20], 'pointOnLine'], ['circle centre', [30, -30], 'coincident'],
       ['origin', [0, 0], 'coincident'], ['X axis', [-30, 0], 'pointOnLine'],
     ];
     for (const [anchor, nth] of [['first', 0], ['second', 1]]) for (const [name, [x, y], type] of cases) {
@@ -35,6 +35,12 @@ for (const host of ['sketchstudio', 'shaper']) {
       app.move(P.x, P.y);
       ok(st.snapTarget && st.snapTarget.isLocked, `${host} ${anchor} anchor ${name}: the snap marker shows on hover`);
       app.click(P.x, P.y);
+      if (type === 'shared') {
+        const others = [...st.joints.keys()].filter((k) => !['jl1', 'jl2', 'jc', 'j_origin'].includes(k));
+        const bz = st.shapes.find((s) => s.type === 'bezier');
+        ok(others.length === nth && !st.constraints.length && (nth === 0 || (bz && bz.joints[1] === 'jl1')), `${host} ${anchor} anchor ${name}: the anchor IS the line's end point (new points ${others.length}, constraints ${st.constraints.length}, segment ${bz && bz.joints})`);
+        continue;
+      }
       const j = [...st.joints].filter(([k]) => !['jl1', 'jl2', 'jc', 'j_origin'].includes(k)).map(([k, v]) => ({ k, ...v })).pop();
       ok(Math.hypot(j.x - x, j.y - y) < 1e-6 || type === 'pointOnLine', `${host} ${anchor} anchor ${name}: lands on the target: ${j.x},${j.y}`);
       const made = st.constraints.filter((c) => (c.joints || [c.joint]).includes(j.k)).map((c) => c.type);

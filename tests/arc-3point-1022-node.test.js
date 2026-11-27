@@ -254,7 +254,7 @@ await run('5e an emptied box unlocks: radius 25 typed then deleted: the arc goes
 });
 
 // ── 6. snaps ──
-await run('6 the start on a line end is coincident with it; a third click on an existing point puts that point on the arc', async () => {
+await run('6 the start on a line end SHARES it (TASK 1045, Fusion measured 2026-11-27); a third click on an existing point puts that point on the arc', async () => {
   const app = await openFresh();
   try {
     app.tool('line'); clickW(app, -30, 0); clickW(app, -30, -40); app.esc(); app.esc();   // a line whose top end is (-30, 0)
@@ -267,7 +267,7 @@ await run('6 the start on a line end is coincident with it; a third click on an 
     const arc = arcs(app)[0];
     assert(arc, 'an arc');
     const added = app.state.constraints.slice(before);
-    assert(added.some((c) => c.type === CONSTRAINT_TYPES.COINCIDENT && c.joints.includes(arc.joints[1]) && c.joints.includes(lineTop)), `the start is coincident with the line's end (${JSON.stringify(added.map((c) => c.type))})`);
+    assert(arc.joints[1] === lineTop && !added.some((c) => c.type === CONSTRAINT_TYPES.COINCIDENT), `the start IS the line's end, no coincident (${arc.joints}, ${JSON.stringify(added.map((c) => c.type))})`);
     assert(added.some((c) => c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.joint === pointOn && c.shape === arc.id), `the point is on the arc (${JSON.stringify(added.map((c) => c.type))})`);
   } finally { await app.close(); }
 });

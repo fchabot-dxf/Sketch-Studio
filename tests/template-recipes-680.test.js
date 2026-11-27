@@ -116,14 +116,16 @@ const docOf = (id, p) => buildTemplate(templateById(id), p).geometry;
   assert.ok(hex.shapes.filter((s) => !s.isConstruction).every((s) => /^poly_/.test(s.groupId)), 'hexagon: the Polygon tool\'s polygon');
   checks += 3;
 }
-// every closed outline drawn with the Line tool: the ends of two consecutive segments are two joints tied by a coincident (never one shared joint)
+// every closed outline drawn with the Line tool: TASK 1045 (Fusion measured 2026-11-27: a Line chain's consecutive segments share their point), two
+// consecutive segments SHARE their corner joint (it used to be two joints tied by a coincident); no coincident joins two outline corners
 for (const id of ['star', 'arrow', 'l-bracket', 't-slot', 'butterfly-key', 'stair-stringer']) {
   const g = docOf(id), solid = g.shapes.filter((s) => s.type === 'line' && !s.isConstruction);
   const uses = new Map();
   for (const s of solid) for (const j of s.joints) uses.set(j, (uses.get(j) || 0) + 1);
-  assert.ok([...uses.values()].every((n) => n === 1), `${id}: every Line tool segment owns its two joints`);
-  const coincident = g.constraints.filter((c) => c.type === 'coincident');
-  assert.ok(coincident.length >= solid.length, `${id}: its corners are coincidents (${coincident.length} for ${solid.length} segments)`);
+  assert.ok(uses.size === solid.length && [...uses.values()].every((n) => n === 2), `${id}: every corner of the outline is ONE joint its two segments share (${uses.size} joints for ${solid.length} segments)`);
+  const corners = new Set(uses.keys());
+  const glued = g.constraints.filter((c) => c.type === 'coincident' && c.joints.every((j) => corners.has(j)));
+  assert.ok(glued.length === 0, `${id}: no coincident between two outline corners (${glued.length})`);
   checks += 2;
 }
 {

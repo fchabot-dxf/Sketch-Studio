@@ -62,7 +62,7 @@ const noInversion = (S, res, label) => {
 const zeroDof = (S, res, label) => {
   const src = res.chain.pieces.map((p) => shape(S, p.id));
   const was = new Map();
-  for (const s of src) for (const j of s.joints) { was.set(j, P(S, j).fixed); P(S, j).fixed = true; }
+  for (const s of src) for (const j of s.joints) { if (!was.has(j)) was.set(j, P(S, j).fixed); P(S, j).fixed = true; } // a corner two sides share (TASK 1045): its own state, once
   const f = S.engine.jointFreedom();
   const free = res.joints.filter((j) => (f.freedom.get(j) || 0) > 0);
   ok(free.length === 0 && f.nullity === 0, `${label}: sources held -> the offset is fully defined (free ${free}, nullity ${f.nullity})`);

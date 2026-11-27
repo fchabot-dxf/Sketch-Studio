@@ -5,8 +5,8 @@
 // mirror line (#core/symmetric.js forms, unchanged) and by nothing else: no constraint and no dimension of the originals is copied, so the
 // copy has no dimension of its own and follows every edit of the originals.
 //   POINTS  every point of the objects gets its OWN copy point at its mirror image, linked by a point symmetric { joints: [p, p'], line }.
-//           Points joined in the objects (a shared joint, or a coincident cluster: the line tool's chains and the rectangles join their
-//           corners that way) become ONE copy point (the copy's corners are shared joints, so a chain stays connected and a rectangle stays
+//           Points joined in the objects (a shared joint: the line tool's chains and the rectangles share their corners since task 1045;
+//           or a coincident cluster: the Coincident tool's join, a file saved before) become ONE copy point (the copy's corners are shared joints, so a chain stays connected and a rectangle stays
 //           closed) with ONE link (from the cluster's first point). A point ON the mirror line still gets its own copy point (measured).
 //   SHAPES  MIRROR_KINDS below, one entry per shape kind (a kind not listed is refused).
 // One undo step is the caller's (the tool wraps this in recordConstraintStep). Refusals are data: { ok: false, reason } and nothing changes.

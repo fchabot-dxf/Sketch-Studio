@@ -3,7 +3,7 @@
 // session runs THE one build below once per circle.
 import { TOOL_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { addConstraint, radialDimensionParams } from '#core/constraints.js';
-import { applySnapConstraint, onShapeSnap } from '#core/snap-constraints.js';
+import { applySnapConstraint, onShapeSnap, SNAP_JOIN } from '#core/snap-constraints.js';
 import { applyLockedSnap, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { newShapeId } from '#core/shape-id.js';
 import { defineTool, PICK } from '#ui/tool-session.js';
@@ -33,7 +33,7 @@ function buildCircle(state, { centre, rim }) {
         if (v.assign) applyLiveAssign(state, v.assign);
         addConstraint(state, CONSTRAINT_TYPES.DISTANCE, { ...radialDimensionParams({ id: shapeId, type: 'circle' }, r), expression: v.expression, ...(v.name ? { name: v.name } : {}) });
     }
-    if (centre.snap) applySnapConstraint(state, centreId, centre.snap);
+    if (centre.snap) applySnapConstraint(state, centreId, centre.snap, { join: SNAP_JOIN.DRAW });   // TASK 1045: a centre on a curve end point shares it
     const s = rim.snap;
     if (s && (s.type === 'joint' || s.type === 'point')) applyLockedSnap(state, s.id || s.targetId, onShapeSnap(shapeId, rim.at));
 }

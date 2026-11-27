@@ -4,7 +4,7 @@
 import { TOOL_MODES, CONSTRAINT_TYPES, ARC_MODES } from '#core/constants.js';
 import { makeArc } from '#core/shapes.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
-import { applySnapConstraint } from '#core/snap-constraints.js';
+import { applySnapConstraint, SNAP_JOIN } from '#core/snap-constraints.js';
 import { boxValueText, SIZE_REFUSAL_HINT, refuseLength } from '#ui/numeric-input-manager.js';
 import { angleBetween, circumcenter3Pt, arcSweepFor3Pt, arcSweepInfo } from '#core/geometry.js';
 import { applyLiveAssign } from '#ui/input-handlers/base-tool.js';
@@ -122,9 +122,10 @@ function buildArc(state, picks) {
     }
     const on = picks.onArc.snap;   // a third click on an existing POINT puts it on the arc; a line / curve / axis only gave the position
     if (on && on.type === 'joint' && state.joints.has(on.id || on.targetId)) ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.POINT_ON_LINE, { joint: on.id || on.targetId, shape: shape.id }, { source: 'arc' });
-  } else if (picks.centre.snap) applySnapConstraint(state, c, picks.centre.snap);
-  if (picks.start.snap) applySnapConstraint(state, s, picks.start.snap);
-  if (picks.end.snap) applySnapConstraint(state, e, picks.end.snap, { excludeJoints: [s] });
+  } else if (picks.centre.snap) applySnapConstraint(state, c, picks.centre.snap, { join: SNAP_JOIN.DRAW });
+  // TASK 1045: a drawing snap (SNAP_JOIN.DRAW): the start / end on an existing curve end point SHARES it (its new joint is merged and gone)
+  if (picks.start.snap) applySnapConstraint(state, s, picks.start.snap, { join: SNAP_JOIN.DRAW });
+  if (picks.end.snap) applySnapConstraint(state, e, picks.end.snap, { excludeJoints: [shape.joints[1]], join: SNAP_JOIN.DRAW });
 }
 
 export const ARC = defineTool({

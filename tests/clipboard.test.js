@@ -81,7 +81,10 @@ await muted(async () => {
 // ---- 2. a link to outside geometry is not copied: one line of a chain keeps its own joints, not the coincident to the next line
 await muted(async () => {
   const S = L.newSketch();
-  const segs = L.polyline(S, [[0, 0], [100, 0], [100, 80]], false); // 2 lines joined by a coincident
+  // 2 lines joined by a coincident (TASK 1045: a Line-tool chain SHARES its corner now; a glued pair is the Coincident tool's, or a file saved before)
+  const p = [[0, 0], [100, 0], [100, 0], [100, 80]].map(([x, y]) => L.point(S, x, y));
+  const segs = [L.line(S, p[0], p[1]), L.line(S, p[2], p[3])].map((id) => ({ id }));
+  ConstraintManager.createConstraint(S.state, 'coincident', { joints: [p[1], p[2]] }, { source: 'toolbar' });
   const coincident = () => S.state.constraints.filter((c) => c.type === 'coincident').length;
   assert.strictEqual(coincident(), 1);
   const cb = clip(S, fakeIo());
@@ -96,6 +99,24 @@ await muted(async () => {
   const cb2 = clip(S, fakeIo());
   await cb2.copy(); await cb2.paste();
   assert.strictEqual(coincident(), 2, 'a coincident between two copied lines is copied');
+});
+
+// ---- 2b. TASK 1045: a Line-tool chain's SHARED corner: one line copied gets its own two points; both lines copied keep ONE shared corner
+await muted(async () => {
+  const S = L.newSketch();
+  const segs = L.polyline(S, [[0, 0], [100, 0], [100, 80]], false);
+  assert.strictEqual(segs[0].b, segs[1].a, 'the chain shares its corner');
+  const cb = clip(S, fakeIo());
+  select(S, [segs[0].id]);
+  await cb.copy(); const one = await cb.paste();
+  const l1 = S.state.shapes.find((s) => one.shapes.includes(s.id));
+  assert.ok(l1 && !l1.joints.includes(segs[0].b) && !l1.joints.includes(segs[1].a), 'the pasted line has its own points, no link to the chain');
+  select(S, segs.map((s) => s.id));
+  const cb2 = clip(S, fakeIo());
+  await cb2.copy(); const two = await cb2.paste();
+  const [m1, m2] = two.shapes.map((id) => S.state.shapes.find((s) => s.id === id));
+  assert.ok(m1.joints[1] === m2.joints[0] && !segs.some((g) => [g.a, g.b].includes(m1.joints[1])), 'the pasted chain shares ITS OWN corner');
+  assert.strictEqual(S.state.constraints.filter((c) => c.type === 'coincident').length, 0, 'no coincident anywhere');
 });
 
 // ---- 3. the origin: a point coincident with the origin comes out free; a shape that uses the origin joint gets an ordinary free copy

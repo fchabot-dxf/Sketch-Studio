@@ -11,10 +11,9 @@
 //                                            open design untouched (task 679)
 //   click(state, x, y)                       the joint a click on empty canvas makes (state.genJ)
 //   polyline(state, pts, closed, construction)
-//                                            Line tool (line-tool.js): every segment owns its two joints; the next segment starts on a NEW
-//                                            joint tied to the previous end by a raw coincident (#core/constraints.js addConstraint); a start
-//                                            on an existing joint IS that joint; an end on an existing joint is a new joint + a raw coincident
-//                                            (its findNearbyJoint auto-coincident; its snap's coincident is then already held: not added)
+//                                            Line tool (line-tool.js joinSegment, TASK 1045): the next segment starts ON the previous end
+//                                            point (shared); a start / end clicked on an existing joint is a new joint joined to it by the
+//                                            drawing snap (an existing curve end point shared, a centre / lone point / the origin glued)
 //   rect(state, x1, y1, x2, y2, construction)
 //                                            Rect tool, two corners (rect-tool.js): makeRectFromTwoJoints, the shapes pushed, each structural
 //                                            constraint through ConstraintManager.createConstraint (source 'rect')
@@ -27,8 +26,8 @@
 //                                            Slot tool, centre to centre (slot-tool.js, task 673): makeSlotCenterToCenter, the shapes pushed,
 //                                            its constraints through the raw addConstraint; a pick on an existing joint REUSES it
 //   fillet(state, lineA, lineB, r)          Fillet tool, two-line pick (fillet-tool.js): findCornerBetweenLines -> applyFillet
-//   snap(state, joint, target)              what a tool does when its click lands on a joint (target = joint id) or on a curve (target =
-//                                            { shape }): #core/snap-constraints.js applySnapConstraint (coincident / point on the curve)
+//   snap(state, joint, target)              an existing point dragged onto a joint (target = joint id) or a curve (target = { shape }):
+//                                            #core/snap-constraints.js applySnapConstraint, SNAP_JOIN.GLUE (coincident / point on the curve)
 //   constrain(state, type, params)          a constraint tool (constraint-tools.js): ConstraintManager.createConstraint (source 'toolbar')
 //   dimension(state, pick, label, text)     Dimension tool (dimension-tool.js) + its value box (numeric-input-manager.js): the constraint made
 //                                            by ConstraintManager.createConstraint at the MEASURED value, placed by the label point the user
@@ -51,7 +50,7 @@ import { addConstraint } from './constraints.js';
 import { makeRectFromTwoJoints, makeArc, makePolygon } from './shapes.js';
 import { makeSlotCenterToCenter } from './slot.js';
 import { findCornerBetweenLines, applyFillet } from './fillet.js';
-import { applySnapConstraint } from './snap-constraints.js';
+import { applySnapConstraint, SNAP_JOIN } from './snap-constraints.js';
 import { newShapeId } from './shape-id.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { getDist, perpendicularDistance } from './geometry.js';
@@ -82,27 +81,31 @@ export function click(state, x, y) {
 
 /**
  * Line tool: a chain of segments through `pts` ([x, y] clicks, or the id of an existing joint clicked), `closed` = the last click is back on
- * the chain's first joint. -> [{ id, a, b }] (each segment's shape id and its own two joints).
+ * the chain's first point. -> [{ id, a, b }] (each segment's shape id and its two joints).
+ * TASK 1045, as line-tool.js joinSegment: each segment is pushed, then a point clicked on an existing joint is joined to it by the drawing snap
+ * (applySnapConstraint SNAP_JOIN.DRAW: a curve END POINT shared, a centre / lone point / the origin glued by a Coincident); the chain's next segment
+ * starts ON the previous end point (shared); a closed chain's last end is its first point (shared).
  */
 export function polyline(state, pts, closed = true, construction = false) {
   const posOf = (p) => (isJointRef(p) ? state.joints.get(p) : { x: p[0], y: p[1] });
   const newAt = (p) => { const q = posOf(p); return click(state, q.x, q.y); };
+  const joinOn = (seg, k, target) => {
+    const q = state.joints.get(target);
+    applySnapConstraint(state, seg.joints[k], { type: 'joint', targetId: target, pt: { x: q.x, y: q.y }, isLocked: true }, { excludeJoints: [seg.joints[1 - k]], join: SNAP_JOIN.DRAW });
+  };
   const segs = [];
-  let start = isJointRef(pts[0]) ? pts[0] : newAt(pts[0]); // a start on a joint IS that joint (line-tool.js handleLinePointerDown)
-  const first = start;
+  let start = newAt(pts[0]), first = null;
   const n = closed ? pts.length : pts.length - 1;
   for (let i = 0; i < n; i++) {
-    const target = closed && i === n - 1 ? first : pts[i + 1];
-    const end = newAt(target);
-    if (isJointRef(target)) addConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [end, target] }); // the end on a joint: auto coincident
-    const id = newShapeId('s');
-    state.shapes.push({ id, type: 'line', joints: [start, end], isConstruction: !!construction });
-    segs.push({ id, a: start, b: end });
-    if (i + 1 < n) { // the chain goes on: the next segment starts on a new joint tied to this end
-      const next = newAt(target);
-      addConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [end, next] });
-      start = next;
-    }
+    const closing = closed && i === n - 1;
+    const target = closing ? first : pts[i + 1];
+    const seg = { id: newShapeId('s'), type: 'line', joints: [start, newAt(target)], isConstruction: !!construction };
+    state.shapes.push(seg);
+    if (i === 0 && isJointRef(pts[0])) joinOn(seg, 0, pts[0]); // the start on a joint (the first click's snap)
+    if (isJointRef(target)) joinOn(seg, 1, target); // the end on a joint (the closing click: on the chain's first point)
+    if (i === 0) first = seg.joints[0];
+    segs.push({ id: seg.id, a: seg.joints[0], b: seg.joints[1] });
+    start = seg.joints[1]; // the chain goes on from this end point, shared
   }
   return segs;
 }
@@ -163,12 +166,13 @@ export function fillet(state, lineA, lineB, r) {
   return { arc: res.arc.id, V: res.virtualSharp, center: res.joints[0], tA: res.joints[1], tB: res.joints[2], radiusConstraint: res.radiusConstraint };
 }
 
-/** A tool's click that landed on a joint (target: its id) or on a curve (target: { shape }): the snap's constraint. */
+/** An EXISTING point joined by a snap to a joint (target: its id) or a curve (target: { shape }): the snap's constraint. TASK 1045: SNAP_JOIN.GLUE, the
+ *  drag's kind of join (a recipe drags a drawn point there): a coincident / a point on the curve, never a shared point (polyline joins its own new points). */
 export function snap(state, joint, target) {
   const at = state.joints.get(joint);
   const t = isJointRef(target) ? { type: 'joint', targetId: target, pt: { x: at.x, y: at.y }, isLocked: true }
     : { type: 'line', targetId: target.shape, pt: { x: at.x, y: at.y }, isLocked: true };
-  if (!applySnapConstraint(state, joint, t)) throw new Error(`snap of ${joint} on ${isJointRef(target) ? target : target.shape}: nothing added`);
+  if (!applySnapConstraint(state, joint, t, { join: SNAP_JOIN.GLUE })) throw new Error(`snap of ${joint} on ${isJointRef(target) ? target : target.shape}: nothing added`);
 }
 
 /** A constraint tool's pick: ConstraintManager.createConstraint (source 'toolbar'). -> the constraint. */

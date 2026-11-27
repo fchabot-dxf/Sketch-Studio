@@ -19,7 +19,8 @@
 //   E  an imported shared corner, F a mirror copy corner (its symmetric stays with the owner)
 //   G  an offset copy join and an offset source join (the offset record dissolves either way), H a pattern SOURCE corner (the pattern dissolves) and a pattern COPY corner (it stays;
 //      BUG-411: when that instance is removed later its copies' detached point goes with them)
-//   I  stacked corners (a rectangle) are unchanged: no shared glyph, their coincident deletes as before
+//   I  stacked corners (a rectangle saved before task 1045: two joints + a coincident per corner; a new one SHARES its corners, tests/shared-corners-1045-node)
+//      are unchanged: no shared glyph, their coincident deletes as before
 //   J  BUG-410: 3 and 4 ends glued at one spot (chain A-B B-C, star A-B A-C), plus a pointOnLine on one stacked joint: selecting / hovering ANY
 //      point at the spot shows EVERY coincident / point-on-line glyph of the spot
 //   K  the context menu's Delete and the footer Delete (the phone's delete path) on a glyph split the point too
@@ -394,9 +395,15 @@ for (const which of ['line from arc', 'arc from line']) {
 
 // ------------------------------------------------------------------------------------------------ I stacked corners unchanged
 {
-  const app = await openApp();
+  const profile = await createProfile();
+  const J = (id, x, y) => [id, { x, y, sketchId: sketch1 }];
+  const joints = [['j_origin', { x: 0, y: 0, fixed: true, sketchId: sketch1 }], J('1A', -20, -10), J('1B', -20, -10), J('2A', 20, -10), J('2B', 20, -10), J('3A', 20, 15), J('3B', 20, 15), J('4A', -20, 15), J('4B', -20, 15)];
+  const shapes = [['s1', '1A', '2A'], ['s2', '2B', '3B'], ['s3', '4A', '3A'], ['s4', '1B', '4B']].map(([id, a, b]) => ({ id, type: 'line', joints: [a, b], groupId: 'rect_old', sketchId: sketch1 }));
+  const constraints = [{ type: 'horizontal', joints: ['1A', '2A'] }, { type: 'vertical', joints: ['2B', '3B'] }, { type: 'horizontal', joints: ['4A', '3A'] }, { type: 'vertical', joints: ['1B', '4B'] },
+    ...['1', '2', '3', '4'].map((k) => ({ type: 'coincident', joints: [k + 'A', k + 'B'] }))];
+  await createNamedDesign(profile, 'sketchstudio', 'T1041 I', { version: 3, hosts: {}, geometry: { joints, shapes, constraints, parameters: [], sketches: [{ id: sketch1, name: 'Sketch 1', visible: true }], activeSketchId: sketch1, groups: [], profiles: [] } });
+  const app = await openApp({ profile });
   const S = app.state;
-  app.tool('rect'); clk(app, -20, -10); clk(app, 20, 15); app.esc(); app.esc();
   check(sharedPointCoincidents(S.joints, S.shapes).length === 0, 'I: a rectangle has no shared point (two joints + a coincident per corner)');
   const co = S.constraints.filter((c) => c.type === 'coincident');
   check(co.length >= 4, `I: its corners are stacked joints held by ${co.length} coincidents`);

@@ -2005,7 +2005,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/drag-midpoint-snap-b18a-node.test.js`, `tests/snap-display-1010-live.test.js` (desktop: a joint dragged to a line midpoint is at (0, 8) during the drag and after release)
 - **Status:** fixed
 - **Family:** `snap-not-applied`
-- **History:** found in `1000B` (`B-18a`) -> fixed in task `1010`
+- **History:** found in `1000B` (`B-18a`) -> fixed in task `1010` -> task `1045`: a rectangle's corner is ONE shared joint now (a JOINT drag, no cluster), so the cluster-only rule missed it again (`tests/drag-midpoint-snap-b18a-node.test.js` measured (0.0568, 3.9470) again); the rule is a CORNER drag now (`selection-tools.js` `cornerDrag`: a cluster, or a point two or more curves share; it infers nothing and takes the midpoint snap), the test passes again.
 
 ---
 
@@ -3696,6 +3696,36 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `solver`
 - **History:** found in task `1041` -> fixed in task `1041`. Probe before: `.evidence/1041/probe-pattern-copy-before.txt` `new joint still there: true used by a shape: false`; after: `.evidence/1041/probe-pattern-copy-after.txt` `new joint still there: false used by a shape: false`.
 
+### BUG-440
+- **Date / turn:** 2026-11-27 (found in task `1045`)
+- **Reported by:** task `1045` (the Fusion oracle, `tests/fusion-oracle.test.js` graded which-moves)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** Equal between a side of a rectangle (drawn since task 1045: SHARED corners) and a held line or rect side, the rectangle giving way: Fusion stretches that one side ("deform"); ours scales the whole rectangle ("scale"). Cells `equal-line-line` LR|7,0, RL|0,7, RR|0,8, RR|8,0 (recorded KNOWN in `tests/fixtures/fusion-oracle/which-moves-graded-known.json`). The same change made 5 collinear cells agree with Fusion (LR|7,0, RL|0,7, RR|0,0, RR|0,8, RR|8,0: the rect now translates, as Fusion's).
+- **What was wrong:** the creation placement moves the giving operand's BODY by one similarity. Its 'shape' body grows through SHARED joints, so a shared-corner rectangle's side is the whole rectangle; a stacked-corner side (before task 1045) was a body of its own, its corner twins dragged along, and the solve then stretched the side.
+- **Cause:** `packages/core/creation-placement.js` `bodyOf` ('shape' mode) with PLACE `equal-line-line` (a scale of the body about its pivot).
+- **Fix:** open. Needs a Fusion-checked design (e.g. the line's own end first, before the body similarity); owner ruling 2026-11-27: a follow-up task.
+- **Task id(s):** `1045` (found)
+- **Fix merge sha:** open
+- **Guarding test file(s):** `tests/fusion-oracle.test.js` (the 4 KNOWN cells fail loudly when they start agreeing)
+- **Status:** open
+- **Family:** `solver`
+- **History:** found in task `1045` (`.evidence/1045/eq-main.txt` vs `.evidence/1045/eq-after.txt`).
+
+### BUG-441
+- **Date / turn:** 2026-11-27 (found in task `1045`)
+- **Reported by:** task `1045` (`tests/shared-corners-1045-live.test.js`, phone 390 x 844)
+- **App(s) & host:** SketchStudio (phone: touch)
+- **Report:** on the phone, a tap on a rectangle corner (2 sides share it) shows its shared-point glyph; a tap ON that glyph (on its drawn icon, 31 to 51 px from the corner) does not select the glyph: the corner stays selected, so the footer Delete deletes the point instead of splitting it. The desktop click selects the glyph. The task 1041 phone test (a polygon corner, 3 curves + a glued line) selects its glyph by the same tap.
+- **What was wrong:** not found. Seen: `document.elementFromPoint` at the tap is the canvas grid (the glyph's own hit path is not under it on the phone), and the select tool keeps the corner.
+- **Cause:** open (candidate: the touch tap's pick falls back to the last snap target, the corner, input-manager pointer down "Unlocked-snapTarget fallback").
+- **Fix:** open. The live test splits the phone's corner through the point's menu "Delete Coincident" meanwhile.
+- **Task id(s):** `1045` (found)
+- **Fix merge sha:** open
+- **Guarding test file(s):** none yet
+- **Status:** open
+- **Family:** `ui-input`
+- **History:** found in task `1045` (`.evidence/1045/live-glyph-selected-phone.png`: the corner still selected after the tap on its glyph).
+
 ---
 
 ## Family index
@@ -3711,7 +3741,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27), BUG-350 (11-27), BUG-352 (11-27), BUG-360 (11-27) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27), BUG-411 (11-27) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27), BUG-411 (11-27) |, BUG-440 (11-27, open)
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -3719,7 +3749,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22), BUG-374 (11-27, open), BUG-400 (11-27) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27), BUG-410 (11-27) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27), BUG-410 (11-27) |, BUG-441 (11-27, open)
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 

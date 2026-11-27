@@ -89,7 +89,8 @@ export function holdClass(state, fr, op) {
 
 // ---------------------------------------------------------------------------------------------------------- 3. the placements
 // The mover's body, by mode: 'shape' = its shape(s) and everything that shares a joint with them; 'component' = also what is coincident
-// with one of its joints (a rect-tool rectangle, a polyline). Never crossing into the anchor.
+// with one of its joints (a rectangle / polyline saved before task 1045, glued by coincidents; a new one SHARES its corners, so its 'shape' body
+// is the whole outline already). Never crossing into the anchor.
 function bodyOf(state, op, anchorJoints, mode) {
   const coincident = mode === 'component' ? state.constraints.filter(c => isDriving(c) && c.type === T.COINCIDENT && Array.isArray(c.joints)) : [];
   const joints = new Set(), shapes = [];

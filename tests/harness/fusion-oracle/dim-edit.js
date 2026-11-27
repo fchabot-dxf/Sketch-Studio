@@ -8,7 +8,7 @@ import { ConstraintManager } from '#core/constraint-manager.js';
 import { commitDimensionEdit } from '#core/dimension-seams.js';
 import { perpendicularDistance } from '#core/geometry.js';
 import { buildCells, materialize, applyLevel, TOL_F, TOL_O } from './graded.js';
-import { serDoc } from './export.js';
+import { serDoc, recordedPointIndex } from './export.js';
 
 export { TOL_F, TOL_O };
 const ORIGIN = L.origin;
@@ -176,7 +176,9 @@ export function compareRun(cell, edit, fx) {
   if (o.na) return { na: o.na };
   const M = o.M;
   const jids = [...M.S.state.joints.keys()].filter(j => j !== ORIGIN), sids = M.S.state.shapes.map(s => s.id);
-  const toMap = (snap) => { const pts = {}, radii = {}; jids.forEach((j, i) => { pts[j] = snap.pts[i]; }); sids.forEach((s, i) => { if (snap.radii[i] != null) radii[s] = snap.radii[i]; }); return { pts, radii }; };
+  // TASK 1045: Fusion's points by the initial place (export.js recordedPointIndex): its `before` (the dimension added at the measured value) against ours
+  const ix = fx.before && o.before ? recordedPointIndex(jids.map((j) => o.before.pts[j] || null), fx.before.pts) : jids.map((_, i) => i);
+  const toMap = (snap) => { const pts = {}, radii = {}; jids.forEach((j, i) => { pts[j] = snap.pts[ix[i]]; }); sids.forEach((s, i) => { if (snap.radii[i] != null) radii[s] = snap.radii[i]; }); return { pts, radii }; };
   let fusion, ours, note = '';
   if (!fx.add.accepted) { fusion = 'not editable'; note = 'Fusion refuses the dimension: ' + (/OVER_CONSTRAINED/.test(fx.add.error) ? 'over-constrained' : 'duplicate'); }
   else if (fx.add.driving === false) fusion = 'not editable';

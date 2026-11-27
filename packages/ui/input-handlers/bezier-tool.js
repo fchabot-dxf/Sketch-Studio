@@ -14,10 +14,10 @@
 // TASK 872: every ANCHOR snaps and attaches as the Line tool's points do (and as Fusion's spline): the app's locked snap (input-manager
 // updateSnapTarget: joints, line mid-span and midpoints, arc / circle edges, circle centres, construction / offset-made lines, origin, axes)
 // shows its marker on hover, the anchor lands on it and gets the constraint the Line tool makes there through the shared base-tool
-// applyLockedSnap (coincident / point-on-line ...). The tangent HANDLES are free: they are shape data, not points of the sketch (the Line tool
+// applyLockedSnap (an existing curve end point shared, TASK 1045; another point coincident; point-on-line ...). The tangent HANDLES are free: they are shape data, not points of the sketch (the Line tool
 // has no counterpart; Fusion's spline tangent handles are dragged free too).
 // TASK 762: CLOSING ON THE FIRST ANCHOR, as the Line tool ends on its first point. With two or more anchors placed, while the snap is the
-// path's FIRST anchor, a press places the anchor THERE: on release the anchor is a new joint made coincident with the first one, the segment
+// path's FIRST anchor, a press places the anchor THERE: on release the anchor IS the first one (TASK 1045: shared, applyLockedSnap), the segment
 // is committed and the path ENDS, closed (a loop of #core/loop-finder.js findLoops).
 // The closing anchor is what an anchor always is: a click makes a CORNER (the last segment arrives along its own handle), a drag makes it
 // SMOOTH (symmetric handles: the incoming one on the last segment, the outgoing one becomes the FIRST segment's first control point, so
@@ -138,9 +138,10 @@ export function handleBezierPointerUp(e, svg, state, w) {
 
   // Finalize this anchor: create its endpoint joint, add it to the chain.
   const a = pen.down;
-  const jointId = state.genJ();
-  state.joints.set(jointId, { x: a.x, y: a.y, fixed: false });
-  if (a.snap) applyLockedSnap(state, jointId, a.snap);
+  const newId = state.genJ();
+  state.joints.set(newId, { x: a.x, y: a.y, fixed: false });
+  // TASK 1045: on an existing curve end point (the path's first anchor when it closes, a line's end ...) the anchor IS that point (shared)
+  const jointId = a.snap ? applyLockedSnap(state, newId, a.snap) : newId;
   const anchor = { jointId, x: a.x, y: a.y, hOutX: a.hOutX, hOutY: a.hOutY, hInX: a.hInX, hInY: a.hInY };
 
   // Commit the cubic from the PREVIOUS anchor to this one (c1 = prev.hOut, c2 = this.hIn). A corner anchor has its

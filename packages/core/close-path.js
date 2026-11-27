@@ -5,14 +5,17 @@
 //
 // THE CHAIN of a curve and its FREE ENDS: a free end is a point (a coincident cluster, buildNodeMap) where exactly ONE curve end of the chain
 // lies. An OPEN chain has exactly two free ends and no BRANCH (a point where three or more curve ends lie). Close path closes an open chain:
-//   gap <= CLOSE_PATH_COINCIDENT_MM   the two free ends are made COINCIDENT (no new curve): the end of the chain's LAST curve (in the walk from
-//                                      the chain's first end) MOVES onto the first end, by the gap (<= the tolerance); when that end is held
-//                                      (a fixed point in its cluster) the other one moves instead; both held: a line is added instead.
-//   otherwise                          ONE straight line between the two free ends, coincident at both (each end of the line its own new joint
-//                                      + a coincident, as the Line tool ends on an existing point), the chain's kind (construction or not), in
+//   gap <= CLOSE_PATH_COINCIDENT_MM   the two free ends are JOINED (no new curve): the end of the chain's LAST curve (in the walk from the
+//                                      chain's first end) MOVES onto the first end, by the gap (<= the tolerance), and becomes that point
+//                                      (TASK 1045: SHARED); when that end is held (a fixed point in its cluster) the other one moves instead;
+//                                      both held: a line is added instead.
+//   otherwise                          ONE straight line between the two free ends, joined at both as the Line tool's ends join an existing
+//                                      point (TASK 1045: each end SHARES the free end point), the chain's kind (construction or not), in
 //                                      the chain's sketch and in the chain's INNERMOST common user group (#core/group-model.js: an imported
 //                                      outline's group gains the line; a group that is not entered stays one rigid block, nothing else is added).
-// Nothing but the coincident constraint(s) is added to state.constraints. A chain (not construction: findLoops skips it) must be a loop findLoops
+// TASK 1045: every join is the drawing snap's (#core/snap-constraints.js applySnapConstraint, SNAP_JOIN.DRAW; Fusion, MEASURED 2026-11-27: every
+// drawing tool joins meeting ends with ONE shared point): a free end on a curve end point is shared; only where that rule glues (the origin, an
+// end that the same curve also uses: a lone arc's two ends) a coincident constraint is added. It used to glue every join with a coincident. A chain (not construction: findLoops skips it) must be a loop findLoops
 // returns once closed (checked on the planned result BEFORE anything changes: a closing line on top of the chain itself is refused with the
 // reason). TASK 761: every curve kind is an edge of findLoops (lines, arcs, beziers; their real tangents and areas, #core/curve-kinds), so a lone
 // arc closed by its chord is a loop now, and a chain with a bezier is checked like any other.
@@ -28,7 +31,7 @@
 // is counted as left open (an engraving line, a path drawn open on purpose).
 
 import { buildNodeMap, curveEnds, findConnectedChains, findLoops } from './loop-finder.js';
-import { addConstraint } from './constraints.js';
+import { applySnapConstraint, SNAP_JOIN } from './snap-constraints.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { newShapeId } from './shape-id.js';
 import { groupChain, groupIndex } from './group-model.js';
@@ -110,7 +113,8 @@ function innermostCommonGroup(state, shapes) {
 }
 
 // Does closing make the chain a loop of findLoops? Checked on a VIEW of the planned result (the chain's joints, the new line / the moved end, the
-// coincidents), so nothing changes before it is known.
+// coincidents), so nothing changes before it is known. The view joins the ends by a coincident: findLoops (buildNodeMap) reads a shared point and a
+// coincident pair as ONE node, so the loop it finds is the one the shared join makes.
 function closesToLoop(state, plan, ctx) {
   const { shapes, mode, ends } = plan;
   const joints = new Map();
@@ -180,8 +184,9 @@ export function planClosePaths(state, shapeIds, include = closePathPick(state)) 
 
 /**
  * applyClosePath(state, plan) -> { ok, mode, lineId?, moved? }   does what the plan says (no history: the caller's ONE undo step).
- *   coincident: the moving end's cluster is moved onto the staying end (moved = the distance, <= CLOSE_PATH_COINCIDENT_MM), one coincident.
- *   line: two new joints at the two ends, the line between them (chain's kind, sketch, innermost common group), a coincident at each end.
+ *   coincident: the moving end's cluster is moved onto the staying end (moved = the distance, <= CLOSE_PATH_COINCIDENT_MM) and joined to it (shared).
+ *   line: the line between the two ends (chain's kind, sketch, innermost common group), each of its ends joined to the end it is on (shared).
+ * The joins are the drawing snap's (joinEnd: SNAP_JOIN.DRAW).
  */
 export function applyClosePath(state, plan) {
   if (!plan || !plan.ok) return { ok: false, reason: plan ? plan.reason : 'no plan' };
@@ -190,7 +195,7 @@ export function applyClosePath(state, plan) {
   if (plan.mode === 'coincident') {
     const dx = ps.x - pm.x, dy = ps.y - pm.y;
     for (const j of plan.moving) { const p = state.joints.get(j); p.x += dx; p.y += dy; } // the moving end's cluster (planned): its points stay together
-    addConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [stay.joint, move.joint] });
+    joinEnd(state, move.joint, stay.joint);
     return { ok: true, mode: 'coincident', moved: Math.hypot(dx, dy) };
   }
   const sketchId = sketchOf(plan.shapes[0]);
@@ -200,9 +205,15 @@ export function applyClosePath(state, plan) {
   const group = innermostCommonGroup(state, plan.shapes);
   const line = { id: newShapeId('s'), type: 'line', joints: [a, b], isConstruction: plan.isConstruction, sketchId, ...(group ? { userGroupId: group } : {}) };
   state.shapes.push(line);
-  addConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [a, stay.joint] });
-  addConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [b, move.joint] });
+  joinEnd(state, a, stay.joint, [b]);
+  joinEnd(state, b, move.joint, [line.joints[0]]);
   return { ok: true, mode: 'line', lineId: line.id };
+}
+
+// TASK 1045: the point `jointId` placed ON the end point `targetId` is joined to it as a drawing tool's point is (applySnapConstraint, SNAP_JOIN.DRAW)
+function joinEnd(state, jointId, targetId, excludeJoints = []) {
+  const q = state.joints.get(targetId);
+  applySnapConstraint(state, jointId, { type: 'joint', targetId, pt: { x: q.x, y: q.y }, isLocked: true }, { excludeJoints, join: SNAP_JOIN.DRAW });
 }
 
 /** The free ends of every OPEN chain among the curves include() accepts (default: the active sketch): [{ x, y, joint }] (what the Close path tool

@@ -3,11 +3,10 @@ import { dbg } from '#core/debug.js';
 import { TOOL_MODES, RECT_MODES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { makeRectFromTwoJoints, makeRectFromCenter, makeRectFrom3Points } from '#core/shapes.js';
-import { findNearbyJoint } from '#core/joints.js';
 import { setupNumericInput, showDualInput, hideInput, resetLockedDimensions, isInputActive } from '#ui/numeric-input-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, shownSnap, snapPoint, tooSmall, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, joinPointUnder, shownSnap, snapPoint, tooSmall, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 let rectState = { lockedWidth: null, lockedHeight: null, widthExpression: null, heightExpression: null, widthName: null, heightName: null, widthAssign: null, heightAssign: null, previewWidth: null, previewHeight: null };   // TASK 876 / 1013
@@ -198,13 +197,9 @@ function placeRect(state, endPt, endSnap) {
     applyRectSnaps(state, three
         ? [[state.active.start, state.active.startSnapTarget], [state.active.secondPt, state.active.secondSnapTarget], [endId, endSnap]]
         : [[state.active.start, state.active.startSnapTarget], [endId, endSnap]]);
-    const allCornerIds = [];
-    if (rectResult && rectResult.shapes) rectResult.shapes.forEach((s) => { if (s && s.joints) s.joints.forEach((j) => allCornerIds.push(j)); });
-    for (const cid of allCornerIds) {
-        const jpt = state.joints.get(cid); if (!jpt) continue;
-        const nearby = findNearbyJoint(state.joints, jpt, cid, 0.01);
-        if (nearby && nearby !== cid) ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [cid, nearby] }, { source: 'rect' });
-    }
+    // a corner on an existing point that no snap bound (a typed size put it there): joined there as a click's snap would (TASK 1045: an end point shared)
+    const corners = () => [...new Set((rectResult && rectResult.shapes ? rectResult.shapes : []).flatMap((s) => (s && s.joints) || []))];
+    for (const cid of corners()) if (state.joints.has(cid)) joinPointUnder(state, cid, corners());
     addTypedSideDimensions(state, rectResult, rectMode);
     closeRectBoxes();
     state.endUndoGroup(); state.active = null; localState.isDragging = false; localState.dragStartScreen = null;

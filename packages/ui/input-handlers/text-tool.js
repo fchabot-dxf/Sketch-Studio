@@ -13,7 +13,7 @@
 
 import { addText, editText, removeText, convertTextToShapes, TEXT_ALIGNS, TEXT_DEFAULTS, TEXT_FALLBACK, TEXT_STYLE_KEYS } from '#core/text.js';
 import { groupCommands } from '#core/group-model.js';
-import { applySnapConstraint } from '#core/snap-constraints.js';
+import { applySnapConstraint, SNAP_JOIN } from '#core/snap-constraints.js';
 import { lengthText } from '#core/settings-manager.js';
 import { fontLibrary, textFace, fallbackNote, USER_FONT_ACCEPT } from '#ui/text-fonts.js';
 import { placeAnchoredBox, parseBoxValue } from '#ui/numeric-input-manager.js';
@@ -100,7 +100,7 @@ export function commitTextEditor() {
   if (s.isNew) {
     if (empty) { removeText(state, text); return; }
     state.saveStateForce(TEXT_UNDO_LABELS.add, s.snapshot);
-    if (s.snap) applySnapConstraint(state, text.joints[0], s.snap); // the anchor on the point it was placed on (the same step)
+    if (s.snap) applySnapConstraint(state, text.joints[0], s.snap, { join: SNAP_JOIN.GLUE }); // the anchor on the point it was placed on (the same step); a text is no curve: glued (TASK 1045)
     state.textStyle = Object.fromEntries(TEXT_STYLE_KEYS.map((k) => [k, text[k]])); // the next text starts in this style
     return;
   }

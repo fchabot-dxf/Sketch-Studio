@@ -4,7 +4,7 @@
 
 import { updatePreview } from '#ui/preview-manager.js';
 import { showDualInput, showSingleInput, setLiveInputValue, updateInputPosition } from '#ui/numeric-input-manager.js';
-import { applySnapConstraint } from '#core/snap-constraints.js';
+import { applySnapConstraint, sharedEndTarget, SNAP_JOIN } from '#core/snap-constraints.js';
 import { planChange } from '#core/parameters.js';
 import { applyParameterChange } from '#core/dimension-seams.js';
 import { docUnit } from '#core/settings-manager.js';
@@ -23,10 +23,36 @@ export const shownSnap = (state) => state.activeSnap || null;
 /**
  * Apply the constraint for a locked drawing snap onto `jointId` (grid snaps are visual-only).
  * Shared by line-tool and rect-tool so corner/endpoint/midpoint/on-curve snap rules live in ONE place.
+ * TASK 1045: it is THE DRAWING tools' snap (Line, Rectangle, Circle, Polygon, Slot, Bezier): SNAP_JOIN.DRAW, so a new point on an existing curve end
+ * point is SHARED with it (the new joint `jointId` is merged into that point and gone), on any other point glued.
+ * -> the joint the point IS after its snap: that end point when it was shared, else `jointId` (a caller that goes on using the point uses this id).
  */
 export function applyLockedSnap(state, jointId, snap, excludeJoints = []) {
-    if (!jointId || !snap || !snap.isLocked || snap.type === 'grid') return false;
-    return applySnapConstraint(state, jointId, snap, { excludeJoints });
+    if (!jointId || !snap || !snap.isLocked || snap.type === 'grid') return jointId;
+    const opts = { excludeJoints, join: SNAP_JOIN.DRAW };
+    const shared = sharedEndTarget(state, jointId, snap, opts);
+    applySnapConstraint(state, jointId, snap, opts);
+    return shared && !state.joints.has(jointId) ? shared : jointId;
+}
+
+/** A snap that binds the point it places (a LOCKED one, not the grid's): applyLockedSnap joins / binds the point to it. */
+export const isBindingSnap = (snap) => !!snap && !!snap.isLocked && snap.type !== 'grid';
+
+/**
+ * TASK 1028 (B-06) / 1045: the point `jointId` a drawing tool placed with NO binding snap (a typed size put it there, or no snap was shown) that lies ON an
+ * existing point (within PLACED_ON_POINT_TOL; not one of `exclude`, the drawn shape's own points) is joined there as a click's snap on it would join it
+ * (applyLockedSnap: an end point shared, another point glued). A typed end 0.3 mm from an unrelated point is never joined with it.
+ * -> the joint the point IS (applyLockedSnap's).
+ */
+export const PLACED_ON_POINT_TOL = 0.01;
+export function joinPointUnder(state, jointId, exclude = []) {
+    const p = state.joints.get(jointId);
+    if (!p) return jointId;
+    for (const [id, q] of state.joints) {
+        if (id === jointId || exclude.includes(id) || Math.hypot(q.x - p.x, q.y - p.y) >= PLACED_ON_POINT_TOL) continue;
+        return applyLockedSnap(state, jointId, { type: 'joint', targetId: id, pt: { x: q.x, y: q.y }, isLocked: true }, exclude);
+    }
+    return jointId;
 }
 
 /**

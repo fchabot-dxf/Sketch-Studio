@@ -14,7 +14,8 @@ import { isPatternConstraint } from '#core/pattern.js';
 import { editPatternFromLabel } from '#ui/input-handlers/pattern-tool.js';
 import { dragDimensionLabel } from '#core/dimension-seams.js';
 import { startDimensionLabelDrag } from '#ui/input-handlers/dimension-tool.js';
-import { applySnapConstraint } from '#core/snap-constraints.js';
+import { applySnapConstraint, SNAP_JOIN } from '#core/snap-constraints.js';
+import { curvesAtJoint } from '#core/shared-point.js';
 import { findInference } from '#core/inference-engine.js';
 import SettingsManager from '#core/settings-manager.js';
 import { SolverConfig } from '#core/solver-config.js';
@@ -743,6 +744,10 @@ export function handleSelectionPointerMove(e, svg, state) {
 // point is within the snap magnet of it (a point held on a line that cannot reach the target does not snap, and the release adds nothing).
 // The inference stays found at the masked cursor (see below). A pin (the snap point, the inferred position) is a second pull. A free point
 // reaches the cursor: its snap is the cursor's, as before. A BODY / LINE drag takes no snap and no inference (TASK 1032, the group drag's rule).
+// TASK 584 / 1045: a CORNER drag infers nothing and takes a previewed midpoint snap (B-18a): a CLUSTER drag (a corner of coincident joints, an arc by
+// its centre, a centre-point rectangle's centre) or a point two or more curves SHARE (a rectangle's and a Line-tool chain's corner since task 1045, which
+// were clusters of stacked joints before; a polygon's, a slot's). findInference's attached-line tests are for a point ONE line ends on.
+const cornerDrag = (state) => state.drag.type === DRAG_TYPES.CLUSTER || curvesAtJoint(state.shapes, state.drag.id).length >= 2;
 function dragToward(e, svg, state, wpt, atPointer) {
     const iters = atPointer ? (SolverConfig.QUICK_SOLVE || 8) : (SolverConfig.ITERATIONS || 500);
     const pointDrag = state.drag.type === DRAG_TYPES.JOINT || state.drag.type === DRAG_TYPES.CLUSTER;
@@ -834,10 +839,10 @@ function dragToward(e, svg, state, wpt, atPointer) {
         }
     }
 
-    // Normalize the candidate's snap point (some snap objects use .pt, others use x/y or id/targetId). A MIDPOINT snap is pulled to only by a CLUSTER drag (B-18a):
-    // it infers nothing (below), so the previewed midpoint must come through the snap; a single-joint drag gets the midpoint from findInference.
+    // Normalize the candidate's snap point (some snap objects use .pt, others use x/y or id/targetId). A MIDPOINT snap is pulled to only by a CORNER drag (B-18a,
+    // cornerDrag): it infers nothing (below), so the previewed midpoint must come through the snap; a single line end gets the midpoint from findInference.
     let snapPt = null;
-    if (state.activeSnap && activeIsLocked && (state.activeSnap.type === 'joint' || state.activeSnap.type === 'line' || state.activeSnap.type === 'shape' || (state.activeSnap.type === 'midpoint' && state.drag.type === DRAG_TYPES.CLUSTER) || state.activeSnap.type === 'grid' || AXIS_SNAP_TARGETS[state.activeSnap.type])) {
+    if (state.activeSnap && activeIsLocked && (state.activeSnap.type === 'joint' || state.activeSnap.type === 'line' || state.activeSnap.type === 'shape' || (state.activeSnap.type === 'midpoint' && cornerDrag(state)) || state.activeSnap.type === 'grid' || AXIS_SNAP_TARGETS[state.activeSnap.type])) {
         try{
             if (state.activeSnap.pt) snapPt = state.activeSnap.pt;
             else if (typeof state.activeSnap.x === 'number' && typeof state.activeSnap.y === 'number') snapPt = { x: state.activeSnap.x, y: state.activeSnap.y };
@@ -898,7 +903,7 @@ function dragToward(e, svg, state, wpt, atPointer) {
         // cursor as a line being DRAWN (tangent to a circle the start lies on, parallel / perpendicular to a nearby line): the point's
         // motion, not a line of the sketch, so the inferred pose is one the point cannot take (the owner's j3 corner, its side radial, showed
         // a tangent to the arc it sits on). Fusion: to verify; the conservative choice (no inference the point cannot satisfy).
-        if (state.drag.type === DRAG_TYPES.CLUSTER) state.inference = null;
+        if (cornerDrag(state)) state.inference = null;
         else if (pointDrag) {
             const primaryId = state.drag.id;
             const initialPos = state.drag.initial.get(primaryId);
@@ -1123,7 +1128,7 @@ export function handleSelectionPointerUp(e, svg, state) {
                           const exclude = dragged.filter(id => id !== primary);
                           try{ 
                               // Use filtered exclude list (allowPointOnLine defaults to true)
-                              const applied = applySnapConstraint(state, primary, snap, { excludeJoints: exclude });
+                              const applied = applySnapConstraint(state, primary, snap, { excludeJoints: exclude, join: SNAP_JOIN.GLUE });   // TASK 1045: a drag joins an EXISTING point: glued (the Coincident tool's kind), never shared
                               console.log('[selection-tools] applySnapConstraint returned', applied, 'snap:', snap, 'primary:', primary, 'exclude:', exclude);
                               if(applied) dbg.log('selection', '[selection-tools] constraint applied for primary joint', primary);
                           }catch(e){ console.error('[selection-tools] snap error', e); }

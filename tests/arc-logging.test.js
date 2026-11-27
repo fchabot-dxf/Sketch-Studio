@@ -50,8 +50,10 @@
   // Accept pointerDown or active-set or clickIgnored as evidence the tool engaged
   assert(msgs.includes('pointerDown') || msgs.includes('active-set') || msgs.includes('clickIgnored'), 'pointerDown, active-set or clickIgnored should be logged');
   assert(msgs.includes('create-second-point') || msgs.includes('create-start-point'), 'create-second-point or create-start-point should be logged');
-  assert(msgs.includes('create-third-point') || msgs.includes('finalize-success') || msgs.includes('clickIgnored'), 'create-third-point, finalize-success or clickIgnored should be logged');
-  assert(msgs.includes('finalize-success') || msgs.includes('clickIgnored'), 'finalize-success or clickIgnored should be logged as an acceptable outcome');
+  // TASK 1033 (A-1, BUG-351): after the drag set the start, the second press-release places the arc (it was swallowed: 'clickIgnored', the only
+  // outcome these lines used to see; no 'finalize-success' / 'create-third-point' is logged by the tool)
+  assert(collected.some((e) => e.msg === 'pointerUp-result' && e.payload && e.payload.shapes === 1), 'the second release placed the arc (pointerUp-result shapes 1)');
+  assert(state.shapes.length === 1 && state.shapes[0].type === 'arc', 'one arc is drawn');
 
   console.log('arc-logging tests passed ✅');
 })().catch(e => { console.error('arc-logging tests failed ❌', e); process.exit(1); });

@@ -11,7 +11,7 @@ import { makePolygon, clampPolygonSides } from '#core/shapes.js';
 import { applySnapConstraint } from '#core/snap-constraints.js';
 import { clearPreview } from '#ui/preview-manager.js';
 import { hideInput } from '#ui/numeric-input-manager.js';
-import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, snapPoint, MIN_SHAPE_SIZE, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, shownSnap, snapPoint, MIN_SHAPE_SIZE, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 
 const localState = { isDragging: false, dragStartScreen: null };
 // The live box: `sides` / `lockedRadius` are what the user typed in it (null = not typed: the cursor sets the size, state.polygonSides the sides).
@@ -62,7 +62,7 @@ export function setupPolygonTool(svg, state) {
             const end = sizedEnd(center, live.cursor || center);
             if (!(Math.hypot(end.x - center.x, end.y - center.y) > MIN_RADIUS)) { detail.keepOpen = true; return; } // no size yet (cursor still on the centre, none typed): the box stays open
             live.boxOpen = false;
-            createPolygon(state, end); // Enter places it at the typed size, else at the cursor
+            createPolygon(state, end, live.lockedRadius == null ? shownSnap(state) : null); // Enter places it at the typed size, else at the cursor (TASK 1033, X-01: with the corner snap the cursor shows, as the click)
         }
     });   // Esc inside the box is the canvas Esc (input-manager handleEscape -> resetPolygonState)
 }

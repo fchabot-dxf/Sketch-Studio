@@ -5,7 +5,7 @@ import { setupNumericInput, showSingleInput, hideInput, resetLockedDimensions, i
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { applySnapConstraint, onShapeSnap } from '#core/snap-constraints.js';
 import { worldToScreen } from '#ui/coords.js';
-import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, tooSmall, applyLockedSnap, snapPoint, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, tooSmall, applyLockedSnap, shownSnap, snapPoint, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { newShapeId } from '#core/shape-id.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
@@ -174,7 +174,7 @@ export function finalizeCircleFromActive(svg, state){
         const previewPt = state.active.preview && state.active.preview.pt ? state.active.preview.pt : null;
         let r = previewPt ? Math.hypot(previewPt.x - center.x, previewPt.y - center.y) : 0;
         if (circleState.lockedRadius) r = circleState.lockedRadius;
-        return commitCircle(state, r);
+        return commitCircle(state, r, { snapForEnd: shownSnap(state), endPt: previewPt });   // TASK 1033 (X-01): the rim snap the cursor shows, as the click (a typed diameter drops it: applyRimSnap)
     }catch(_){ try{ state.endUndoGroup(); }catch(_){ } state.active = null; return false; }
 }
 

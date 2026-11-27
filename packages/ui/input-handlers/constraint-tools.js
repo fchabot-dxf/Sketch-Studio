@@ -68,6 +68,12 @@ const CONSTRAINT_PRESELECT = Object.freeze({
  * callers of the pick pass it, the click (input-manager toolSnap) and the hover (hover-manager updateHover), so the hover lights what a click
  * takes. null for any other tool (it takes anything).
  */
+/** TASK 1030 (I-05): the constraint tool holds a pick (its first element, or its pick buffer): Undo then cancels that pick, not an older step. */
+export function constraintPickPending(state) {
+    const pc = state && state.pendingConstraint;
+    return !!pc && (!!pc.firstElement || (Array.isArray(pc.selectionBuffer) && pc.selectionBuffer.length > 0));
+}
+
 export function constraintToolPicks(state) {
     const spec = state && CONSTRAINT_PRESELECT[state.currentTool];
     if (!spec) return null;

@@ -513,9 +513,9 @@ function dragUndoLabel(state) {
 }
 function ensureDragUndo(state) {
     if (!state.drag || state.drag.undoLen !== undefined) return;
-    // UX-12: saveState drops the oldest entry at maxHistory and clears redoStack; a no-op drag must lose neither (same pattern as dimension-seams.js)
+    // UX-12: saveState drops the oldest entry at maxHistory; a no-op drag must not lose it (same pattern as dimension-seams.js). The Redo branch its
+    // save cleared comes back with discardSnapshotAt (#core/sketch-state.js, TASK 1030).
     state.drag.undoEvicted = state.history && state.maxHistory && state.history.length >= state.maxHistory ? state.history[0] : null;
-    state.drag.undoRedo = state.redoStack ? [...state.redoStack] : null;
     state.saveState(dragUndoLabel(state));
     state.drag.undoLen = state.history.length;
 }
@@ -529,10 +529,28 @@ function settleDragUndo(state) {
         && [...snap.joints].every(([id, p]) => { const j = state.joints.get(id); return j && j.x === p.x && j.y === p.y; })
         && JSON.stringify(snap.shapes) === JSON.stringify(state.shapes);
     if (same && state.discardSnapshotAt(len)) {
-        if (state.drag.undoEvicted) state.history.unshift(state.drag.undoEvicted);
-        if (state.drag.undoRedo && state.drag.undoRedo.length) state.redoStack.push(...state.drag.undoRedo);
-        if ((state.drag.undoEvicted || (state.drag.undoRedo && state.drag.undoRedo.length)) && typeof state._notifyHistory === 'function') state._notifyHistory();
+        if (state.drag.undoEvicted) { state.history.unshift(state.drag.undoEvicted); state._notifyHistory(); }
     }
+}
+
+/**
+ * TASK 1030 (I-08, I-12): a point / line / shape drag put back where it started (Esc during the drag, another tool picked by its key): the
+ * drag's ONE snapshot is restored and its step dropped (with the Redo branch it cleared, #core/sketch-state.js), so nothing moved and no
+ * undo step is left. A transform-box handle drag has its own put-back (#ui/transform-box.js cancelTransformGesture). Returns true when a
+ * drag was cancelled.
+ */
+export function cancelPointDrag(state) {
+    const d = state && state.drag;
+    if (!d || d.type === DRAG_TYPES.TRANSFORM || d.type === DRAG_TYPES.PAN) return false;
+    const len = d.undoLen;
+    if (len !== undefined && state.history.length === len) {
+        state._restoreSnapshot(state.history[len - 1]);
+        state.discardSnapshotAt(len);
+        if (d.undoEvicted) { state.history.unshift(d.undoEvicted); state._notifyHistory(); }
+    }
+    state.drag = null;
+    resetSelectionState();
+    return true;
 }
 
 /**

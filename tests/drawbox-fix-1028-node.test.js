@@ -179,15 +179,16 @@ await run('B-04 3-point arc slot: typed span 30 is a driving dimension; a formul
   }
 });
 
-// ── B-05: a right-click with a typed length commits that segment and finishes the chain: ONE segment, as without typing ──
-await run('B-05 line: typed 40 then right-click: one segment of 40, the chain finished', async () => {
+// ── B-05: a right-click with a typed length commits that segment and finishes the chain: ONE segment. TASK 1030 (I-17, advisor ruling): without a
+// typed length it finishes the chain and adds NO segment (a right-click never adds a segment to the cursor) ──
+await run('B-05 line: typed 40 then right-click: one segment of 40, the chain finished; untyped: no segment, the chain finished', async () => {
   for (const typed of [true, false]) {
     const app = await openFresh();
     try {
       app.tool('line'); clickW(app, -40, 20); moveW(app, -10, -10);
       if (typed) app.type('40');
       const p = W(app, -10, -10); app.rightClick(p.x, p.y);
-      assert.strictEqual(lines(app).length, 1, `typed=${typed}: one segment (${lines(app).map((s) => lenOf(app, s).toFixed(2))})`);
+      assert.strictEqual(lines(app).length, typed ? 1 : 0, `typed=${typed}: ${typed ? 'one segment' : 'no segment'} (${lines(app).map((s) => lenOf(app, s).toFixed(2))})`);
       if (typed) near(lenOf(app, lines(app)[0]), 40, 1e-6, 'the segment is the typed 40');
       assert.strictEqual(app.state.active, null, `typed=${typed}: the chain is finished`);
       assert.strictEqual(app.state.currentTool, 'line', `typed=${typed}: the Line tool stays`);

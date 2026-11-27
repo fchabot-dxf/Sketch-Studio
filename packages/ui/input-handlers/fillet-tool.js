@@ -454,6 +454,8 @@ function ensureViewListener() {
 
 /** The radius input is open (the check button of the Done layer shows). */
 export function filletInputOpen() { return !!_input; }
+/** TASK 1030 (I-05): a first line is picked or the radius box is open (Undo then cancels that, not an older step). */
+export function filletPickPending() { return !!(_pick || _input); }
 
 /** The open radius box currently parses to a valid positive radius (gates the Done button). */
 export function filletInputValid() { return !!(_input && !_input.invalid); }

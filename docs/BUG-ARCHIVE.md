@@ -2021,7 +2021,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/drag-noop-redo-ux12-1011-node.test.js`
 - **Status:** fixed
 - **Family:** `ui-input`
-- **History:** found in `1000` (`UX-12`), confirmed in `1000B` -> fixed in task `1011`
+- **History:** found in `1000` (`UX-12`), confirmed in `1000B` -> fixed in task `1011`; task `1030` (BUG-322): the hand copy of the Redo branch in `settleDragUndo` is gone, the ONE rule in `packages/core/sketch-state.js` (`discardSnapshotAt` gives back the Redo its save cleared) covers the no-op drag; guard re-run: `drag-noop-redo-ux12-1011-node: ok`
 
 ### BUG-151
 - **Date / turn:** 2026-11-26 (audit ID `UX-22`; fixed in task `1011`)
@@ -3010,7 +3010,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/drawbox-fix-1028-node.test.js` (`B-05`), `tests/drawbox-fix-1028-live.test.js` (`B-05`, desktop 1280x800, real right button)
 - **Status:** fixed
 - **Family:** `ui-input`
-- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-L30 ... FINAL shapes{L[len=40 ...] L[len=1.03 ...]}`. After: `ROW B-L30 ... FINAL shapes{L[len=40 ang=-42.89 -60,10>-30.69,37.22]} cons{distance=40:d1}`. Behaviour change (advisor-approved): after a typed right-click the chain ends, as it already did untyped.
+- **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-L30 ... FINAL shapes{L[len=40 ...] L[len=1.03 ...]}`. After: `ROW B-L30 ... FINAL shapes{L[len=40 ang=-42.89 -60,10>-30.69,37.22]} cons{distance=40:d1}`. Behaviour change (advisor-approved): after a typed right-click the chain ends, as it already did untyped. Task `1030` (BUG-330, advisor ruling): an UNTYPED right-click ends the chain with NO segment (it made one); the rule moved to `line-tool.js rightClickLine`, reached from the one right-button guard in `input-manager.js`.
 
 ---
 
@@ -3097,6 +3097,219 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **History:** found in audit `1026` -> fixed in task `1028`. Probe before: `ROW B-R202 ... | DEV: box closed on a refused Enter`; after: `OK`. `ROW B-C04 ... LIVE ... box=single[80] focus=BUTTON`; after: `focus=dimInput`.
 
+### BUG-320
+- **Date / turn:** 2026-11-27 (audit ID `I-01`; fixed in task `1030`)
+- **Reported by:** audit `1023` (`SWR-025..039`, `RCC-025..039`, phone `tap other tool` / `tap same tool`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-01`: Slot (every variant), a pick made, a value typed, then another tool picked (or Slot re-clicked): the slot is dropped but its value box (`#dimInput "22"`) stays on the canvas over the next tool.
+- **What was wrong:** a tool switch only closed the boxes of a draw that had opened a draw step (`closeDrawStep` fires its cancel listeners); Slot never opens one, so nothing closed its box. Esc worked because `handleEscape` reset every draw tool itself.
+- **Cause:** `packages/ui/input-manager.js` `leaveActiveTool` (it ran `closeDrawStep` only, not the Esc cleanup).
+- **Fix:** ONE cancel for what a tool holds, `cancelActiveWork` (`input-manager.js:1512`), shared by Esc, a tool switch (`leaveActiveTool`, `:1541`) and Undo with a pick pending: it resets every tool's state (`resetDrawingState` closes the Slot boxes). The re-click half is BUG-323 (a re-click keeps the slot and its box).
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-01`, every Slot variant)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `SWR-014 | slot-c2c | boxTyped | ribbon-switch | ... tool=circle boxes=[dimInput("22")]`; after: `SWR-014 | slot-c2c | boxTyped | ribbon-switch | ... tool=circle boxes=[none] ... hist=(U:1,R:1)`.
+
+### BUG-321
+- **Date / turn:** 2026-11-27 (audit ID `I-02`; fixed in task `1030`)
+- **Reported by:** audit `1023` (`ESC-044`, `ESC-070`, `ESC-013`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-02`: ONE Esc inside the Text editor or the Dimension value box closed the box only; a second Esc was needed to leave the tool (owner ruling BUG-105: one Esc cancels and leaves the tool). The 3-point rectangle box had the same fault; task `1028` rebuilt that box (`ESC-004 ... tool=select` on main before this task).
+- **What was wrong:** the box's Esc reaches the canvas Esc through the `liveDimensionCancelled` event, and its listener ran `handleEscape` only for the draw tools with `state.active` and Offset / Fillet. The Text editor's Esc never raised the event.
+- **Cause:** `packages/ui/input-manager.js` `liveDimensionCancelled` listener (a tool list), `packages/ui/input-handlers/text-tool.js` editor keydown.
+- **Fix:** the listener (`input-manager.js:1296`) runs the canvas Esc for EVERY tool but Select (in Select a box's Esc only closes that box: the dimension edit box, a text edited from its menu); the Text editor's Esc raises the same event (`text-tool.js:298`). The box's Ctrl+Z at its opening value raises it with `{ undo: true }` (`numeric-input-manager.js:1069`): the canvas Undo then (BUG-324).
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-02` text, dimension)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-105, BUG-223
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `ESC-006 | text | boxTyped | Esc | ... post=tool=text`, `ESC-010 | dim | boxTyped | Esc | ... post=tool=dim`; after: `ESC-033 | dim | boxTyped | Esc | ... tool=select ... hist=(U:1,R:1)`.
+
+### BUG-322
+- **Date / turn:** 2026-11-27 (audit ID `I-03`; fixed in task `1030`)
+- **Reported by:** audit `1023` (Esc x17, ribbon switch x18, key switch x4, phone x6; `F2-*`, `F4-esc2`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-03`: the 1st click of Line / Rect / Circle / Arc / Polygon / Bezier / Dimension opens an undo step, which clears Redo; Esc or a tool switch drops the step but Redo stays empty: a cancelled draw lost the user's redo history.
+- **What was wrong:** every saved step clears the Redo branch; a step that is later DROPPED (it changed nothing) never gave it back. Two hand copies restored it for one case each (a no-op drag, BUG-150; a refused parameter edit).
+- **Cause:** `packages/core/sketch-state.js` `saveStateForce` / `closeDrawStep` / `discardSnapshotAt`.
+- **Fix:** ONE rule in `sketch-state.js` (`:31`, `:206`): an entry remembers the Redo branch its save cleared (a WeakMap, nothing added to a snapshot), and `closeDrawStep` (a cancelled draw) and `discardSnapshotAt` (a cancelled Dimension placement, a no-op drag, a refused edit, a no-op Shaper Prepare cut edit) give it back when they drop that entry. The two hand copies are deleted (`selection-tools.js settleDragUndo`, `dimension-seams.js applyParameterChange`). Behaviour change (advisor-approved): a no-op Shaper Prepare cut-plan edit no longer wipes Redo either.
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-03`), `tests/drag-noop-redo-ux12-1011-node.test.js` (BUG-150), `tests/parameters-batch.test.js` (a refused edit keeps the stacks)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-150
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `ESC-002 | line | after1st | Esc | base(U:1,R:1) -> ... hist=(U:1,R:0)`; after: `ESC-002 | line | after1st | Esc | base(U:1,R:1) -> ... hist=(U:1,R:1)`.
+
+### BUG-323
+- **Date / turn:** 2026-11-27 (audit ID `I-04`; fixed in task `1030`)
+- **Reported by:** audit `1023` (`RCC-002..042`, phone x6)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-04`: re-clicking the active draw tool's button kept the tool but wiped the half-made draw and the typed box value; the constraint tools kept theirs. Advisor default (one rule): a re-click does nothing.
+- **What was wrong:** `switchToTool` returned early on a same-tool call for the constraint tools only; every other tool ran `leaveActiveTool`, which cancels the draw.
+- **Cause:** `packages/ui/input-manager.js` `switchToTool`.
+- **Fix:** `switchToTool` (`input-manager.js:1577`) returns for ANY same-tool call (re-click or key): the tool keeps what it holds. The activation itself is `armTool` (`:1589`). A Rect / Slot variant changed from the dropdown mid-draw starts the tool again (`tool-ribbon.js:402`, `restartActiveTool`), since the draw was the old shape. This also ends the Rectangular Pattern re-click making a live pattern (`I-13`).
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-04` rect, line, circle, slot)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1023` -> fixed in task `1030`. After: `RCC-006 | rect-2pt | boxTyped | re-click-same | ... boxes=[dualInput(["25","0.6"])] active=rect ... COMPLETION(Enter): dShapes=4`.
+
+### BUG-324
+- **Date / turn:** 2026-11-27 (audit ID `I-05`; fixed in task `1030`)
+- **Reported by:** audit `1023` (`UND` 14 cells, `RED` 15 cells)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-05`: Ctrl+Z partway through a tool: the draw tools cancelled the draw and LEFT the tool; Fillet / Mirror / Dimension / the constraint tools undid the PREVIOUS finished step (an older step undone by a mid-pick Ctrl+Z) and Ctrl+Y redid a step and dropped the pick. Owner ruling: Ctrl+Z with a pick pending cancels the pick / half-made shape and STAYS in the tool, no undo step; the next Ctrl+Z undoes the previous finished step; Ctrl+Y with a pick pending does nothing to the pick.
+- **What was wrong:** the history source knew only "a draw tool with `state.active`" (then Esc, which leaves the tool); a pick held by any other tool fell through to a normal undo / redo.
+- **Cause:** `packages/ui/input-manager.js` `sketchHistory` (the ONE undo / redo of the Design surface, keys and footer buttons).
+- **Fix:** `TOOL_PENDING` (`input-manager.js:1551`) declares what each tool holds between its picks; `sketchHistory` undo (`:1253`) runs `restartActiveTool` (cancel what it holds, clear the selection its picks lit, arm the same tool) when one is pending, else `state.undo()`; redo does nothing while one is pending (BUG-329).
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-05`), `tests/draw-undo-node-runner.js` (`ctrl+z while line active`: the Line tool now stays)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `UND-019 | fillet | after1st | Ctrl+Z | base(U:1,R:1) -> tool=fillet ... hist=(U:0,R:2)` (the older step undone); after: `UND-019 | fillet | after1st | Ctrl+Z | base(U:1,R:1) -> tool=fillet ... hist=(U:1,R:1)`. Behaviour change (owner ruling): Ctrl+Z mid-draw stays in the draw tool (TASK 549 had it end the tool).
+
+### BUG-325
+- **Date / turn:** 2026-11-27 (audit ID `I-06`; fixed in task `1030`)
+- **Reported by:** audit `1023` (`UND-067`, `F2-dim`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-06`: Ctrl+Z while a dimension label was being placed removed the dimension from the document but left `placing=true`; Ctrl+Y brought the half-placed dimension back.
+- **What was wrong:** the undo restored the snapshot under the placement instead of cancelling the placement.
+- **Cause:** `packages/ui/input-manager.js` `sketchHistory` (a placement was not a pending pick).
+- **Fix:** the same rule as BUG-324: a placement is the Dimension tool's pending pick (`TOOL_PENDING[DIMENSION]`), so Ctrl+Z cancels it (`resetDimensionState` drops its birth step, giving Redo back, BUG-322) and stays in the tool.
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-06`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `UND-026 | dim | dimPlacing | Ctrl+Z | ... placing=true ... hist=(U:1,R:1)`, `UZY-026 | dim | dimPlacing | Ctrl+Z,Ctrl+Y | ... placing=true`; after: `UND-026 | dim | dimPlacing | Ctrl+Z | ... placing=false ... hist=(U:1,R:1)`.
+
+### BUG-326
+- **Date / turn:** 2026-11-27 (audit ID `I-08`; fixed in task `1030`)
+- **Reported by:** audit `1023` (`ESC-063`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-08`: Esc during a point drag ended the drag but KEPT the moved position as an undo step (`U:1->2`, `R:1->0`). Owner ruling: Esc during a drag puts everything back, no undo step.
+- **What was wrong:** `handleEscape` set `state.drag = null` without restoring the drag's start (only the transform-box gesture had a put-back).
+- **Cause:** `packages/ui/input-manager.js` `handleEscape`.
+- **Fix:** `cancelPointDrag` (`selection-tools.js:542`): the drag's ONE snapshot is restored and its step dropped (Redo given back, BUG-322). `cancelActiveWork` runs it with `cancelTransformGesture`, so Esc and a tool switch (BUG-328) both put a drag back.
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-08`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `ESC-027 | select-drag | midDrag | Esc | base(U:1,R:1) -> ... hist=(U:2,R:0)`; after: `ESC-027 | select-drag | midDrag | Esc | base(U:1,R:1) -> ... hist=(U:1,R:1)`.
+
+### BUG-327
+- **Date / turn:** 2026-11-27 (audit ID `I-09`; fixed in task `1030`)
+- **Reported by:** audit `1023` (`SWR-063`, screenshot `transform-box-zombie-after-switch-to-circle.png`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-09`: a value typed in the transform box (`#tbox-input` "30"), then the Circle tool from the ribbon: the box stayed on the canvas.
+- **What was wrong:** the tool switch did not close the transform box's typed value.
+- **Cause:** `packages/ui/input-manager.js` `leaveActiveTool`.
+- **Fix:** `cancelActiveWork` closes it (`transform-box.js closeTransformInput`, exported for it).
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-live.test.js` (`I-09`, desktop 1280x800)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `SWR-027 | transform | transformBoxTyped | ribbon-switch | ... tool=circle boxes=[tboxInput("30")]`; after: `SWR-027 | transform | transformBoxTyped | ribbon-switch | ... tool=circle boxes=[none]`.
+
+### BUG-328
+- **Date / turn:** 2026-11-27 (audit ID `I-12`; fixed in task `1030`)
+- **Reported by:** audit `1023` (`SWK-063`, `SWK-064`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-12`: a tool key during a drag (a point, a transform handle) switched the tool with the drag still live until the release.
+- **What was wrong:** the tool switch did not touch `state.drag`.
+- **Cause:** `packages/ui/input-manager.js` `leaveActiveTool`.
+- **Fix:** `cancelActiveWork` (run by `leaveActiveTool`) first puts the drag back (`cancelTransformGesture`, `cancelPointDrag`, BUG-326), then the switch.
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-12`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `SWK-027 | select-drag | midDrag | key-switch | ... tool=circle ... drag=joint ... hist=(U:2,R:0)`, `SWK-028 | transform | transformDrag | key-switch | ... drag=transform`; after: `SWK-027 ... tool=circle ... drag=no ... hist=(U:1,R:1)`, `SWK-028 ... drag=no`.
+
+### BUG-329
+- **Date / turn:** 2026-11-27 (audit ID `I-15`; fixed in task `1030`)
+- **Reported by:** audit `1023` (`RED-011`, `RED-012`, `RED-041`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-15`: Ctrl+Y with nothing to redo cancelled a half-made 3-point rectangle / Bezier.
+- **What was wrong:** `state.redo` ran `closeDrawStep` before its empty-Redo check.
+- **Cause:** `packages/ui/input-manager.js` `sketchHistory` redo (it called `state.redo` mid-draw).
+- **Fix:** with a pick pending (`toolPickPending`, BUG-324) the history source's redo does nothing (`input-manager.js:1253`).
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-15`, `I-05` Ctrl+Y)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `RED-016 | bezier | after1st | Ctrl+Y | ... active=no ... hist=(U:1,R:0)`; after: `RED-016 | bezier | after1st | Ctrl+Y | ... active=bezier ... hist=(U:2,R:0)` (the draw's own step kept).
+
+### BUG-330
+- **Date / turn:** 2026-11-27 (audit ID `I-17`; fixed in task `1030`)
+- **Reported by:** audit `1023` (`RCK` 31 cells; same cause as `B-05`, BUG-314)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-17`: a right-click on empty canvas in a draw tool acted as a left click: it started the shape, placed the next point or completed it (rect `shapes 8->12`, polygon `8->20`).
+- **What was wrong:** only Select / Dimension consumed the right press (for the context menu); every other tool got it as a left press, and its release as a left release.
+- **Cause:** `packages/ui/input-manager.js` `handlePointerDown` / `handlePointerUp`.
+- **Fix:** `rightPressIgnored` (`input-manager.js:544`): in every tool but Select, a right press and its release reach no tool (after the Select / Dimension menu check). Line keeps its ruling in ONE place, `line-tool.js:130 rightClickLine`: a typed length is committed, then the chain ends; never a segment to the cursor (the `drawing-tools.js` branch is gone). Behaviour change (advisor ruling): an UNTYPED Line right-click ends the chain with NO segment (task 1028 made one); the constraint / modify tools no longer take a pick from a right press either.
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-17`, every draw tool and variant), `tests/interrupts-fix-1030-live.test.js` (`I-17`, desktop real right button), `tests/drawbox-fix-1028-node.test.js` (`B-05`, the untyped half now expects no segment)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-314
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `RCK-005 | rect-2pt | after1st | right-click | DIFF[... shapes:8->12 ...]`; after: `RCK-005 | rect-2pt | after1st | right-click | ... active=rect ... shapes=8`.
+
+### BUG-331
+- **Date / turn:** 2026-11-27 (audit ID `I-18`; fixed in task `1030`)
+- **Reported by:** audit `1023` (`RCK-066`, `RCK-067`, `PNF-067`, `P9B-067`, `PNP-067`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-18`: Dimension, a pick or a placement pending, then a right-click on empty canvas: the pick / placement was dropped. Advisor default: Dimension keeps it across a right-click and a panel click, like the other tools.
+- **What was wrong:** the right press on empty canvas reached the Dimension tool as a left press (BUG-330).
+- **Cause:** `packages/ui/input-manager.js` `handlePointerDown`.
+- **Fix:** the BUG-330 rule (`rightPressIgnored`); the footer click already kept the pick.
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-18`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `RCK-046 | dim | after1st | right-click | DIFF[hasActive:true->false ...]`; after: `RCK-035 | dim | after1st | right-click | ... active=dim`.
+
+### BUG-332
+- **Date / turn:** 2026-11-27 (audit ID `I-19`; fixed in task `1030`)
+- **Reported by:** audit `1023` (112 cells: middle pan, footer, Sketches browser, Parameters window)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `I-19`: with a value box open, a middle-drag pan or a click on the footer bar took the keyboard focus out of the box (`input -> body`): Enter then did nothing. Advisor default: a pan or a footer click gives the focus back to the box; a click INTO the Parameters window or the Sketches browser keeps the focus there, and the next canvas press gives it back.
+- **What was wrong:** the document pointerdown handler gave the canvas the focus on every press outside a text field, and nothing gave it back to the box.
+- **Cause:** `packages/ui/input-manager.js` document `pointerdown` listener.
+- **Fix:** the same listener (`input-manager.js:1188`) remembers the value box being typed in (`.dim-input`, `.sk-dual-input input`); a press into `FOCUS_KEEPING_PANELS` (`:541`) keeps the focus there; a middle press, a press outside the canvas, or the first canvas press after a panel visit gives the focus back to that box once the press is done (when it is still shown). A tool's own canvas press is left to the tool.
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-live.test.js` (`I-19`, desktop 1280x800)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `PAN-009 | circle | boxTyped | middle-pan | ... focus=body.sk-has-footer || COMPLETION(Enter): dShapes=0`; after: `PAN-009 | circle | boxTyped | middle-pan | ... focus=#dimInput || COMPLETION(Enter): dShapes=1`.
+
+### BUG-333
+- **Date / turn:** 2026-11-27 (audit ID `I-21`; fixed in task `1030`)
+- **Reported by:** audit `1023` (phone 390x844, pinch 8 + pan 9 cells)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab, phone)
+- **Report:** `I-21`: the first finger of a two-finger pinch / pan acted as a press: it started a Line, completed a Rect / Polygon / Bezier, trimmed, picked in Coincident / Dimension, before the second finger made it a pinch.
+- **What was wrong:** the canvas handled a finger's press at once; the second finger only stopped LATER presses. The second finger's own release then reached the tool as a click.
+- **Cause:** `packages/ui/input-manager.js` svg `pointerdown` / `pointerup` listeners.
+- **Fix:** a finger's press is held back (`input-manager.js:1044`) until it is the press of ONE finger: it lifts, leaves the `LONG_PRESS_SLOP` circle, or `LONG_PRESS_MS` pass (the hold's own window, `#ui/long-press.js`; no new number). A second finger in that time drops the held press; the pinch fingers' releases go to the pan / zoom only. The finger is known to the pinch at once. A long press is unchanged (the held press runs first, then the hold decides; a finger on a transform-box handle is never a hold).
+- **Task id(s):** `1030`
+- **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
+- **Guarding test file(s):** `tests/interrupts-fix-1030-live.test.js` (`I-21`, phone 390x844, real touch)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found in audit `1023` -> fixed in task `1030`. Probe before: `PH-003 | rect-2pt | after1st | pinch zoom (2 fingers) | ... active=no shapes=12`; after: `PH-003 | rect-2pt | after1st | pinch zoom (2 fingers) | ... active=rect shapes=8`.
+
 ---
 
 ## Family index
@@ -3120,7 +3333,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 
@@ -3136,4 +3349,4 @@ Audit-only findings live in their dedicated audit documents rather than being du
 - [docs/FILES-AUDIT-1024.md](FILES-AUDIT-1024.md) — Files and documents audit (task `1024`: Save / Open / tabs / import / templates / export / file dialog; rows `F-01`..).
 - [docs/DESIGN-RUN-AUDIT-1016.md](DESIGN-RUN-AUDIT-1016.md), [docs/DESIGN-RUN-AUDIT-1017.md](DESIGN-RUN-AUDIT-1017.md) — Real-design audits, parts A-D (tasks `1016`, `1017`; rows `R1-*` / `R2-*`; fixes in tasks `1018`-`1021`; BUG-190..BUG-199 from task `1018`: R1-01, R1-02, R1-03, R1-05, R1-07, R1-12, R2-01, R2-03, R2-05, R2-13).
 - [docs/DRAWBOX-AUDIT-1026.md](DRAWBOX-AUDIT-1026.md) — Draw-box audit (task `1026`; every typed size input of the drawing and modify tools, `425` live cells, rows `B-01`..`B-19`; B-01..B-09, B-13, B-14, B-15, B-18, B-19 fixed in task `1028` as BUG-310..BUG-319).
-- [docs/INTERRUPTS-AUDIT-1023.md](INTERRUPTS-AUDIT-1023.md) — Interruptions audit (task `1023`: every ribbon tool x Esc / tool switch / re-click / Ctrl+Z / Ctrl+Y / right-click / zoom / pan / panel click / Delete / blur / phone touch; findings `I-01`..`I-23`; audit-only, nothing entered in the table above).
+- [docs/INTERRUPTS-AUDIT-1023.md](INTERRUPTS-AUDIT-1023.md) — Interruptions audit (task `1023`: every ribbon tool x Esc / tool switch / re-click / Ctrl+Z / Ctrl+Y / right-click / zoom / pan / panel click / Delete / blur / phone touch; findings `I-01`..`I-23`; I-01..I-06, I-08, I-09, I-12, I-15, I-17..I-19, I-21 fixed in task `1030` as BUG-320..BUG-333; I-07 fixed before it (task `1020`), I-20 / I-22 and the 3-point rectangle half of I-02 by task `1028`; the 1030 guards cover them).

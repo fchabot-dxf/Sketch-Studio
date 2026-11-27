@@ -27,6 +27,9 @@ export function releaseDragTargets(state, drag) {
 // ~539 KB heap. At depth 100 that is ~28 MB typical, ~54 MB worst (history + redo together never exceed the depth).
 export const HISTORY_DEPTH = 100;
 
+// TASK 1030 (I-03): history entry -> the Redo branch its save cleared (a WeakMap: an entry carries nothing extra into a snapshot or the journal).
+const clearedRedo = new WeakMap();
+
 export function createSketchState(engine, view) {
   const state = {
     // SKETCH-1a: the sketch container — state.sketches + activeSketchId (default single 'Sketch 1'). ADDITIVE; nothing
@@ -191,14 +194,22 @@ export function createSketchState(engine, view) {
     // Force push a snapshot regardless of grouping (used to capture pre-group state)
     // TASK 549: `snapshot` (optional) = a state captured EARLIER with captureUndoSnapshot(), pushed as this step's "before" instead of the live one.
     saveStateForce: function(label, snapshot, opts){
-      this.history.push(this._stamp(snapshot || this._captureSnapshot(!!(opts && opts.host)), label));
+      const entry = this._stamp(snapshot || this._captureSnapshot(!!(opts && opts.host)), label);
+      if(this.redoStack.length) clearedRedo.set(entry, this.redoStack.slice()); // TASK 1030 (I-03): what this save clears, given back if the step is dropped
+      this.history.push(entry);
       if(this.history.length > this.maxHistory) this.history.shift();
       this.redoStack.length = 0; // BURN-DOWN-2: any new saved state invalidates the redo branch
       this._notifyHistory();
     },
+    // TASK 1030 (I-03): THE rule for a dropped step (a cancelled draw, a cancelled Dimension placement, a no-op drag, a refused edit): a step
+    // that is dropped changed nothing, so it gives back the Redo branch its save cleared (closeDrawStep and discardSnapshotAt call this).
+    _giveBackRedo: function(entry){
+      const redo = entry && clearedRedo.get(entry);
+      if(redo && this.redoStack.length === 0) this.redoStack.push(...redo);
+    },
     discardSnapshotAt(len) {
       if (this.history.length !== len) return false;
-      this.history.pop();
+      this._giveBackRedo(this.history.pop());
       this._notifyHistory();
       return true;
     },
@@ -266,6 +277,7 @@ export function createSketchState(engine, view) {
       this._undoGroupInfo = null; this._undoGroupActive = false; this._undoGroupDepth = 0;
       this.history.splice(info.startIndex);
       this._restoreSnapshot(start);
+      this._giveBackRedo(start); // TASK 1030 (I-03): a cancelled draw leaves Redo as it was
       this._notifyHistory();
       for(const fn of (this._drawCancelListeners || [])) fn();
       return 'cancelled';

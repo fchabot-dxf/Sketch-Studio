@@ -153,7 +153,7 @@ export function mergeTabBuffers(stored, mine, base, app) {
  *     openFile, a Drive conflict reload, a tab switch / new tab / close). `reason`: 'restore' | 'open' | 'new' | 'file' | 'conflict' |
  *     'switch'. The host re-solves / repaints and applies ITS sidecar from `hosts` (or resets its own state to defaults when
  *     `hosts[hostName]` is absent: a design without a sidecar must not inherit the previous one). On 'switch' the tab's own view has
- *     already been put back on state.view. `removedVcarves` (TASK 741): #core/document.js deserializeDocument's count of the V-carve regions an old
+ *     already been put back on state.view. `damagedShapes` (BUG-305): the shapes of a loaded stored design / file that name a missing joint (the buffer shows its one notice). `removedVcarves` (TASK 741): #core/document.js deserializeDocument's count of the V-carve regions an old
  *     document carried and that were not loaded (0 for any other document); Shaper says so once in Prepare, the other hosts ignore it.
  *   showDesign(): OPTIONAL (TASK 706) — how this host shows its Design view; called before onRestored when the reason is one of OPENING_REASONS (a design the
  *     user opened is shown in Design, from any stage). Omit it and the stage is never changed by a restore (Trace: its own applyHost decides).
@@ -282,6 +282,8 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   const restored = (out) => {
     held = newerSidecar(out.hosts); // before the host reads it and before anything of this document is written
     if (held) out = { ...out, newer: true };
+    // BUG-305 (F-105): a shape of a stored design / a file that names a joint it does not have cannot be drawn: say so once, here, where every load ends
+    if (out.damagedShapes > 0) showNotification(`${out.damagedShapes === 1 ? '1 shape' : `${out.damagedShapes} shapes`} in this design ${out.damagedShapes === 1 ? 'was' : 'were'} damaged and could not be loaded`, 'warning');
     // TASK 845: THE document read gives every text its letters (#core/document.js never stores them): at once when its font is loaded, else when it has
     // downloaded (the canvas draws them on its next frame). Before the host's onRestored, so a host reading the drawing finds them when it can.
     syncTextOutlines(state, { notify: showNotification }).then(null, (err) => showNotification(`A text's font could not be loaded: ${err.message}`, 'error'));
@@ -326,7 +328,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
   /** Snapshot of the open tabs + active working state so page refresh / crash reopens what was open (the shared working buffer, NOT a saved
    *  file). null = only an empty Untitled is open (nothing to keep). */
   function captureBufferSnapshot() {
-    if (tabList.length === 1 && !boundId && !activeContent()) return null;
+    if (tabList.length === 1 && !boundId && !fileHome && !activeContent()) return null; // BUG-306 (F-03 / F-32): a design opened from a FILE is kept like an edited one (it is not an empty Untitled)
     return {
       v: 2,
       activeKey: active.key,
@@ -394,7 +396,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     if (reason !== 'conflict') otherSessions = {}; // a Drive conflict reloads the SAME tab: the other apps' sessions stay with it
     bindStored(design);
     if (sameTab && sameTab.view && state.view) Object.assign(state.view, sameTab.view); // TASK 766: the same tab keeps its view (SAME_TAB_REASONS)
-    const out = restored({ restored: true, hosts: result.hosts, name: design.name, reason, removedVcarves: result.removedVcarves });
+    const out = restored({ restored: true, hosts: result.hosts, name: design.name, reason, removedVcarves: result.removedVcarves, damagedShapes: result.damagedShapes });
     if (sameTab && session) session.restore(sameTab.session); // and its stage selection / view (as a tab switch brings them back)
     resetHostBaseline(docHasOwnHost(result.hosts));
     lastSig = sigNow(); // TASK 684: the baseline is taken AFTER the host applied its sidecar (or its defaults when the design has none): showing a design never writes it
@@ -613,7 +615,7 @@ export function createDocumentBuffer({ state, app, hostName, getHostData, sessio
     if (!result.ok) throw new Error(`This file could not be opened: ${result.reason}`);
     boundId = null; name = p.name; saveOk = true; fileHome = p.file;
     foreign = splitHosts(result.hosts); otherSessions = {};
-    const out = restored({ restored: true, hosts: result.hosts, name, reason: 'file', removedVcarves: result.removedVcarves });
+    const out = restored({ restored: true, hosts: result.hosts, name, reason: 'file', removedVcarves: result.removedVcarves, damagedShapes: result.damagedShapes });
     resetHostBaseline(docHasOwnHost(result.hosts));
     lastSig = sigNow(); emptySig = fullSigNow(); // taken AFTER the host applied the file's sidecar: showing the file is not a change
     return out;

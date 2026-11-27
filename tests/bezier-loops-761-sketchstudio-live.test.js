@@ -55,7 +55,10 @@ try {
   out.svgCubic = (svg.match(/ C /g) || []).length;
   assert.strictEqual(out.svgCubic, 1, '2: the SVG writes the bezier as one cubic C');
   const dxf = await exportAs('dxf');
-  out.dxf = ['LINE', 'SPLINE'].map((k) => (dxf.match(new RegExp('\\r?\\n' + k + '\\r?\\n', 'g')) || []).length);
-  assert.deepStrictEqual(out.dxf, [3, 1], '2: the DXF writes 3 LINEs and 1 SPLINE');
+  // TASK 1043 (BUG-402): the outline's 3 lines are ONE open LWPOLYLINE (4 vertices) beside the bezier's SPLINE (an LWPOLYLINE holds no cubic)
+  out.dxf = ['LINE', 'LWPOLYLINE', 'SPLINE'].map((k) => (dxf.match(new RegExp('\\r?\\n' + k + '\\r?\\n', 'g')) || []).length);
+  assert.deepStrictEqual(out.dxf, [0, 1, 1], '2: the DXF writes the 3 lines as 1 LWPOLYLINE and the bezier as 1 SPLINE');
+  const poly = /\r?\nLWPOLYLINE\r?\n[\s\S]*?\r?\n90\r?\n(\d+)\r?\n70\r?\n(\d+)\r?\n/.exec(dxf);
+  assert.deepStrictEqual(poly && [poly[1], poly[2]], ['4', '0'], '2: the LWPOLYLINE: 4 vertices, open (the SPLINE closes the outline)');
   console.log(`bezier-loops-761-sketchstudio-live: ALL CHECKS PASSED ${JSON.stringify({ svgCubic: out.svgCubic, dxf: out.dxf, tint: out.tint[0] })}`);
 } finally { await cdp.close(); fs.rmSync(dlDir, { recursive: true, force: true }); }

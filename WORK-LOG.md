@@ -18665,3 +18665,38 @@ The plan's Arc migration (docs/INPUT-UNIFY-PLAN-1031.md 5.2 item 2): both Arc va
 - **Advisor's 6 drawings after** (`.evidence/1040/measure.mjs`): rect `path 1`, line chain `path 1`, rect + line `path 2` (1 closed, 1 open), two rects `path 2` (2 closed), slot `path 1`, filleted rect `path 1`; no `<line>` or `<polygon>`.
 - **DXF (BUG-402, open):** `buildDXF` writes one LINE / ARC / SPLINE / CIRCLE per shape and never an LWPOLYLINE: `DXF of one closed rectangle (4 lines): {"LINE":4}` (`.evidence/1040/sample-output.txt`). Stopped there, as the task said.
 - **Gate:** `npm run gate:quick` before the change: `GATE tier=quick jobs=quick=22 files=684 pass=684 fail=0`; after: `GATE tier=quick jobs=quick=22 files=685 pass=685 fail=0`.
+
+## TURN 1043
+- **Task:** two items. (1) BUG-402: SketchStudio "Download DXF" wrote every curve as its own entity (one closed rectangle `{"LINE":4}`). (2) `tests/arc-session-1039-live.test.js` hit the 90 s file limit under merge-gate load: split it.
+- **Item 1, `apps/sketchstudio/ui/export-manager.js`:** the decomposition task 1040 wrote inline in `buildSVG` (findLoops / findOpenChains / chainWalk on `exportedShapes`, every curve in one place) is now ONE helper, `exportOutlines(state)`. `buildSVG` and `buildDXF` both read it; there is no second walk. Each step's ends are its nodes' points (`buildNodeMap`), so two curves meeting at a node are written at the very same coordinates. `buildSVG` output is byte-identical: 453 fixture exports (151 drawings x off / Invert Y / arcApprox) before and after, `.evidence/1043/svg-before.json` = `svg-after.json`, md5 `bc430291074ba730cef38ee91814d65d` both.
+  - What the DXF writes now:
+    - each closed outline: ONE closed `LWPOLYLINE` (`70` = 1). An arc is a bulge `42` = tan(sweep / 4); its sign is the way the walk turns in the DXF's Y-up plane, from the one `arcSweepInfo`.
+    - each open stroke of 2+ curves: ONE open `LWPOLYLINE` (`70` = 0).
+    - a circle: `CIRCLE`. A lone line or arc: `LINE` / `ARC` (advisor ruling b).
+    - Y-up as before (BUG-301); construction stays out.
+  - Bezier (advisor ruling a, a declared limit in BUG-402): an `LWPOLYLINE` holds no cubic, so with arcApprox off the bezier stays its exact `SPLINE` (today's TASK 761 entity). Each run of lines / arcs around it is one open `LWPOLYLINE`, read from just after a bezier so no run wraps. The SPLINE's end points and the neighbouring vertices are the same node points, so they are written as the same text (asserted).
+  - With arcApprox: arcs and beziers are sampled (arcSeg) into the polylines with no bulge, so every closed outline is one closed `LWPOLYLINE`. A circle is one closed `LWPOLYLINE` of its points.
+  - Bulge decimals: `precision` + log10(chord / (4 b^2)). A bulge's error moves the centre by about chord x error / (4 b^2). At the coordinates' 6 decimals, the nearly flat 17188 mm arc of `angle-dimension/owner-trapezoid-angle.json` came back off; the D-4 sweep caught it.
+  - Round trip: `#core/dxf-import` already reads `LWPOLYLINE` bulges (`bulgeSegment`), so no STOP and no importer change.
+- **Behaviour changes for SketchStudio DXF users:**
+  - A closed outline of lines / arcs is now one closed `LWPOLYLINE`; it was one `LINE` / `ARC` per curve.
+  - A chain of 2+ joined open curves is one open `LWPOLYLINE`; a branching chain gives one per stroke.
+  - An outline with a bezier is the `SPLINE` + open `LWPOLYLINE`(s).
+  - With arcApprox, a sampled arc / bezier / circle is now vertices inside a polyline; it was arcSeg `LINE`s each.
+  - Entity order is now the finder's (outlines, then the open chains); it was shape order.
+  - Unchanged: a lone line / arc / bezier / circle entity, the ARC / SPLINE / CIRCLE group codes, Y-up, scale, precision of coordinates, construction left out.
+  - For SVG users: none in the 453 fixture exports. In principle, an open chain whose coincident joints are not at the same point (unsolved) is now written through the node's point; the closed outlines already were.
+- **Item 2:** `tests/arc-session-1039-live.test.js` became `tests/arc-session-1039-live-runner.js` (NOT a test: `runArcSession({ width, height, tag, variants })`, each variant's cases and its end checks guarded by `variants`, a browser tag per file). It is called by three files: `arc-session-1039-desktop-centre-live.test.js`, `arc-session-1039-desktop-3pt-live.test.js` and `arc-session-1039-phone-live.test.js` (both variants).
+  - The cases and assertions are unchanged: original alone `41` ok checks; split `12 + 12 + 17 = 41`, the same check names (`diff` of the sorted names: identical).
+  - Times alone, while a merge gate held the CPU lock: original `90s`; desktop-centre `27.2s`, desktop-3pt `25.1s`, phone `39.8s`.
+  - The runner sits under `tests/`, not `tests/helpers/`: a helpers change makes the merge gate run every live test.
+- **Tests:** NEW `tests/dxf-loops-1043-node.test.js`:
+  - D-1: the svg-loops-1040 drawings, drawn with the real tools in the node kit. Checks entity kinds / counts, closed / open flags, vertex counts, the bulges (tan 22.5 deg, tan 45 deg) and their sign (= the outline's turn), every curve exactly once, Y-up, and "Invert Y" leaving the DXF alone. The bezier's SPLINE ends equal the LWPOLYLINE ends as text.
+  - D-2: arcApprox: no ARC / SPLINE / CIRCLE / bulge, every closed outline one closed polyline.
+  - D-3: the round trip through `importDxf`: the same curves; the arcs' centre, radius and direction; the same loops.
+  - D-4: the 151 fixture drawings of bezier-loops-761, every curve once and the round trip (`151 drawings, 97 LWPOLYLINEs, 28 closed`).
+  - Fail-first, with the old `export-manager.js` from origin/main swapped in: `dxf-loops-1043-node: 1 passed, 9 failed` (`.evidence/1043/fail-first.txt`; the 1 pass is D-3 with nothing to check, now guarded). After: `dxf-loops-1043-node: 11 passed, 0 failed`.
+  - Updated: `export-roundtrip-1027-node` (the 3-line chain is `LWPOLYLINE: 1`), `bezier-loops-761-node` (`studioDxf` facet changed on purpose: `no-bezier drawings bit-identical: 160`), `bezier-loops-761-sketchstudio-live` (the real Export button's DXF: `{"dxf":[0,1,1]}` = 0 LINE, 1 LWPOLYLINE of 4 open vertices, 1 SPLINE).
+- **Found (BUG-420, open):** the Export view's "DXF version" select (R12 default / R2000) is passed as `dxfVersion` but `buildDXF` never reads it, and the file has no HEADER. The file now holds R2000 `LWPOLYLINE`s while the select says R12.
+- **Evidence:** `.evidence/1043/{rect-filleted,slot,two-rects-and-circle,bezier-loop}.dxf`, for an advisor Fusion import (Fusion compatibility unverified). Read back by the app's import: filleted rect `{"LWPOLYLINE":1}` flag `1`, bulge `-0.41421356`, import `{"line":4,"arc":1}`, loops 1. Slot: bulges `-1.0000000` x2, import `{"line":2,"arc":2}`. Bezier loop `{"LWPOLYLINE":1,"SPLINE":1}`, import `{"line":2,"bezier":1}`, loops 1.
+- **Gate:** `npm run gate:quick` (after merging origin/main: already up to date): `GATE tier=quick jobs=quick=22 files=669 pass=669 fail=0 deferred=17 elapsed=118s`; the 17 are timing tests DEFERRED because the advisor's gate:merge held the lock. Live, one at a time: bezier-loops-761-sketchstudio-live, bezier-loops-761-dxf-tabs-live, files-1027-live, import-groups-751-live, sketch-import, notices-1001-live, groups-sketchstudio-desktop-756-live, groups-sketchstudio-phone-756-live, close-path-760-sketchstudio-live, shared-header-live, trace-projects, and the 3 new arc-session files: all exit 0.

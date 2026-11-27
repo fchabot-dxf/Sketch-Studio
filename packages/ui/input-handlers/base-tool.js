@@ -93,7 +93,8 @@ export function safeUpdatePreview(state, type, jointIds, pt, opts) {
 
 /**
  * TASK 596: the ONE "show the tool's boxes on the first click" path of the creation tools (rect, circle, polygon). A tool declares its box
- * ({ dual: { kind, labels, separator, quantities } } for two fields, { single: { field, quantity } } for one; TASK 769: a field's quantity is 'length'
+ * ({ dual: { kind, labels, separator, quantities } } for two fields, { single: { field, quantity, refuse? } } for one (TASK 1028: `refuse(v)` -> why | '' is the
+ * field's own value rule, numeric-input-manager boxRefusal); TASK 769: a field's quantity is 'length'
  * (the default: shown and typed in the document unit), 'angle' or 'count') and calls these:
  * openCreationBoxes on the first click (the boxes show at once, beside the cursor, the first field focused: a digit typed now goes in it),
  * followCreationBoxes on every move (the box follows the cursor and each field shows the live value unless the user typed in it),
@@ -104,7 +105,7 @@ export function openCreationBoxes(e, box, values) {
     const x = e.clientX + 15, y = e.clientY + 15;
     const focus = e.pointerType !== 'touch';
     if (box.dual) showDualInput(x, y, values[0], values[1], { ...box.dual, focus });
-    else showSingleInput(x, y, values[0], box.single.field, null, focus, box.single.quantity);
+    else showSingleInput(x, y, values[0], box.single.field, null, focus, box.single.quantity, box.single.refuse || null);   // TASK 1028 (B-07): a box may declare its own value rule
 }
 export function followCreationBoxes(e, values) {
     updateInputPosition(e.clientX, e.clientY);

@@ -11,7 +11,9 @@ import { ConstraintManager } from '#core/constraint-manager.js';
 import { findNearbyJoint } from '#core/joints.js';
 import { findInference } from '#core/inference-engine.js';
 import { screenToWorld, worldToScreen } from '#ui/coords.js';
-import { hideInput, setupNumericInput } from '#ui/numeric-input-manager.js';
+import { hideInput, setupNumericInput, refuseLiveValue, cantSetText } from '#ui/numeric-input-manager.js';
+import { quantityText } from '#core/parameters.js';
+import { docUnit } from '#core/settings-manager.js';
 import { updatePreview, clearPreview } from '#ui/preview-manager.js';
 import { checkDragThreshold, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, MIN_SHAPE_SIZE, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { newShapeId as mintShapeId } from '#core/shape-id.js';
@@ -20,7 +22,7 @@ import SettingsManager from '#core/settings-manager.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
 // TASK 597: lockedLength / lockedAngle (degrees) are what the user TYPED in the length + angle boxes (null = the cursor sets it)
-let lineState = { lockedLength: null, lockedAngle: null, lengthExpression: null, lengthName: null, lengthAssign: null };   // TASK 876 / 1013: expression / name / user-param assign from typed length box
+let lineState = { lockedLength: null, lockedAngle: null, lengthExpression: null, lengthName: null, lengthAssign: null, angleAssign: null };   // TASK 876 / 1013: expression / name / user-param assign from typed length box; TASK 1028 (B-13): `param = value` typed in the angle box
 // the boxes shown since the segment's first click (base-tool's shared creation-box path); `cursor` = the last world point, `screen` = the last pointer
 const live = { boxOpen: false, cursor: null, screen: null };
 const BOX = { dual: { kind: 'line', labels: ['L', '°'], separator: '∠', quantities: ['length', 'angle'] } };
@@ -41,12 +43,12 @@ function lockedEnd(spt, pt) {
     return { x: spt.x + Math.cos(ang) * len, y: spt.y + Math.sin(ang) * len };
 }
 function openLineBoxes(e) {   // e: the click (or { clientX, clientY } where the last pointer was)
-    lineState.lockedLength = null; lineState.lockedAngle = null; lineState.lengthExpression = null; lineState.lengthName = null; lineState.lengthAssign = null;
+    lineState.lockedLength = null; lineState.lockedAngle = null; lineState.lengthExpression = null; lineState.lengthName = null; lineState.lengthAssign = null; lineState.angleAssign = null;
     live.boxOpen = true; live.cursor = null; live.screen = { x: e.clientX, y: e.clientY };
     openCreationBoxes(e, BOX, [0, 0]);
 }
 function closeLineBoxes() {
-    lineState.lockedLength = null; lineState.lockedAngle = null; lineState.lengthExpression = null; lineState.lengthName = null; lineState.lengthAssign = null;
+    lineState.lockedLength = null; lineState.lockedAngle = null; lineState.lengthExpression = null; lineState.lengthName = null; lineState.lengthAssign = null; lineState.angleAssign = null;
     if (live.boxOpen) hideInput();
     live.boxOpen = false; live.cursor = null; live.screen = null;
 }
@@ -57,6 +59,37 @@ function redrawLinePreview(state) {
     const inferredPt = state.activeInference && state.activeInference.pos;   // the inferred direction a typed length runs along
     const pt = lockedEnd(spt, inferredPt || live.cursor || spt);
     safeUpdatePreview(state, 'line', [state.active.start], pt, { lockedLength: lineState.lockedLength || undefined });
+}
+
+/** TASK 1028 (B-06): THE merge rule of a committed segment's end, the click's and Enter's: the end joint is made coincident with an existing joint
+ *  within 0.01 of it (a typed end 0.3 mm from an unrelated point is never merged with it: Enter used 0.5 and the solver then moved that point). */
+const END_MERGE_TOL = 0.01;
+function mergeEndWithNearby(state, endId, endPt, startId) {
+    const nearby = findNearbyJoint(state.joints, endPt, startId, END_MERGE_TOL);
+    if (nearby && nearby !== endId) {
+        addConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [endId, nearby] });
+        dbg.log('line-tool', '[line-tool] auto coincident to nearby', { endId, nearby });
+    }
+}
+/** The typed length of the segment startId -> endId becomes its driving dimension (THE constraint path: a redundant size is placed as a reference), and
+ *  TASK 1028 (B-13) a `param = value` typed in the angle box updates that parameter. TASK 1028 (B-08): a typed length the sketch cannot hold (it came in as
+ *  a reference measuring another value: the end is held by a locked point) is not silently dropped: returns the refusal (the edit box's wording), '' = kept. */
+function addTypedSizes(state, startId, endId) {
+    if (lineState.lockedAngle !== null && lineState.angleAssign) applyLiveAssign(state, lineState.angleAssign);
+    if (lineState.lockedLength === null) return '';
+    if (lineState.lengthAssign) applyLiveAssign(state, lineState.lengthAssign);
+    const c = ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [startId, endId], value: lineState.lockedLength, expression: lineState.lengthExpression, ...(lineState.lengthName ? { name: lineState.lengthName } : {}) }, { source: 'line' });
+    const a = state.joints.get(startId), b = state.joints.get(endId);
+    const held = !c || !(c.isDriven || c.driven) || !a || !b || Math.abs(Math.hypot(b.x - a.x, b.y - a.y) - lineState.lockedLength) <= 1e-6;
+    return held ? '' : cantSetText(quantityText(lineState.lockedLength, docUnit(), 'unit'), 'the sketch is over constrained');
+}
+/** TASK 1028 (B-08): put the document back as it was before the refused segment (the draw goes on: the same start, the boxes keep the text) and refuse the length box. */
+function refuseSegment(state, before, why) {
+    const active = state.active;
+    state._restoreSnapshot(before);
+    state.active = active;
+    state.inference = null; state.activeInference = null;
+    refuseLiveValue(0, why);
 }
 
 const SNAP_DEBUG = false;
@@ -218,8 +251,8 @@ export function setupLineTool(svg, state) {
                 lineState.lengthName = lineState.lockedLength !== null ? liveName(detail, 0) : null;
                 lineState.lengthAssign = lineState.lockedLength !== null ? liveAssign(detail, 0) : null;
             }   // only a TYPED field locks; the other shows the live cursor value
-            if (detail.reset && detail.reset[1]) lineState.lockedAngle = null;
-            else if (detail.typed[1]) lineState.lockedAngle = Number.isFinite(detail.height) ? detail.height : null;
+            if (detail.reset && detail.reset[1]) { lineState.lockedAngle = null; lineState.angleAssign = null; }
+            else if (detail.typed[1]) { lineState.lockedAngle = Number.isFinite(detail.height) ? detail.height : null; lineState.angleAssign = lineState.lockedAngle !== null ? liveAssign(detail, 1) : null; }
             redrawLinePreview(state);
         },
         onApply: (detail) => {
@@ -230,7 +263,7 @@ export function setupLineTool(svg, state) {
                 lineState.lengthName = lineState.lockedLength !== null ? liveName(detail, 0) : null;
                 lineState.lengthAssign = lineState.lockedLength !== null ? liveAssign(detail, 0) : null;
             }
-            if (detail.typed[1]) lineState.lockedAngle = Number.isFinite(detail.height) ? detail.height : null;
+            if (detail.typed[1]) { lineState.lockedAngle = Number.isFinite(detail.height) ? detail.height : null; lineState.angleAssign = lineState.lockedAngle !== null ? liveAssign(detail, 1) : null; }
             const spt = startOf(state);
             if (!spt) return;
             const end = lockedEnd(spt, live.cursor || spt);
@@ -457,6 +490,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
     const clickPt = (snap && snap.isLocked && snap.pt) ? snap.pt : w;
     const startForLock = startOf(state);
     const endPt = (typedLock && startForLock) ? lockedEnd(startForLock, clickPt) : clickPt;
+    const before = state.captureUndoSnapshot();   // TASK 1028 (B-08): the document before this segment (a refused typed length puts it back)
     const endId = state.genJ();
     state.joints.set(endId, { x: endPt.x, y: endPt.y, fixed: false });
     dbg.log('line-tool', '[line-tool] created end joint', { endId, endPt });
@@ -472,13 +506,7 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
         return true;
     }
 
-    try {
-        const nearby = findNearbyJoint(state.joints, endPt, state.active.start, 0.01);
-        if (nearby && nearby !== endId) {
-            addConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [endId, nearby] });
-            dbg.log('line-tool', '[line-tool] auto coincident to nearby', { endId, nearby });
-        }
-    } catch (_) { }
+    mergeEndWithNearby(state, endId, endPt, state.active.start);
 
     state.saveState();
     // startId has already been created above if missing — reuse the variable
@@ -486,18 +514,16 @@ export function handleLinePointerUp(e, svg, state, hitSnap, w, wasDragging) {
 
     const newShapeId = mintShapeId('s');   // THE shape-id generator (#core/shape-id.js)
     state.shapes.push({ id: newShapeId, type: 'line', joints: [startId, endId], isConstruction: !!state.isConstructionMode });
+    const refused = addTypedSizes(state, startId, endId);
+    if (refused) { refuseSegment(state, before, refused); return true; }
     lastLineCommitTime = Date.now();
 
-    if (lineState.lockedLength !== null) {
-        if (lineState.lengthAssign) applyLiveAssign(state, lineState.lengthAssign);
-        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [startId, endId], value: lineState.lockedLength, expression: lineState.lengthExpression, ...(lineState.lengthName ? { name: lineState.lengthName } : {}) }, { source: 'line' });   // THE constraint path: a redundant size is placed driven
-    }
-    
     lineState.lockedLength = null;
     lineState.lockedAngle = null;
     lineState.lengthExpression = null;
     lineState.lengthName = null;
     lineState.lengthAssign = null;
+    lineState.angleAssign = null;
 
     try{
         if (state.active && state.active.startSnapTarget) {
@@ -551,15 +577,9 @@ export function finalizeLineFromActive(svg, state) {
     ensureSegmentStep(state);
 
     const endPt = (state.active.preview && state.active.preview.pt) ? state.active.preview.pt : (state.tempMousePos || state.active.startPt || { x: 0, y: 0 });
-    let endId = null;
-
-    const nearbyId = findNearbyJoint(state.joints, endPt, state.active.start, 0.5);
-    if (nearbyId) {
-        endId = nearbyId;
-    } else {
-        endId = state.genJ();
-        state.joints.set(endId, { x: endPt.x, y: endPt.y, fixed: false });
-    }
+    const before = state.captureUndoSnapshot();   // TASK 1028 (B-08): the document before this segment (a refused typed length puts it back)
+    const endId = state.genJ();   // TASK 1028 (B-06): a new end joint, merged by the click's rule below (mergeEndWithNearby), never an existing joint 0.5 mm away
+    state.joints.set(endId, { x: endPt.x, y: endPt.y, fixed: false });
 
     let startId = state.active.start;
     if(!startId){
@@ -573,28 +593,27 @@ export function finalizeLineFromActive(svg, state) {
     const spt = state.joints.get(startId) || { x: 0, y: 0 };
     const segLen = Math.hypot((endPt.x - spt.x), (endPt.y - spt.y));
     if (segLen < MIN_LEN) {
-        if (!nearbyId && endId) state.joints.delete(endId);
+        state.joints.delete(endId);
         abortLine(state);
         justCreatedActive = false;
         localState.dragStartScreen = null;
         return true;
     }
 
+    mergeEndWithNearby(state, endId, endPt, startId);
     const newShapeId = mintShapeId('s');   // THE shape-id generator (#core/shape-id.js)
     state.shapes.push({ id: newShapeId, type: 'line', joints: [startId, endId], isConstruction: !!state.isConstructionMode });
 
-    if (lineState.lockedLength !== null) {
-        dbg.log('line-tool', '[DEBUG LINE] Adding distance constraint:', lineState.lockedLength);
-        if (lineState.lengthAssign) applyLiveAssign(state, lineState.lengthAssign);
-        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, { joints: [startId, endId], value: lineState.lockedLength, expression: lineState.lengthExpression, ...(lineState.lengthName ? { name: lineState.lengthName } : {}) }, { source: 'line' });
-    }
-    
+    const refused = addTypedSizes(state, startId, endId);
+    if (refused) { refuseSegment(state, before, refused); return false; }
+
     lineState.lockedLength = null;
     lineState.lockedAngle = null;
     lineState.lengthExpression = null;
     lineState.lengthName = null;
     lineState.lengthAssign = null;
-    
+    lineState.angleAssign = null;
+
     applyLineInference(state, state.activeInference || state.inference || null, startId, endId, newShapeId);
 
     try{ applyLockedSnap(state, startId, state.active && state.active.startSnapTarget, [endId]); }catch(_){ }

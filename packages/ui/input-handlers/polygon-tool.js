@@ -15,7 +15,7 @@ import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, se
 
 const localState = { isDragging: false, dragStartScreen: null };
 // The live box: `sides` / `lockedRadius` are what the user typed in it (null = not typed: the cursor sets the size, state.polygonSides the sides).
-const live = { boxOpen: false, sides: null, lockedRadius: null, radiusExpression: null, radiusName: null, radiusAssign: null, cursor: null };
+const live = { boxOpen: false, sides: null, sidesAssign: null, lockedRadius: null, radiusExpression: null, radiusName: null, radiusAssign: null, cursor: null };   // TASK 1028 (B-13): sidesAssign = `param = 6` typed in the N box
 const MIN_RADIUS = MIN_SHAPE_SIZE;   // TASK 782: the one minimum size (base-tool.js)
 const SIDES_KEY = 'sk-polygon-sides';
 const BOX = { dual: { kind: 'polygon', labels: ['R', 'N'], separator: 'sides', quantities: ['length', 'count'] } };
@@ -38,8 +38,8 @@ export function setupPolygonTool(svg, state) {
     setupDimensionListeners(state, TOOL_MODES.POLYGON, {
         guard: (detail) => detail.mode === 'dual' && detail.kind === 'polygon',
         onPreview: (detail) => {
-            if (detail.reset && detail.reset[1]) live.sides = null;
-            else if (detail.typed[1] && Number.isFinite(detail.height)) live.sides = clampPolygonSides(detail.height);
+            if (detail.reset && detail.reset[1]) { live.sides = null; live.sidesAssign = null; }
+            else if (detail.typed[1] && Number.isFinite(detail.height)) { live.sides = clampPolygonSides(detail.height); live.sidesAssign = liveAssign(detail, 1); }
             if (detail.reset && detail.reset[0]) { live.lockedRadius = null; live.radiusExpression = null; live.radiusName = null; live.radiusAssign = null; }
             else if (detail.typed[0]) {
                 live.lockedRadius = detail.width > 0 ? detail.width : null;
@@ -57,7 +57,7 @@ export function setupPolygonTool(svg, state) {
                 live.radiusName = live.lockedRadius !== null ? liveName(detail, 0) : null;
                 live.radiusAssign = live.lockedRadius !== null ? liveAssign(detail, 0) : null;
             }
-            if (Number.isFinite(detail.height)) live.sides = clampPolygonSides(detail.height);
+            if (Number.isFinite(detail.height)) { live.sides = clampPolygonSides(detail.height); live.sidesAssign = liveAssign(detail, 1); }
             const center = state.joints.get(state.active.start);
             const end = sizedEnd(center, live.cursor || center);
             if (!(Math.hypot(end.x - center.x, end.y - center.y) > MIN_RADIUS)) { detail.keepOpen = true; return; } // no size yet (cursor still on the centre, none typed): the box stays open
@@ -69,7 +69,7 @@ export function setupPolygonTool(svg, state) {
 
 function resetLive() {
     if (live.boxOpen) hideInput();
-    live.boxOpen = false; live.sides = null; live.lockedRadius = null; live.radiusExpression = null; live.radiusName = null; live.radiusAssign = null; live.cursor = null;
+    live.boxOpen = false; live.sides = null; live.sidesAssign = null; live.lockedRadius = null; live.radiusExpression = null; live.radiusName = null; live.radiusAssign = null; live.cursor = null;
 }
 
 /** `pt`, pulled to the typed size along the centre -> pt direction (a typed size holds while the cursor turns the polygon). */
@@ -143,6 +143,7 @@ export function createPolygon(state, endPt, vertexSnap = null) {
     const radiusExpression = live.radiusExpression;
     const radiusName = live.radiusName;
     const radiusAssign = live.radiusAssign;
+    const sidesAssign = live.sides != null ? live.sidesAssign : null;
     resetLive();
     if (!(radius > MIN_RADIUS)) {   // a second click on the centre: no polygon, and the centre joint made by the first click goes too
         state.closeDrawStep(); // nothing committed: the centre joint made by the first click goes with the cancelled step
@@ -151,6 +152,7 @@ export function createPolygon(state, endPt, vertexSnap = null) {
         return true;
     }
     state.saveState();
+    if (sidesAssign) applyLiveAssign(state, sidesAssign);   // TASK 1028 (B-13): `param = 6` in the N box updates that parameter
     const vertexId = state.genJ();
     state.joints.set(vertexId, { x: endPt.x, y: endPt.y, fixed: false });
     const built = makePolygon(state.joints, state.active.start, vertexId, sides, state.genJ, !!state.isConstructionMode);

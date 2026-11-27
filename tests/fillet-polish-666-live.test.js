@@ -143,11 +143,13 @@ await (async () => {
       assert.strictEqual(inv.doneDisabled, true, 'F9 desktop: .sk-done disabled when invalid');
       await shotClip('desktop-invalid.png', { x: Math.max(0, C.x - 120), y: Math.max(0, C.y - 120), width: 320, height: 240 });
 
-      // Enter while invalid warns (evaluateBoxText error for unknown parameter 'abc') and stays open
+      // Enter while invalid says why (evaluateBoxText error for unknown parameter 'abc') and stays open. TASK 1028 (B-18): inline under the box (#dimHint), the
+      // draw boxes' refusal, no toast
       await evalJs(`document.querySelectorAll('#notification-container [data-level]').forEach((e) => e.remove())`);
       await key('Enter', 'Enter', 13);
-      const warnTxt = await evalJs(`[...document.querySelectorAll('#notification-container [data-level]')].map((e) => e.textContent).join(' | ')`);
-      assert.ok(warnTxt.includes("unknown parameter 'abc'"), `F9 desktop: Enter on invalid warns, got: ${warnTxt}`);
+      const warnTxt = await evalJs(`(() => { const h = document.getElementById('dimHint'); return h && !h.classList.contains('hidden') ? h.textContent : ''; })()`);
+      assert.ok(warnTxt.includes("unknown parameter 'abc'"), `F9 desktop: Enter on invalid says why under the box, got: ${warnTxt}`);
+      assert.strictEqual(await evalJs(`document.querySelectorAll('#notification-container [data-level]').length`), 0, 'F9 desktop: no toast');
       assert.ok(await evalJs(`!!document.getElementById('fillet-radius-input')`), 'F9 desktop: Enter on invalid keeps box open');
 
       // F7 + F9 recovery: type "0.05" -> valid again, Enter creates arc with radius 0.05

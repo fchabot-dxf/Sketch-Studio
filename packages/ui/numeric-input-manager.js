@@ -28,9 +28,15 @@ export const boxValueText = (v, quantity = 'length') => quantityText(Number(v), 
  *  A length is read with the DOCUMENT unit as the default: a bare 2 in an inch document is 2 in (50.8 mm), "50mm", "1 1/2", 1 1/2" and "3/8 in" convert,
  *  "d1/2" is half of dimension d1. An angle or a count is read by the same parser (45, 45°, 0.5 rad). */
 export function readBoxText(text, quantity = 'length', state = uiState.appState, opts = {}) {
-    const allowAssign = opts.allowAssign !== undefined ? opts.allowAssign : (quantity === 'length');
-    return evaluateBoxText(state, text, quantity, { unit: docUnit(), allowAssign });
+    const allowAssign = opts.allowAssign !== undefined ? opts.allowAssign : true;
+    const r = evaluateBoxText(state, text, quantity, { unit: docUnit(), allowAssign });
+    // TASK 1028 (B-13): `name = value` is read in every box (the pattern dialog's rule). An angle or a count box makes no dimension, so there `param = value`
+    // updates that user parameter (r.assign, applied by the tool) and a FREE name, which would name the new dimension, has nothing to name: it is refused.
+    if (r.ok && r.name && quantity !== 'length') return { ok: false, code: 'NAME_NEEDS_DIMENSION', message: NAME_NEEDS_DIMENSION };
+    return r;
 }
+/** TASK 1028 (B-13): why a free name is refused in an angle or a count box. */
+export const NAME_NEEDS_DIMENSION = 'a name needs a dimension; this value makes none';
 /** The value a box's text means (see readBoxText), or NaN. */
 export function parseBoxValue(text, quantity = 'length', state = uiState.appState) {
     const r = readBoxText(text, quantity, state);
@@ -218,6 +224,8 @@ let uiState = {
     refusalText: '', // TASK 782 / 876: why the refused field is refused (a size of 0 or less, or the edit box's own reason: an unknown name, a syntax error)
     openValues: [null, null], // TASK 769: the values the box opened with (its Ctrl+Z default text, shown again on a unit change)
     refusing: false, // TASK 782: a typed size is 0 or less: the box shows it as invalid, Enter and a click place nothing
+    refuses: [null, null], // TASK 1028 (B-07): a field's own value rule (v -> why | ''), declared by the tool that opened the box; null = its quantity's
+    heldRefusal: null, // TASK 1028 (B-08): { index, text }: the tool could not keep that typed value; refused until the field is typed in again
     typed: [false, false], // TASK 596: which field the user has typed in (a field showing the live value is NOT typed; only a typed one locks a size)
     defaults: ['', ''], // TASK 675 C: opening default strings so Ctrl/Cmd+Z restores the default in one step
     undoneToDefault: false, // TASK 675 C: a second Ctrl/Cmd+Z right after reverting a typed creation box does nothing
@@ -360,14 +368,18 @@ function setupListeners() {
             dirty: () => !!uiState.typed[0],
             onAtDefault: (!uiState.typed[0] && !uiState.undoneToDefault) ? handleCancel : null
         })) return;
-        const tabCommits = e.key === 'Tab' && (uiState.mode === 'edit' || uiState.mode === 'view'); // task 1008, D-15: the dimension's one field: Tab commits like Enter, focus stays
+        const tab = e.key === 'Tab';
+        const tabCommits = tab && (uiState.mode === 'edit' || uiState.mode === 'view'); // task 1008, D-15: the dimension's one field: Tab commits like Enter, focus stays
         if (tabCommits) e.preventDefault();
+        // TASK 1028 (B-15): a drawing tool's one-field box: Tab goes to the "next" field as in the two-field box, and the next field is this one: the focus
+        // stays in the box and its text is selected (it never moves out to the page, where a later Enter pressed a toolbar button)
+        if (tab && uiState.mode === 'live-single') { e.preventDefault(); uiState.singleInput.select(); }
         if (e.key === 'Enter' || tabCommits) handleCommit();
         if (e.key === 'Escape') handleCancel();
         e.stopPropagation(); // Prevent global shortcuts
     });
     
-    uiState.singleInput.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; uiState.typingIndex = 0; handlePreview(); updateAssist(); });
+    uiState.singleInput.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; uiState.heldRefusal = null; uiState.typingIndex = 0; handlePreview(); updateAssist(); });
 
     // Dual Input Handlers
     const handleDualKey = (e, field) => {
@@ -405,18 +417,19 @@ function setupListeners() {
     uiState.dualInputW.addEventListener('focus', () => { if (uiState.typingIndex !== 0 && uiState.completion) uiState.completion.close(); uiState.typingIndex = 0; });
     uiState.dualInputH.addEventListener('focus', () => { if (uiState.typingIndex !== 1 && uiState.completion) uiState.completion.close(); uiState.typingIndex = 1; });
     
-    uiState.dualInputW.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; uiState.typingIndex = 0; handlePreview(); updateAssist(); });
-    uiState.dualInputH.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[1] = true; uiState.typingIndex = 1; handlePreview(); updateAssist(); });
+    uiState.dualInputW.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[0] = true; uiState.heldRefusal = null; uiState.typingIndex = 0; handlePreview(); updateAssist(); });
+    uiState.dualInputH.addEventListener('input', () => { uiState.undoneToDefault = false; uiState.typed[1] = true; uiState.heldRefusal = null; uiState.typingIndex = 1; handlePreview(); updateAssist(); });
 }
 
 // --- Public API ---
 
-export function showSingleInput(x, y, value, field, initialKey = null, focus = true, quantity = 'length') {
+export function showSingleInput(x, y, value, field, initialKey = null, focus = true, quantity = 'length', refuse = null) {
     if (!uiState.singleInput) return;   // a host with no DOM (the headless node tests that drive a tool's handlers bare) has no boxes: the tool runs as it does with one
     resetState();
     uiState.active = true;
     uiState.mode = 'live-single';
     uiState.field = field; // 'length', 'radius'
+    uiState.refuses = [refuse, null]; // TASK 1028 (B-07): the box's own value rule (an arc's sweep), else the quantity's (boxRefusal)
     uiState.typed = [!!initialKey, false];
     uiState.typingIndex = initialKey ? 0 : -1;
     uiState.quantities = [quantity, 'length'];
@@ -732,7 +745,7 @@ function handleCommit() {
                 const who = res.culprit && res.culprit.name && res.culprit.name !== target.name ? `${res.culprit.name}: ` : '';
                 // TASK 1013 (UX-18): format refused values in document units (quantityText), never raw internal mm
                 const shown = pv.kind === 'value' ? quantityText(pv.value, dimensionUnit(target, docUnit()), 'unit') : uiState.singleInput.value.trim();
-                showNotification(`Can't set to ${shown}${why ? ` — ${who}${why}` : ''}. Reverted.`, "warning");
+                showNotification(`${cantSetText(shown, why ? `${who}${why}` : '')}. Reverted.`, "warning");
             }
         }
         target.__editing = false;
@@ -921,10 +934,13 @@ function handlePreview(resetIdx = -1) {
     showLiveRefusal();
     
     const detail = { mode: uiState.mode === 'live-dual' ? 'dual' : 'single' };
+    // TASK 1028 (B-01): a typed field the user EMPTIED is unlocked: it goes back to the cursor exactly as a Ctrl+Z reset does (rule 2 of the draw boxes).
+    // The ONE reading of "unlocked" for every tool (their `detail.reset`), so a single box and a count field unlock like the two length fields always did.
+    const reset = [0, 1].map((i) => resetIdx === i || (i < (uiState.mode === 'live-dual' ? 2 : 1) && uiState.typed[i] && String(liveField(i).value).trim() === ''));
     if (uiState.mode === 'live-dual') {
         detail.kind = uiState.dualKind;
         detail.typed = uiState.typed.slice();
-        if (resetIdx !== -1) detail.reset = [resetIdx === 0, resetIdx === 1];
+        if (reset[0] || reset[1]) detail.reset = reset;
         const w = readLiveField(0);
         const h = readLiveField(1);
         if (!isNaN(w)) detail.width = w;
@@ -935,11 +951,9 @@ function handlePreview(resetIdx = -1) {
     } else {
         const v = readLiveField(0);
         detail.typed = uiState.typed.slice();
-        if (resetIdx !== -1) detail.reset = [resetIdx === 0];
-        if (!isNaN(v)) {
-            detail.field = uiState.field;
-            detail.value = v;
-        }
+        if (reset[0]) detail.reset = [true];
+        detail.field = uiState.field;   // TASK 1028 (B-01): always: every single-field tool reads the event by its field (a text that reads nothing has no value)
+        if (!isNaN(v)) detail.value = v;
         detail.expressions = typedExpressions();
         detail.names = typedNames();
         detail.assigns = typedAssigns();
@@ -981,19 +995,39 @@ function readLiveField(index) {
 // (TASK 789: the rule and its message are #core/dimension-seams.js sizeRefusal, the one every dimension edit is refused by too.)
 export const SIZE_REFUSAL_HINT = SIZE_REFUSAL[0].toUpperCase() + SIZE_REFUSAL.slice(1) + '.';
 // TASK 876: a TYPED field whose text does not read (a name nothing defines, a syntax error: the edit box's own message) is refused the same way.
+// TASK 1028 (B-07 / B-18): the rule is boxRefusal, exported: the Fillet and Offset boxes refuse by it too, and a box may declare its own value rule.
+const QUANTITY_REFUSE = { length: (v) => (sizeRefusal(v) ? SIZE_REFUSAL_HINT : '') };
+/** THE refusal of a value box's text: '' when it reads as a value the field takes, else why: the parser's own message (a syntax error, an unknown name, ...)
+ *  or the field's value rule: `refuse(v)` when the box declares one (an arc's sweep, an offset's distance), else its quantity's (a length must be more than 0). */
+export function boxRefusal(text, quantity = 'length', { state = uiState.appState, refuse = null } = {}) {
+    const r = readBoxText(text, quantity, state);
+    if (!r.ok) return r.message || 'not a valid value';
+    const rule = refuse || QUANTITY_REFUSE[quantity];
+    return (rule && rule(r.v)) || '';
+}
+/** TASK 1028 (B-08): the edit box's refusal wording (BUG-181), shared by the edit box and a drawing tool that could not keep a typed value. */
+export const cantSetText = (shown, why) => `Can't set to ${shown}${why ? ` — ${why}` : ''}`;
 function liveRefusal() {
     uiState.refusalText = '';
     if (!uiState.active || (uiState.mode !== 'live-dual' && uiState.mode !== 'live-single')) return -1;
+    if (uiState.heldRefusal) { uiState.refusalText = uiState.heldRefusal.text; return uiState.heldRefusal.index; }
     const n = uiState.mode === 'live-dual' ? 2 : 1;
     for (let i = 0; i < n; i++) {
         if (!uiState.typed[i]) continue;
         const text = liveField(i).value;
         if (String(text).trim() === '') continue;
-        const r = readBoxText(text, uiState.quantities[i]);
-        if (!r.ok) { uiState.refusalText = r.message || 'not a valid value'; return i; }
-        if (uiState.quantities[i] === 'length' && sizeRefusal(r.v)) { uiState.refusalText = SIZE_REFUSAL_HINT; return i; }
+        const why = boxRefusal(text, uiState.quantities[i], { refuse: uiState.refuses[i] });
+        if (why) { uiState.refusalText = why; return i; }
     }
     return -1;
+}
+/** TASK 1028 (B-08): a drawing tool could not keep the value typed in field `index` (the sketch cannot hold it): the box refuses it as it refuses a size of 0,
+ *  with `text` under it, until that field is typed in again. Nothing was drawn; the box keeps the text. */
+export function refuseLiveValue(index, text) {
+    if (!uiState.active || (uiState.mode !== 'live-dual' && uiState.mode !== 'live-single')) return;
+    uiState.heldRefusal = { index, text };
+    showLiveRefusal();
+    liveField(index).focus();
 }
 /** The drawing tools' pointer-up gate: true while the open creation box holds a refused typed size, so the click places nothing. The click took the focus
  *  from the box (a press on the canvas focuses the canvas): it goes back to the refused field, selected, so the next keys fix it. */
@@ -1126,7 +1160,7 @@ function attachCompletion(single) {
 
 /** TASK 1013 (UX-17c / B-19e): borrow the ONE shared #dimComplete list for an external value box (Fillet / Offset). */
 export function attachExternalCompletion(el, state, onInsert) {
-    const noop = { update: () => {}, handleKey: () => false, close: () => {}, detach: () => {} };
+    const noop = { update: () => {}, handleKey: () => false, close: () => {}, refuse: (text) => { if (el) el.setAttribute('aria-invalid', text ? 'true' : 'false'); }, detach: () => {} };
     if (!el || !uiState.completion) return noop;
     el.setAttribute('aria-controls', 'dimComplete');
     el.setAttribute('aria-autocomplete', 'list');
@@ -1140,9 +1174,20 @@ export function attachExternalCompletion(el, state, onInsert) {
         update: () => { if (uiState.externalInput === el) uiState.completion.update(); },
         handleKey: (e) => (uiState.externalInput === el ? uiState.completion.handleKey(e) : false),
         close: () => { if (uiState.externalInput === el) uiState.completion.close(); },
+        // TASK 1028 (B-18): the box's refusal (boxRefusal's text, '' = none) under it in the ONE hint line, as a drawing tool's box shows its own
+        refuse: (text) => {
+            if (uiState.externalInput !== el || !uiState.hintEl) return;
+            el.setAttribute('aria-invalid', text ? 'true' : 'false');
+            if (!text) { hideNumericInputEl(uiState.hintEl); return; }
+            uiState.hintEl.textContent = text;
+            uiState.hintEl.classList.add('err');
+            showNumericInputEl(uiState.hintEl);
+            placeAssist();
+        },
         detach: () => {
             if (uiState.externalInput !== el) return;
             uiState.completion.close();
+            if (uiState.hintEl) hideNumericInputEl(uiState.hintEl);
             uiState.externalInput = null;
             uiState.externalState = null;
             uiState.externalOnInsert = null;
@@ -1235,6 +1280,8 @@ function resetState() {
     uiState.assigns = [null, null];
     uiState.refusalText = '';
     uiState.openValues = [null, null];
+    uiState.refuses = [null, null];
+    uiState.heldRefusal = null;
     
     if (uiState.singleInput) {
         uiState.singleInput.classList.remove('sk-live-box');

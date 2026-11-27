@@ -28,7 +28,7 @@ import { resolveCanvasSvg, setCanvasCursor } from '#ui/cursor-manager.js';
 import { formatConstraintValue, formatLenLabel } from '#ui/svg-renderer.js';
 import { showNotification } from '#ui/notification-manager.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js'; // TASK 660: a press on another sketch's curve warns
-import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox, attachExternalCompletion } from '#ui/numeric-input-manager.js';
+import { ensureNumericInputStyles, handleBoxUndoKey, placeAnchoredBox, attachExternalCompletion, boxRefusal } from '#ui/numeric-input-manager.js';
 import { applyLiveAssign } from '#ui/input-handlers/base-tool.js';
 import { matchesShortcut } from '#ui/shortcuts.js'; // TASK 727: the keys are declared there
 
@@ -228,7 +228,10 @@ function pickWhileInputOpen(svg, state, viewState, clientX, clientY) {
   }
   if (warnOtherSketch(state, 'Fillet', otherCurveAt(state, world, thresh))) { refocusInput(); return; }
   if (why) { showNotification(why, 'warning'); refocusInput(); return; }
-  cancelAll(); // truly empty canvas click abandons the pending fillet
+  // TASK 1028 (B-19): a click on empty canvas COMMITS the pending fillet with the box's radius, as a click commits a drawing tool's box (it used to cancel it and
+  // lose the typed radius). A radius the box refuses keeps it open with its hint; Esc is the one way to cancel.
+  commitFilletInput();
+  refocusInput();
 }
 
 // A fresh click at a client point: pick line 1 / line 2, or a corner (opens the radius input).
@@ -335,7 +338,7 @@ function openInput(svg, state, viewState, corner) {
       _input.assign = null;
       _input.invalid = true;
     }
-    el.setAttribute('aria-invalid', _input.invalid ? 'true' : 'false');
+    if (_input.completion) _input.completion.refuse(_input.invalid ? boxRefusal(el.value, 'length', { state }) : '');   // TASK 1028 (B-18): why, under the box (sets aria-invalid)
     refreshPreview();
   };
   _input.completion = attachExternalCompletion(el, state, () => { applyInputValue(); });
@@ -464,9 +467,9 @@ export function commitFilletInput() {
   const { el, corners, state } = _input;
   const unit = docUnit();
   const parsed = evaluateFilletRadius(state, el.value, unit);
-  if (!parsed.ok) {
-    const formulaErr = parsed.code === 'UNKNOWN_NAME' || parsed.code === 'UNIT_MISMATCH' || parsed.code === 'NAME_TAKEN' || parsed.code === 'RESERVED_NAME' || parsed.code === 'REFERENCE_DIM';
-    showNotification(formulaErr ? parsed.message : 'Enter a radius greater than zero', 'warning');
+  if (!parsed.ok) {   // TASK 1028 (B-09 / B-18): refused inline under the box with the draw boxes' wording (the parser's own message, or the size rule), no toast
+    _input.invalid = true;
+    _input.completion.refuse(boxRefusal(el.value, 'length', { state }));
     return;
   }
   const val = parsed.v;

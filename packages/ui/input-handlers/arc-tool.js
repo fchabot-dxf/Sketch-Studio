@@ -39,9 +39,13 @@ export const ARC_MODES = {
 // arc gets the radius dimension it always got); after the start click the SWEEP box (degrees: a typed sweep is the arc's exact angle, the winding
 // direction follows the cursor). Both through base-tool's shared creation-box path; a value not typed follows the cursor.
 // lockedRadius / lockedSweep = what the user TYPED (null = the cursor sets it); `cursor` = the last world point, `screen` = the last pointer.
-let arcState = { lockedRadius: null, radiusExpression: null, radiusName: null, radiusAssign: null, lockedSweep: null, field: null, cursor: null, screen: null };
+let arcState = { lockedRadius: null, radiusExpression: null, radiusName: null, radiusAssign: null, lockedSweep: null, sweepAssign: null, field: null, cursor: null, screen: null };   // TASK 1028 (B-13): sweepAssign = `param = value` typed in the sweep box
+/** TASK 1028 (B-07): THE value rule of a typed sweep: an arc turns more than 0 and less than a full turn (0 and -90 were ignored, 360 / 720 made an arc whose
+ *  ends are one point). The sweep box refuses by it (numeric-input-manager boxRefusal) and only a sweep it takes locks the arc. */
+export const SWEEP_REFUSAL = 'A sweep must be more than 0 and less than 360 degrees.';
+const sweepRefusal = (v) => (v > 0 && v < 360 ? '' : SWEEP_REFUSAL);
 const BOX_RADIUS = { single: { field: 'radius' } };
-const BOX_SWEEP = { single: { field: 'sweep', quantity: 'angle' } }; // TASK 769: degrees (the radius box is a length)
+const BOX_SWEEP = { single: { field: 'sweep', quantity: 'angle', refuse: sweepRefusal } }; // TASK 769: degrees (the radius box is a length)
 const MIN_R = MIN_SHAPE_SIZE;   // TASK 782: the one minimum size (base-tool.js)
 
 function openArcBox(pos, field) {
@@ -50,7 +54,7 @@ function openArcBox(pos, field) {
   openCreationBoxes(pos || { clientX: 0, clientY: 0 }, field === 'radius' ? BOX_RADIUS : BOX_SWEEP, [0]);
 }
 function closeArcBoxes() {
-  arcState.lockedRadius = null; arcState.radiusExpression = null; arcState.radiusName = null; arcState.radiusAssign = null; arcState.lockedSweep = null;
+  arcState.lockedRadius = null; arcState.radiusExpression = null; arcState.radiusName = null; arcState.radiusAssign = null; arcState.lockedSweep = null; arcState.sweepAssign = null;
   if (arcState.field) hideInput();
   arcState.field = null; arcState.cursor = null; arcState.screen = null;
 }
@@ -72,7 +76,7 @@ function endAngleFor(state, startAngle, cursorAngle) {
 function takeTyped(detail) {
   if (detail.reset && detail.reset[0]) {
     if (detail.field === 'radius') { arcState.lockedRadius = null; arcState.radiusExpression = null; arcState.radiusName = null; arcState.radiusAssign = null; }
-    else if (detail.field === 'sweep') arcState.lockedSweep = null;
+    else if (detail.field === 'sweep') { arcState.lockedSweep = null; arcState.sweepAssign = null; }
     return;
   }
   if (!detail.typed || !detail.typed[0]) return;
@@ -82,7 +86,7 @@ function takeTyped(detail) {
     arcState.radiusName = arcState.lockedRadius !== null ? liveName(detail, 0) : null;
     arcState.radiusAssign = arcState.lockedRadius !== null ? liveAssign(detail, 0) : null;
   }
-  else if (detail.field === 'sweep') arcState.lockedSweep = detail.value > 0 ? Math.min(detail.value, 359.999) : null;
+  else if (detail.field === 'sweep') { arcState.lockedSweep = sweepRefusal(detail.value) ? null : detail.value; arcState.sweepAssign = arcState.lockedSweep !== null ? liveAssign(detail, 0) : null; }
 }
 /** The preview of the arc phase: start -> the cursor's angle, or the typed sweep. Returns the end point. */
 function drawSweepPreview(state, center, start, cursor) {
@@ -150,7 +154,7 @@ export function setupArcTool(svg, state) {
       takeTyped(detail);
       redrawArcPreview(state);
     },
-    onCancel: () => { arcState.lockedRadius = null; arcState.radiusExpression = null; arcState.radiusName = null; arcState.radiusAssign = null; arcState.lockedSweep = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
+    onCancel: () => { arcState.lockedRadius = null; arcState.radiusExpression = null; arcState.radiusName = null; arcState.radiusAssign = null; arcState.lockedSweep = null; arcState.sweepAssign = null; } // Esc in the box also runs the canvas Esc (input-manager handleEscape)
   });
 
   if (!state.arcMode) state.arcMode = ARC_MODES.CENTER_START_END;
@@ -312,6 +316,7 @@ function handleCenterArc(state, snap, pt, w, pos) {
 
     try {
       state.saveState();
+      if (arcState.lockedSweep !== null && arcState.sweepAssign) applyLiveAssign(state, arcState.sweepAssign);   // TASK 1028 (B-13): `param = 90` in the sweep box updates that parameter
       const res = makeArc(state.joints, state.active.center, state.active.start, endId, 'CENTER', state.isConstructionMode || false);
       if (res && res.shapes) res.shapes.forEach(s => state.shapes.push(s));
       if (res && res.constraints) res.constraints.forEach(c => ConstraintManager.createConstraint(state, c.type, c, { source: 'arc' }));

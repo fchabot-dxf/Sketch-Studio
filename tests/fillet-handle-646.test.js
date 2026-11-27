@@ -205,10 +205,17 @@ await (async () => {
       assert.strictEqual(await overlay(), false, `[${kind}] Esc drops the pick`);
       await evalJs(`(() => { const v = ${STATE}.view, o = window.__v646; v.x = o.x; v.y = o.y; v.w = o.w; document.querySelector('#design-canvas').dispatchEvent(new WheelEvent('wheel', { deltaY: 0, clientX: 10, clientY: 10, bubbles: true, cancelable: true })); })()`); await sleep(250);
 
-      // ---- 6. a click on empty canvas still abandons the input; tool switch and Undo remove box, preview and handle
+      // ---- 6. a click on empty canvas APPLIES the fillet at the box's radius, as a click commits a drawing tool's box (TASK 1028, B-19 / BUG-317: it used to
+      // abandon it and lose the typed radius); Esc is the one way to cancel. Tool switch and Undo remove box, preview and handle
+      const h6 = await hist();
       await openAt(); await P.tap(empty);
-      assert.strictEqual(await boxRect(), null, `[${kind}] a click on empty canvas abandons the input`);
+      assert.strictEqual(await boxRect(), null, `[${kind}] a click on empty canvas closes the input`);
       assert.strictEqual(await overlay(), false, `[${kind}] ... and its preview`);
+      rs = await arcs();
+      assert(rs.length === 1 && Math.abs(rs[0] - 5) < 1e-3, `[${kind}] a click on empty canvas applies the box's R=5: ${rs}`);
+      assert.strictEqual(await hist(), h6 + 1, `[${kind}] one undo step`);
+      await undo();
+      assert.deepStrictEqual(await arcs(), [], `[${kind}] one Undo removes it`);
       await openAt(); await tool('tool-select');
       assert.strictEqual(await boxRect(), null, `[${kind}] a tool switch removes the box`);
       assert.strictEqual(await overlay(), false, `[${kind}] a tool switch removes the preview and the handle`);

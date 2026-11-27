@@ -102,13 +102,21 @@ export function safeUpdatePreview(state, type, jointIds, pt, opts) {
  * Esc inside a box is NOT handled here: the box raises 'liveDimensionCancelled' and input-manager runs the canvas Esc (handleEscape) for it.
  */
 export function openCreationBoxes(e, box, values) {
-    const x = e.clientX + 15, y = e.clientY + 15;
-    const focus = e.pointerType !== 'touch';
-    if (box.dual) showDualInput(x, y, values[0], values[1], { ...box.dual, focus });
-    else showSingleInput(x, y, values[0], box.single.field, null, focus, box.single.quantity, box.single.refuse || null);   // TASK 1028 (B-07): a box may declare its own value rule
+    openCreationBoxesAt({ x: e.clientX, y: e.clientY }, box, values, { focus: e.pointerType !== 'touch' });
+}
+/** TASK 1034: THE opening of the creation boxes beside a screen point. `owner` (a tool session's box translator, #ui/input-translate-box.js)
+ *  hears the box's edits and Enter directly; `initialKey` is the key that opened the box (its first character). */
+export function openCreationBoxesAt(at, box, values, { focus = true, owner = null, initialKey = null } = {}) {
+    const x = at.x + 15, y = at.y + 15;
+    if (box.dual) showDualInput(x, y, values[0], values[1], { ...box.dual, focus, owner, initialKey });
+    else showSingleInput(x, y, values[0], box.single.field, initialKey, focus, box.single.quantity, box.single.refuse || null, owner);   // TASK 1028 (B-07): a box may declare its own value rule
 }
 export function followCreationBoxes(e, values) {
-    updateInputPosition(e.clientX, e.clientY);
+    followCreationBoxesAt({ x: e.clientX, y: e.clientY }, values);
+}
+/** TASK 1034: the open creation box follows a screen point and shows each field's live value (a typed field keeps its text) */
+export function followCreationBoxesAt(at, values) {
+    updateInputPosition(at.x, at.y);
     values.forEach((v, i) => setLiveInputValue(i, v));
 }
 

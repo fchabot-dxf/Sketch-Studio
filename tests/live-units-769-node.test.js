@@ -86,7 +86,7 @@ try {
     app.tool('circle');
     const o = S(150, 60), r = S(170, 60);
     app.click(o.x, o.y); app.move(r.x, r.y);
-    const rad = Math.hypot(st.active.preview.pt.x - st.joints.get(st.active.start).x, st.active.preview.pt.y - st.joints.get(st.active.start).y);
+    const rad = Math.hypot(st.active.preview.pt.x - st.active.startPt.x, st.active.preview.pt.y - st.active.startPt.y); // TASK 1034: the centre is held as a point until the build
     eq(boxes(), [want(2 * rad)], `${tag} circle: the diameter box`);
     n0 = st.shapes.length;
     app.type('50mm'); app.enter();

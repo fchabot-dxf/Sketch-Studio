@@ -147,7 +147,7 @@ try {
   const rb = dimBox();
   assert.strictEqual(doc.activeElement, rb, 'circle: the diameter box has the focus');
   app.move(P(40, 0).x, P(40, 0).y);
-  const cc = world(st.active.start), cp = st.active.preview.pt;
+  const cc = st.active.startPt, cp = st.active.preview.pt; // TASK 1034: the centre is a point the session holds until the build (no joint mid-draw)
   assert(Math.abs(parseFloat(rb.value) - 2 * Math.hypot(cp.x - cc.x, cp.y - cc.y)) < 0.06 && parseFloat(rb.value) > 0.4, 'circle: the box shows the DIAMETER the cursor makes (2 x the radius): ' + rb.value);
   app.type('24');
   assert.strictEqual(rb.value, '24', 'circle: the first typed digit is kept');

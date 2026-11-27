@@ -539,6 +539,8 @@ function updateSnapTarget(e, svg, state) {
 
 // TASK 1030 (I-19): the panels a press into keeps the keyboard focus in (the user went there on purpose)
 const FOCUS_KEEPING_PANELS = '.sk-pwin, .sk-browser';
+// ... and the bar a press on gives the keyboard back to the value box being typed in
+const FOCUS_RETURNING_BARS = '.sk-footer';
 
 // TASK 1030 (I-17): the right button reaches only the Select tool (and the menus above); every other tool ignores its press and release.
 const rightPressIgnored = (e, state) => e.button === 2 && state.currentTool !== TOOL_MODES.SELECT;
@@ -1182,9 +1184,9 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
     });
 
     // Also attach keyboard shortcuts at document-level (already handled) - ensure focus doesn't steal keys
-        // TASK 1030 (I-19): the on-canvas value box the user is typing in keeps the keyboard across a press that is not the tool's: a middle-button pan,
-        // a press on the footer bar (or anywhere outside the canvas). A press INTO the Parameters window or the Sketches browser keeps the focus there
-        // (the user went there on purpose); the next press on the canvas gives it back. A press of the tool on the canvas is the tool's own.
+        // TASK 1030 (I-19): the on-canvas value box the user is typing in keeps the keyboard across a press that is not the tool's: a middle-button pan
+        // of the canvas, a press on the footer bar. A press INTO the Parameters window or the Sketches browser keeps the focus there (the user went there
+        // on purpose); the next press on the canvas gives it back. A press of the tool on the canvas is the tool's own; any other press is as before.
         let typingBox = null, boxLeftForPanel = false;
         const isValueBox = (el) => !!el && typeof el.matches === 'function' && el.matches('.dim-input, .sk-dual-input input');
         const boxShown = (el) => el.isConnected && el.getClientRects().length > 0;
@@ -1196,7 +1198,8 @@ svg.addEventListener('wheel', (e) => { console.debug && console.debug('[input-ma
             // Don't steal focus if user is clicking an input
             if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
             const onCanvas = !!t && svg.contains(t);
-            const box = typingBox && (!onCanvas || e.button === 1 || boxLeftForPanel) ? typingBox : null;
+            const onBar = !!t && typeof t.closest === 'function' && !!t.closest(FOCUS_RETURNING_BARS);
+            const box = typingBox && (onBar || (onCanvas && (e.button === 1 || boxLeftForPanel))) ? typingBox : null;
             if (onCanvas && e.button !== 1) { typingBox = null; boxLeftForPanel = false; }
             // the press's own focus change (to the page) comes after this listener: the box takes the focus back once it is done
             if (box) { setTimeout(() => { if (boxShown(box)) box.focus(); }, 0); return; }

@@ -3104,7 +3104,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** `I-01`: Slot (every variant), a pick made, a value typed, then another tool picked (or Slot re-clicked): the slot is dropped but its value box (`#dimInput "22"`) stays on the canvas over the next tool.
 - **What was wrong:** a tool switch only closed the boxes of a draw that had opened a draw step (`closeDrawStep` fires its cancel listeners); Slot never opens one, so nothing closed its box. Esc worked because `handleEscape` reset every draw tool itself.
 - **Cause:** `packages/ui/input-manager.js` `leaveActiveTool` (it ran `closeDrawStep` only, not the Esc cleanup).
-- **Fix:** ONE cancel for what a tool holds, `cancelActiveWork` (`input-manager.js:1512`), shared by Esc, a tool switch (`leaveActiveTool`, `:1541`) and Undo with a pick pending: it resets every tool's state (`resetDrawingState` closes the Slot boxes). The re-click half is BUG-323 (a re-click keeps the slot and its box).
+- **Fix:** ONE cancel for what a tool holds, `cancelActiveWork` (`input-manager.js:1515`), shared by Esc, a tool switch (`leaveActiveTool`, `:1544`) and Undo with a pick pending: it resets every tool's state (`resetDrawingState` closes the Slot boxes). The re-click half is BUG-323 (a re-click keeps the slot and its box).
 - **Task id(s):** `1030`
 - **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
 - **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-01`, every Slot variant)
@@ -3119,7 +3119,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** `I-02`: ONE Esc inside the Text editor or the Dimension value box closed the box only; a second Esc was needed to leave the tool (owner ruling BUG-105: one Esc cancels and leaves the tool). The 3-point rectangle box had the same fault; task `1028` rebuilt that box (`ESC-004 ... tool=select` on main before this task).
 - **What was wrong:** the box's Esc reaches the canvas Esc through the `liveDimensionCancelled` event, and its listener ran `handleEscape` only for the draw tools with `state.active` and Offset / Fillet. The Text editor's Esc never raised the event.
 - **Cause:** `packages/ui/input-manager.js` `liveDimensionCancelled` listener (a tool list), `packages/ui/input-handlers/text-tool.js` editor keydown.
-- **Fix:** the listener (`input-manager.js:1296`) runs the canvas Esc for EVERY tool but Select (in Select a box's Esc only closes that box: the dimension edit box, a text edited from its menu); the Text editor's Esc raises the same event (`text-tool.js:298`). The box's Ctrl+Z at its opening value raises it with `{ undo: true }` (`numeric-input-manager.js:1069`): the canvas Undo then (BUG-324).
+- **Fix:** the listener (`input-manager.js:1299`) runs the canvas Esc for EVERY tool but Select (in Select a box's Esc only closes that box: the dimension edit box, a text edited from its menu); the Text editor's Esc raises the same event (`text-tool.js:298`). The box's Ctrl+Z at its opening value raises it with `{ undo: true }` (`numeric-input-manager.js:1069`): the canvas Undo then (BUG-324).
 - **Task id(s):** `1030`
 - **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
 - **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-02` text, dimension)
@@ -3151,7 +3151,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** `I-04`: re-clicking the active draw tool's button kept the tool but wiped the half-made draw and the typed box value; the constraint tools kept theirs. Advisor default (one rule): a re-click does nothing.
 - **What was wrong:** `switchToTool` returned early on a same-tool call for the constraint tools only; every other tool ran `leaveActiveTool`, which cancels the draw.
 - **Cause:** `packages/ui/input-manager.js` `switchToTool`.
-- **Fix:** `switchToTool` (`input-manager.js:1577`) returns for ANY same-tool call (re-click or key): the tool keeps what it holds. The activation itself is `armTool` (`:1589`). A Rect / Slot variant changed from the dropdown mid-draw starts the tool again (`tool-ribbon.js:402`, `restartActiveTool`), since the draw was the old shape. This also ends the Rectangular Pattern re-click making a live pattern (`I-13`).
+- **Fix:** `switchToTool` (`input-manager.js:1580`) returns for ANY same-tool call (re-click or key): the tool keeps what it holds. The activation itself is `armTool` (`:1592`). A Rect / Slot variant changed from the dropdown mid-draw starts the tool again (`tool-ribbon.js:402`, `restartActiveTool`), since the draw was the old shape. This also ends the Rectangular Pattern re-click making a live pattern (`I-13`).
 - **Task id(s):** `1030`
 - **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
 - **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-04` rect, line, circle, slot)
@@ -3166,7 +3166,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** `I-05`: Ctrl+Z partway through a tool: the draw tools cancelled the draw and LEFT the tool; Fillet / Mirror / Dimension / the constraint tools undid the PREVIOUS finished step (an older step undone by a mid-pick Ctrl+Z) and Ctrl+Y redid a step and dropped the pick. Owner ruling: Ctrl+Z with a pick pending cancels the pick / half-made shape and STAYS in the tool, no undo step; the next Ctrl+Z undoes the previous finished step; Ctrl+Y with a pick pending does nothing to the pick.
 - **What was wrong:** the history source knew only "a draw tool with `state.active`" (then Esc, which leaves the tool); a pick held by any other tool fell through to a normal undo / redo.
 - **Cause:** `packages/ui/input-manager.js` `sketchHistory` (the ONE undo / redo of the Design surface, keys and footer buttons).
-- **Fix:** `TOOL_PENDING` (`input-manager.js:1551`) declares what each tool holds between its picks; `sketchHistory` undo (`:1253`) runs `restartActiveTool` (cancel what it holds, clear the selection its picks lit, arm the same tool) when one is pending, else `state.undo()`; redo does nothing while one is pending (BUG-329).
+- **Fix:** `TOOL_PENDING` (`input-manager.js:1554`) declares what each tool holds between its picks; `sketchHistory` undo (`:1256`) runs `restartActiveTool` (cancel what it holds, clear the selection its picks lit, arm the same tool) when one is pending, else `state.undo()`; redo does nothing while one is pending (BUG-329).
 - **Task id(s):** `1030`
 - **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
 - **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-05`), `tests/draw-undo-node-runner.js` (`ctrl+z while line active`: the Line tool now stays)
@@ -3241,7 +3241,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** `I-15`: Ctrl+Y with nothing to redo cancelled a half-made 3-point rectangle / Bezier.
 - **What was wrong:** `state.redo` ran `closeDrawStep` before its empty-Redo check.
 - **Cause:** `packages/ui/input-manager.js` `sketchHistory` redo (it called `state.redo` mid-draw).
-- **Fix:** with a pick pending (`toolPickPending`, BUG-324) the history source's redo does nothing (`input-manager.js:1253`).
+- **Fix:** with a pick pending (`toolPickPending`, BUG-324) the history source's redo does nothing (`input-manager.js:1256`).
 - **Task id(s):** `1030`
 - **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
 - **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-15`, `I-05` Ctrl+Y)
@@ -3256,7 +3256,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** `I-17`: a right-click on empty canvas in a draw tool acted as a left click: it started the shape, placed the next point or completed it (rect `shapes 8->12`, polygon `8->20`).
 - **What was wrong:** only Select / Dimension consumed the right press (for the context menu); every other tool got it as a left press, and its release as a left release.
 - **Cause:** `packages/ui/input-manager.js` `handlePointerDown` / `handlePointerUp`.
-- **Fix:** `rightPressIgnored` (`input-manager.js:544`): in every tool but Select, a right press and its release reach no tool (after the Select / Dimension menu check). Line keeps its ruling in ONE place, `line-tool.js:130 rightClickLine`: a typed length is committed, then the chain ends; never a segment to the cursor (the `drawing-tools.js` branch is gone). Behaviour change (advisor ruling): an UNTYPED Line right-click ends the chain with NO segment (task 1028 made one); the constraint / modify tools no longer take a pick from a right press either.
+- **Fix:** `rightPressIgnored` (`input-manager.js:546`): in every tool but Select, a right press and its release reach no tool (after the Select / Dimension menu check). Line keeps its ruling in ONE place, `line-tool.js:130 rightClickLine`: a typed length is committed, then the chain ends; never a segment to the cursor (the `drawing-tools.js` branch is gone). Behaviour change (advisor ruling): an UNTYPED Line right-click ends the chain with NO segment (task 1028 made one); the constraint / modify tools no longer take a pick from a right press either.
 - **Task id(s):** `1030`
 - **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
 - **Guarding test file(s):** `tests/interrupts-fix-1030-node.test.js` (`I-17`, every draw tool and variant), `tests/interrupts-fix-1030-live.test.js` (`I-17`, desktop real right button), `tests/drawbox-fix-1028-node.test.js` (`B-05`, the untyped half now expects no segment)
@@ -3287,7 +3287,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** `I-19`: with a value box open, a middle-drag pan or a click on the footer bar took the keyboard focus out of the box (`input -> body`): Enter then did nothing. Advisor default: a pan or a footer click gives the focus back to the box; a click INTO the Parameters window or the Sketches browser keeps the focus there, and the next canvas press gives it back.
 - **What was wrong:** the document pointerdown handler gave the canvas the focus on every press outside a text field, and nothing gave it back to the box.
 - **Cause:** `packages/ui/input-manager.js` document `pointerdown` listener.
-- **Fix:** the same listener (`input-manager.js:1188`) remembers the value box being typed in (`.dim-input`, `.sk-dual-input input`); a press into `FOCUS_KEEPING_PANELS` (`:541`) keeps the focus there; a middle press, a press outside the canvas, or the first canvas press after a panel visit gives the focus back to that box once the press is done (when it is still shown). A tool's own canvas press is left to the tool.
+- **Fix:** the same listener (`input-manager.js:1190`) remembers the value box being typed in (`.dim-input`, `.sk-dual-input input`); a press into `FOCUS_KEEPING_PANELS` (`:541`) keeps the focus there; a middle-button press on the canvas, a press on the footer bar (`FOCUS_RETURNING_BARS`), or the first canvas press after a panel visit gives the focus back to that box once the press is done (when it is still shown). A tool's own canvas press is left to the tool; any other press (a ribbon button, the Done check) is as before.
 - **Task id(s):** `1030`
 - **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
 - **Guarding test file(s):** `tests/interrupts-fix-1030-live.test.js` (`I-19`, desktop 1280x800)
@@ -3302,7 +3302,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Report:** `I-21`: the first finger of a two-finger pinch / pan acted as a press: it started a Line, completed a Rect / Polygon / Bezier, trimmed, picked in Coincident / Dimension, before the second finger made it a pinch.
 - **What was wrong:** the canvas handled a finger's press at once; the second finger only stopped LATER presses. The second finger's own release then reached the tool as a click.
 - **Cause:** `packages/ui/input-manager.js` svg `pointerdown` / `pointerup` listeners.
-- **Fix:** a finger's press is held back (`input-manager.js:1044`) until it is the press of ONE finger: it lifts, leaves the `LONG_PRESS_SLOP` circle, or `LONG_PRESS_MS` pass (the hold's own window, `#ui/long-press.js`; no new number). A second finger in that time drops the held press; the pinch fingers' releases go to the pan / zoom only. The finger is known to the pinch at once. A long press is unchanged (the held press runs first, then the hold decides; a finger on a transform-box handle is never a hold).
+- **Fix:** a finger's press is held back (`input-manager.js:1046`) until it is the press of ONE finger: it lifts, leaves the `LONG_PRESS_SLOP` circle, or `LONG_PRESS_MS` pass (the hold's own window, `#ui/long-press.js`; no new number). A second finger in that time drops the held press; the pinch fingers' releases go to the pan / zoom only. The finger is known to the pinch at once. A long press is unchanged (the held press runs first, then the hold decides; a finger on a transform-box handle is never a hold).
 - **Task id(s):** `1030`
 - **Fix merge sha:** open (`agents/interrupts-fix-1030`, awaiting merge)
 - **Guarding test file(s):** `tests/interrupts-fix-1030-live.test.js` (`I-21`, phone 390x844, real touch)

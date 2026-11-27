@@ -29,6 +29,7 @@ import {
     openCreationBoxes,
     followCreationBoxes,
     applyLockedSnap,
+    shownSnap,
     liveExpression,
     liveName,
     liveAssign,
@@ -397,7 +398,8 @@ function commitSlot(svg, state, cursorPt) {
 
 function advanceFromSpan(e, svg, state, endPt, snap) {
     const active = state.active;
-    active.picks[1] = { pt: { x: endPt.x, y: endPt.y }, snap: snap || null };
+    // TASK 1033 (S-1): a typed span positions the end (resolveSpanEnd): the snap it was clicked on is dropped, the rule of Rect / Arc / Polygon / Line
+    active.picks[1] = { pt: { x: endPt.x, y: endPt.y }, snap: localState.lockedSpan === null ? (snap || null) : null };
     active.typedSpanExpression = localState.spanExpression;
     active.typedSpanName = localState.spanName;
     active.typedSpanAssign = localState.spanAssign;
@@ -487,11 +489,11 @@ export function setupSlotTool(svg, state) {
                     detail.keepOpen = true;
                     return;
                 }
-                advanceFromSpan(null, svg, state, endPt, null);
+                advanceFromSpan(null, svg, state, endPt, shownSnap(state));   // TASK 1033 (X-01): the snap the cursor shows, as the click
                 detail.keepOpen = true;
             } else if (active.phase === 'arc3') {
                 const cursor = localState.cursor || active.picks[1].pt;
-                if (!advanceFromArc3(null, svg, state, cursor, null)) {
+                if (!advanceFromArc3(null, svg, state, cursor, shownSnap(state))) {   // TASK 1033 (X-01): as the click
                     detail.keepOpen = true;
                     return;
                 }

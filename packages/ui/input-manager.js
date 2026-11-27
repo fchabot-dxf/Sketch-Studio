@@ -525,19 +525,8 @@ function updateSnapTarget(e, svg, state) {
             state.snapTarget = null;
         }
 
-        // Link snap feedback into active preview when drawing/dimensioning
-        // This makes the visual snap target the authoritative source for
-        // applying constraints on finalize, avoiding mismatches between what
-        // the user sees and what the code applies on pointer up.
-        if ((isDrawing || isDimensioning) && state.active) {
-            state.active.preview = state.active.preview || {};
-            if (state.snapTarget) {
-                state.active.preview.snapTarget = state.snapTarget;
-            } else {
-                // Clear any leftover preview snap if the snap is no longer valid
-                if (state.active.preview && state.active.preview.snapTarget) delete state.active.preview.snapTarget;
-            }
-        }
+        // The snap the cursor shows: the click reads it here, and Enter in a value box reads it through base-tool `shownSnap` (TASK 1033, X-01: it was
+        // copied onto state.active.preview, which every tool's updatePreview rebuilds on the same move, so Enter never saw it).
         state.activeSnap = state.snapTarget;
     } else {
         // IDLE: No snap needed, just clear snap state

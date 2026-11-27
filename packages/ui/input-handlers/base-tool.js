@@ -13,6 +13,14 @@ import { docUnit } from '#core/settings-manager.js';
 export const snapPoint = (snap) => (snap ? (snap.pt || (typeof snap.x === 'number' && typeof snap.y === 'number' ? { x: snap.x, y: snap.y } : null)) : null);
 
 /**
+ * TASK 1033 (X-01): THE snap the cursor shows, for a step that has no pointer event of its own (Enter in a value box steps at the last hover point).
+ * It is the locked snap the last move found, kept by input-manager updateSnapTarget in `state.activeSnap`: the one the click reads too
+ * (`state.activeSnap || hitSnap`), so Enter and a click on the same point apply the same snap. Never read from `state.active.preview`: each tool's
+ * updatePreview rebuilds that object on every move. A typed value that positions the point still drops it, in each tool's own step (as its click does).
+ */
+export const shownSnap = (state) => state.activeSnap || null;
+
+/**
  * Apply the constraint for a locked drawing snap onto `jointId` (grid snaps are visual-only).
  * Shared by line-tool and rect-tool so corner/endpoint/midpoint/on-curve snap rules live in ONE place.
  */

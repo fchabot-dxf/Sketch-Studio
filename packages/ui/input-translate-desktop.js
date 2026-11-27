@@ -11,11 +11,11 @@
 //   - every move is a hover (the preview, the box following the pointer).
 // The device differences are a policy: desktop boxes take the focus; the touch translator (#ui/input-translate-touch.js) declares its own.
 
-import { checkDragThreshold } from '#ui/input-handlers/base-tool.js';
+import { checkDragThreshold, shownSnap } from '#ui/input-handlers/base-tool.js';
 import { setHoverFromSnap } from '#ui/hover-manager.js';
 
-/** the snap a step or a hover takes: the snap the cursor shows (state.activeSnap), else the one the click found */
-const shownSnap = (state, hitSnap) => state.activeSnap || hitSnap || null;
+/** the snap a step takes: THE snap the cursor shows (base-tool shownSnap, task 1033), else the one the click found; a hover takes the shown one (Enter steps with it) */
+const stepSnap = (state, hitSnap) => shownSnap(state) || hitSnap || null;
 const screenOf = (e) => ({ x: e.clientX, y: e.clientY });
 
 /** a pointer translator for one device `policy` ({ focusBoxes }) */
@@ -25,7 +25,7 @@ export function createPointerTranslator(policy) {
         down(e, state, session, hitSnap, w) {
             const screen = screenOf(e);
             press = { screen, stepped: false, dragging: false };
-            if (session.firesOn() === 'press') press.stepped = session.step({ at: w, snap: shownSnap(state, hitSnap), screen, via: 'click' }) === 'next';
+            if (session.firesOn() === 'press') press.stepped = session.step({ at: w, snap: stepSnap(state, hitSnap), screen, via: 'click' }) === 'next';
             return true;   // the press is the tool's (a second click's press waits for its release): it never pans
         },
         move(e, state, session, w) {
@@ -35,13 +35,13 @@ export function createPointerTranslator(policy) {
         },
         /** a hover with no pointer event: the re-preview after a wheel zoom or a pan (input-manager) */
         hover(state, session, screen, w) {
-            return session.hover({ at: w, snap: shownSnap(state, state.snapTarget), screen });
+            return session.hover({ at: w, snap: shownSnap(state), screen });
         },
         up(e, state, session, hitSnap, w) {
             const p = press;
             press = null;
             if (p && p.stepped && !p.dragging) { session.openBoxes({ screen: screenOf(e), focus: policy.focusBoxes }); return true; }
-            if (session.firesOn() === 'release') session.step({ at: w, snap: shownSnap(state, hitSnap), screen: screenOf(e), via: p && p.dragging ? 'release' : 'click' });
+            if (session.firesOn() === 'release') session.step({ at: w, snap: stepSnap(state, hitSnap), screen: screenOf(e), via: p && p.dragging ? 'release' : 'click' });
             return true;
         },
     };

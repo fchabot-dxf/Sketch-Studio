@@ -4,6 +4,7 @@ import { open, createProfile, createNamedDesign } from './helpers/node-app.js';
 import { labelEl } from './helpers/node-dom-read.js';
 import * as ops from '#core/tool-ops.js';
 import { patternDefaults } from '#core/pattern.js';
+import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { radialDimensionParams } from '#core/constraints.js';
 import { previewDimensionInput } from '#core/parameters.js';
@@ -263,6 +264,51 @@ await run('R1-11: a hole\'s label turns away from a neighbouring line; a linear 
   const ln = ops.polyline(st, [[0, 40], [80, 40]], false)[0];
   const dl = ConstraintManager.createConstraint(st, 'distance', { joints: [ln.a, ln.b], value: 80 });
   assert.ok(dl && dl.offset < 30 && dl.offset >= 10, 'offset for an 80 mm edge: ' + (dl && dl.offset));
+});
+
+// ── review (task 1021): the default label placement is for a dimension being CREATED; a saved dimension never gets a new one on undo / redo / load ──
+// Requirement: distances saved WITHOUT offset / labelAngle / labelSlide (hand-made or very old files; the core createConstraint has stored `offset` since
+// the first lift, so any file the app wrote carries it) rebuild to byte-identical records and identical label positions through undo + redo and
+// serialize -> deserialize, whatever the order the restore adds them in.
+await run('review: distances saved with no placement fields are stable through load, serialize->deserialize and undo/redo', async () => {
+  const J = (id, x, y, fixed = false) => [id, { x, y, fixed, sketchId: 'sketch-1' }];
+  const doc = {
+    version: 3, hosts: {},
+    geometry: {
+      joints: [J('j_origin', 0, 0, true), J('cc', 0, 0, true), J('a', 0, 40), J('b', 80, 40), J('d', 120, 40)],
+      shapes: [{ id: 'C1', type: 'circle', joints: ['cc'], radius: 20, sketchId: 'sketch-1' }, { id: 'C2', type: 'circle', joints: ['cc'], radius: 35, sketchId: 'sketch-1' },
+        { id: 'L1', type: 'line', joints: ['a', 'b'], sketchId: 'sketch-1', isConstruction: false }, { id: 'L2', type: 'line', joints: ['b', 'd'], sketchId: 'sketch-1', isConstruction: false }],
+      constraints: [
+        { type: 'distance', shape: 'C1', isRadius: true, isDiameter: true, value: 40, name: 'd1' },
+        { type: 'distance', shape: 'C2', isRadius: true, isDiameter: true, value: 70, name: 'd2' },
+        { type: 'distance', joints: ['a', 'b'], value: 80, name: 'd3' },
+        { type: 'distance', joints: ['b', 'd'], value: 40, name: 'd4' },
+      ],
+      parameters: [], sketches: [{ id: 'sketch-1', name: 'Sketch 1', visible: true }], activeSketchId: 'sketch-1', groups: [], profiles: [],
+    },
+  };
+  const profile = await createProfile();
+  await createNamedDesign(profile, 'sketchstudio', 'review-1021', doc);
+  const app = await open({ host: 'sketchstudio', profile });
+  try {
+    const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x));   // key order is the renderer's glyphPos write order, not the record's content
+    const records = () => canon(app.state.constraints);
+    const positions = () => JSON.stringify([...app.svg.querySelectorAll('.dim-label')].map((e) => [e.dataset.constraintIdx, e.textContent.trim(), e.getAttribute('transform') || e.getAttribute('x') + ',' + e.getAttribute('y')]));
+    const loaded = records(), loadedPos = positions();
+    // serialize -> deserialize
+    const st2 = ops.newSketchState();
+    deserializeDocument(serializeDocument(app.state), st2);
+    assert.strictEqual(canon(st2.constraints), loaded, 'serialize -> deserialize: byte-identical constraint records');
+    // undo / redo of an unrelated edit restores the same records and label positions
+    app.tool('line'); const p0 = app.toScreen(-60, 60), p1 = app.toScreen(-20, 60);
+    app.click(p0.x, p0.y); app.click(p1.x, p1.y); app.esc();
+    app.undo(); app.frames(2);
+    assert.strictEqual(records(), loaded, 'undo: byte-identical constraint records');
+    assert.strictEqual(positions(), loadedPos, 'undo: identical label positions');
+    app.redo(); app.undo(); app.frames(2);
+    assert.strictEqual(records(), loaded, 'redo then undo: byte-identical constraint records');
+    assert.strictEqual(positions(), loadedPos, 'redo then undo: identical label positions');
+  } finally { await app.close(); }
 });
 
 console.log(`toolux-1021: ${passed} passed`);

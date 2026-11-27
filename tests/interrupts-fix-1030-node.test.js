@@ -128,6 +128,27 @@ await run('I-03 dimension placing then Esc: Redo is kept', async () => {
   } finally { await app.close(); }
 });
 
+await run('I-03 memory: committed draws after an undo keep ONE retained Redo branch, the newest clearing step', async () => {
+  const app = await openFresh();
+  try {
+    seedRedo(app);                                                            // Redo holds one step
+    app.tool('line'); clickW(app, 0, -40); clickW(app, 30, -40); app.esc(); app.esc();   // a committed draw clears it (entry A)
+    const first = app.state._clearedRedo;
+    assert(first && first.redo.length === 1, 'the slot holds the branch the first draw cleared');
+    app.undo();                                                               // Redo holds that draw
+    app.tool('line'); clickW(app, 0, -60); clickW(app, 30, -60); app.esc(); app.esc();   // a second committed draw clears it (entry B)
+    const second = app.state._clearedRedo;
+    assert(second && second !== first, 'one slot, overwritten by the next clearing save');
+    assert(second.entry !== first.entry, 'the slot holds the second entry, not the first');
+    assert(app.state.history.includes(second.entry), 'the entry of the second draw is the one held');
+    assert.strictEqual(second.redo.length, 1, 'only that one branch is retained');
+    // the give-back still works after it: a cancelled draw keeps Redo
+    app.undo(); const h0 = hist(app);
+    app.tool('rect'); clickW(app, 40, -20); moveW(app, 60, -10); app.esc();
+    sameHist(h0, hist(app), 'a cancelled draw after the overwrite still gives Redo back');
+  } finally { await app.close(); }
+});
+
 // ── I-04: re-clicking the active tool's button keeps the half-made draw and the typed value ──
 await run('I-04 rect / line / circle / slot: click, type 25, click the same button again: tool, first pick and "25" kept; Enter still finishes', async () => {
   for (const tool of ['rect', 'line', 'circle', 'slot']) {

@@ -2363,7 +2363,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Status:** fixed
 - **Family:** `ui-input`
 - **Related:** BUG-120..126 (task 1006 birth rule)
-- **History:** found in audit `1016` -> fixed in task `1019`. Probe before: `ROW R1-04 | ... | BUG | 2nd orthogonal point-to-point dim born [ref] while Y free (A11b d13Ref=true nullity=1; A12 d16Ref=true)`.
+- **History:** found in audit `1016` -> fixed in task `1019`. Probe before: `ROW R1-04 | ... | BUG | 2nd orthogonal point-to-point dim born [ref] while Y free (A11b d13Ref=true nullity=1; A12 d16Ref=true)`. After: `ROW R1-04 | Part A / A11b,A12 | OK | ... (A11b d13Ref=false nullity=1; A12 d16Ref=false)`.
 
 ---
 ### BUG-201
@@ -2379,7 +2379,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Guarding test file(s):** `tests/dimsolve-1019-node.test.js` (`R2-02a` undo + redo, `R2-02b` undo of a later step, `R2-02c` save + reload, `R2-02d` a second reference, `R2-02 behaviour change` a file with a duplicate driving distance)
 - **Status:** fixed
 - **Family:** `solver`
-- **History:** found in audit `1017` -> fixed in task `1019`. Probe before: `ROW E-01a.autoRefUndoRedo | afterPlace=["80","(80)"] ... afterRedo=["80"]`.
+- **History:** found in audit `1017` -> fixed in task `1019`. Probe before: `ROW E-01a.autoRefUndoRedo | afterPlace=["80","(80)"] ... afterRedo=["80"]`. After: `ROW E-01a.autoRefUndoRedo | ... afterRedo=["80","(80)"]`, `ROW E-01b.singleUndoAutoRef | before=["80","(80)","(80)"] after1Undo=["80","(80)"] after1Redo=["80","(80)","(80)"]`.
 
 ---
 

@@ -2349,7 +2349,38 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 
 ---
 
-<<<<<<< HEAD
+### BUG-200
+- **Date / turn:** 2026-11-26 (audit ID `R1-04`; fixed in task `1019`)
+- **Reported by:** audit `1016` (`R1-04`, Part A `A11b`, `A12`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R1-04`: a 2nd orthogonal point-point dimension (Vertical `Origin -> Hole 1` after Horizontal `d12 = 10`; Vertical `(50,-30) -> Hole 2` after aligned `d15 = 10`) is born `[ref]` while the point can still move (`nullity = 1`). Fusion places it driving (`bracket.json` `hole x` + `hole y`).
+- **What was wrong:** the rank test (`isDimensionDetermined`) answers right (`d13 vertical redundant false`); two other demotions overrode it at birth.
+- **Cause:** (1) `packages/ui/input-handlers/dimension-tool.js` (finalize placement and `anchorPlacingDimension`): a legacy "both joints fixed" sandbox read `analyzeConstraintStatus` WITH the new dimension in it (so its last free point read fixed), then solved an ALIGNED test distance at the H / V value, which cannot hold, and forced the dimension driven (`ERR-DIM-02`). (2) `packages/core/dim-label.js` `updateConstraintOffset`: the same-edge `hasConflict` reference flag was sticky during placement, so a pointer passing through the mode of the pair's driving dimension on its way to another mode left the new dimension a reference.
+- **Fix:** both sandbox blocks removed: the ONE rank test (`numeric-input-manager.js` `showEditInput` -> `isDimensionDetermined`) decides at birth. A dimension born in the placement keeps only ConstraintManager's decision (it carries `drivenReason`); `hasConflict` follows the current mode.
+- **Task id(s):** `1019`
+- **Fix merge sha:** open (`agents/dimsolve-1019`, awaiting merge)
+- **Guarding test file(s):** `tests/dimsolve-1019-node.test.js` (`R1-04a`, `R1-04b`, `R1-04c`); `tests/notices-1001-node.test.js` (fixed joints: now `ERR-DRIVEN-02`)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **Related:** BUG-120..126 (task 1006 birth rule)
+- **History:** found in audit `1016` -> fixed in task `1019`. Probe before: `ROW R1-04 | ... | BUG | 2nd orthogonal point-to-point dim born [ref] while Y free (A11b d13Ref=true nullity=1; A12 d16Ref=true)`. After: `ROW R1-04 | Part A / A11b,A12 | OK | ... (A11b d13Ref=false nullity=1; A12 d16Ref=false)`.
+
+---
+### BUG-201
+- **Date / turn:** 2026-11-26 (audit ID `R2-02`; fixed in task `1019`)
+- **Reported by:** audit `1017` (`R2-02`, `E-01a`, `E-01b`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** `R2-02`: a reference dimension `(80)` placed beside an edge's driving `80` is lost by one Undo + Redo (`["80","(80)"] -> ["80"] -> ["80"]`), and on undo-all + redo-all.
+- **What was wrong:** undo / redo (`sketch-state.js` `_restoreSnapshot`) and loading a file (`document.js` `deserializeDocument`) rebuilt each constraint through `addConstraintObject` -> `addConstraint` -> `hasConstraint`, which took the reference for a duplicate and dropped it.
+- **Cause:** the restore paths applied CREATION's duplicate rule: `hasConstraint` (`packages/core/constraints.js`, DISTANCE, joint form) ignores `isDriven`, and two references of one edge are alike, so a reference beside the driving dimension, or a second reference, was dropped as a duplicate.
+- **Fix:** ONE `restoreConstraintObject` in `packages/core/constraints.js` (addConstraintObject's validation: createConstraint's fields, the coincident expansion, a missing name; NO duplicate check), called by `sketch-state.js` `_restoreSnapshot` and `cancelUndoGroup` and `document.js` `deserializeDocument`: what was saved comes back exactly. Creation (addConstraintObject, ConstraintManager, paste, mirror) keeps its duplicate check. Behaviour change: a file that holds a real duplicate (two driving distances on one pair) now loads both instead of silently dropping the second; equal values solve, different ones show as a conflict.
+- **Task id(s):** `1019`
+- **Fix merge sha:** open (`agents/dimsolve-1019`, awaiting merge)
+- **Guarding test file(s):** `tests/dimsolve-1019-node.test.js` (`R2-02a` undo + redo, `R2-02b` undo of a later step, `R2-02c` save + reload, `R2-02d` a second reference, `R2-02 behaviour change` a file with a duplicate driving distance)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found in audit `1017` -> fixed in task `1019`. Probe before: `ROW E-01a.autoRefUndoRedo | afterPlace=["80","(80)"] ... afterRedo=["80"]`. After: `ROW E-01a.autoRefUndoRedo | ... afterRedo=["80","(80)"]`, `ROW E-01b.singleUndoAutoRef | before=["80","(80)","(80)"] after1Undo=["80","(80)"] after1Redo=["80","(80)","(80)"]`.
+
 ### BUG-300
 - **Date / turn:** 2026-11-27 (task 1027, from the files and documents audit 1024, row F-81 / F-81b)
 - **Reported by:** audit `1024`
@@ -2484,39 +2515,6 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **Related:** none
 - **History:** F-id `F-94` of `docs/FILES-AUDIT-1024.md`; probe `tests/audits/files-audit-1024-*.mjs`.
-=======
-### BUG-200
-- **Date / turn:** 2026-11-26 (audit ID `R1-04`; fixed in task `1019`)
-- **Reported by:** audit `1016` (`R1-04`, Part A `A11b`, `A12`)
-- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
-- **Report:** `R1-04`: a 2nd orthogonal point-point dimension (Vertical `Origin -> Hole 1` after Horizontal `d12 = 10`; Vertical `(50,-30) -> Hole 2` after aligned `d15 = 10`) is born `[ref]` while the point can still move (`nullity = 1`). Fusion places it driving (`bracket.json` `hole x` + `hole y`).
-- **What was wrong:** the rank test (`isDimensionDetermined`) answers right (`d13 vertical redundant false`); two other demotions overrode it at birth.
-- **Cause:** (1) `packages/ui/input-handlers/dimension-tool.js` (finalize placement and `anchorPlacingDimension`): a legacy "both joints fixed" sandbox read `analyzeConstraintStatus` WITH the new dimension in it (so its last free point read fixed), then solved an ALIGNED test distance at the H / V value, which cannot hold, and forced the dimension driven (`ERR-DIM-02`). (2) `packages/core/dim-label.js` `updateConstraintOffset`: the same-edge `hasConflict` reference flag was sticky during placement, so a pointer passing through the mode of the pair's driving dimension on its way to another mode left the new dimension a reference.
-- **Fix:** both sandbox blocks removed: the ONE rank test (`numeric-input-manager.js` `showEditInput` -> `isDimensionDetermined`) decides at birth. A dimension born in the placement keeps only ConstraintManager's decision (it carries `drivenReason`); `hasConflict` follows the current mode.
-- **Task id(s):** `1019`
-- **Fix merge sha:** open (`agents/dimsolve-1019`, awaiting merge)
-- **Guarding test file(s):** `tests/dimsolve-1019-node.test.js` (`R1-04a`, `R1-04b`, `R1-04c`); `tests/notices-1001-node.test.js` (fixed joints: now `ERR-DRIVEN-02`)
-- **Status:** fixed
-- **Family:** `ui-input`
-- **Related:** BUG-120..126 (task 1006 birth rule)
-- **History:** found in audit `1016` -> fixed in task `1019`. Probe before: `ROW R1-04 | ... | BUG | 2nd orthogonal point-to-point dim born [ref] while Y free (A11b d13Ref=true nullity=1; A12 d16Ref=true)`. After: `ROW R1-04 | Part A / A11b,A12 | OK | ... (A11b d13Ref=false nullity=1; A12 d16Ref=false)`.
-
----
-### BUG-201
-- **Date / turn:** 2026-11-26 (audit ID `R2-02`; fixed in task `1019`)
-- **Reported by:** audit `1017` (`R2-02`, `E-01a`, `E-01b`)
-- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
-- **Report:** `R2-02`: a reference dimension `(80)` placed beside an edge's driving `80` is lost by one Undo + Redo (`["80","(80)"] -> ["80"] -> ["80"]`), and on undo-all + redo-all.
-- **What was wrong:** undo / redo (`sketch-state.js` `_restoreSnapshot`) and loading a file (`document.js` `deserializeDocument`) rebuilt each constraint through `addConstraintObject` -> `addConstraint` -> `hasConstraint`, which took the reference for a duplicate and dropped it.
-- **Cause:** the restore paths applied CREATION's duplicate rule: `hasConstraint` (`packages/core/constraints.js`, DISTANCE, joint form) ignores `isDriven`, and two references of one edge are alike, so a reference beside the driving dimension, or a second reference, was dropped as a duplicate.
-- **Fix:** ONE `restoreConstraintObject` in `packages/core/constraints.js` (addConstraintObject's validation: createConstraint's fields, the coincident expansion, a missing name; NO duplicate check), called by `sketch-state.js` `_restoreSnapshot` and `cancelUndoGroup` and `document.js` `deserializeDocument`: what was saved comes back exactly. Creation (addConstraintObject, ConstraintManager, paste, mirror) keeps its duplicate check. Behaviour change: a file that holds a real duplicate (two driving distances on one pair) now loads both instead of silently dropping the second; equal values solve, different ones show as a conflict.
-- **Task id(s):** `1019`
-- **Fix merge sha:** open (`agents/dimsolve-1019`, awaiting merge)
-- **Guarding test file(s):** `tests/dimsolve-1019-node.test.js` (`R2-02a` undo + redo, `R2-02b` undo of a later step, `R2-02c` save + reload, `R2-02d` a second reference, `R2-02 behaviour change` a file with a duplicate driving distance)
-- **Status:** fixed
-- **Family:** `solver`
-- **History:** found in audit `1017` -> fixed in task `1019`. Probe before: `ROW E-01a.autoRefUndoRedo | afterPlace=["80","(80)"] ... afterRedo=["80"]`. After: `ROW E-01a.autoRefUndoRedo | ... afterRedo=["80","(80)"]`, `ROW E-01b.singleUndoAutoRef | before=["80","(80)","(80)"] after1Undo=["80","(80)"] after1Redo=["80","(80)","(80)"]`.
->>>>>>> origin/main
 
 ---
 
@@ -2541,12 +2539,9 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22) |
-<<<<<<< HEAD
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-200 (11-26) |
 | `ui-input` | BUG-307 (11-27), BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
-=======
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-200 (11-26) |
->>>>>>> origin/main
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 
 ---

@@ -5,7 +5,7 @@ import { SolverConfig } from '#core/solver-config.js';
 // Shared UI (#ui/input-handlers/). Relocated VERBATIM from apps/sketchstudio in slice S4d.
 // TODO(shaper): parameterize the DOM reaches before Shaper adopts this — relocation only for now.
 
-import { dbg, logDiagnostic } from '#core/debug.js';
+import { dbg } from '#core/debug.js';
 import { TOOL_MODES, CONSTRAINT_TYPES, DRAG_TYPES, DEFAULTS } from '#core/constants.js';
 import { ConstraintManager, announceReference } from '#core/constraint-manager.js';
 import { radialDimensionParams } from '#core/constraints.js';
@@ -17,8 +17,6 @@ import { placeRadiusLabel, updateConstraintOffset } from '#core/dim-label.js'; /
 import { findUndimensionedOffsetPair, restoreOffsetDimension } from '#core/offset.js';
 import { isPatternConstraint } from '#core/pattern.js';
 import { editPatternFromLabel } from '#ui/input-handlers/pattern-tool.js';
-import { analyzeConstraintStatus } from '#core/constraint-status.js';
-import { snapshotSolverState, restoreSolverState } from '#core/solver/engine.js';
 import { showNotification } from '#ui/notification-manager.js';
 // Constraint / dimension operands resolve through the scene (task 539): the real containers + the two built-in reference lines.
 import { sceneJoints, sceneShapes, pickableShapes, referenceEnds } from '#core/reference-lines.js';
@@ -304,36 +302,6 @@ export function anchorPlacingDimension(svg, state, initialKey) {
     const pending = (state && state.placingConstraint) || dimensionState.placingConstraint;
     if (!pending || !pending.__placing) return false;
 
-    // Check if geometry is already fully defined (Fixed/Constrained)
-    if (pending.joints && pending.joints.length === 2 && state) {
-        const [j1, j2] = pending.joints;
-        const status = analyzeConstraintStatus(state);
-        if (status.fixedJoints.has(j1) && status.fixedJoints.has(j2)) {
-            const savedPositions = snapshotSolverState(state.joints, state.shapes, state.constraints);
-            const testConstraint = { type: CONSTRAINT_TYPES.DISTANCE, joints: [j1, j2], value: pending.value, __temp: true, isDriven: false };
-            state.constraints.push(testConstraint);
-            try { if (state.engine && typeof state.engine.solve === 'function') state.engine.solve(SolverConfig.ITERATIONS || 500); } catch(_) {}
-            const a = sceneJoints(state.joints).get(j1);
-            const b = sceneJoints(state.joints).get(j2);
-            const dist = (a && b) ? getDist(a, b) : null;
-            const idx = state.constraints.indexOf(testConstraint);
-            if (idx !== -1) state.constraints.splice(idx, 1);
-            restoreSolverState(state.joints, state.shapes, savedPositions);
-
-            if (dist === null || Math.abs(dist - (pending.value || 0)) > 0.1) {
-                pending.isDriven = true;
-                pending.driven = true;
-                finishPlacementWithoutEdit(pending, state);
-                logDiagnostic('constraints', 'ERR-DIM-02', 'Geometry already defined; dimension added as driven.', {
-                    joints: [j1, j2],
-                    value: pending.value,
-                    dist
-                });
-                return true;
-            }
-        }
-    }
-
     // Finalize value for H/V/aligned
     if (pending.dimMode === 'horizontal' && pending.joints && pending.joints.length >= 2 && state) {
         const j1 = sceneJoints(state.joints).get(pending.joints[0]);
@@ -478,50 +446,6 @@ function dimensionPointerDown(e, svg, state, hitJoint, hitShape, hitConstraint) 
         
         // If it's a driving dimension, open the edit box.
         logDim('open-edit-driving', { id: pending.id || '(pending)', dimMode: pending.dimMode, offset: pending.offset });
-
-        // Check if geometry is already fully defined (Fixed/Constrained)
-        // Use a solver sandbox to determine whether adding a driving dimension would distort geometry.
-        if (pending.joints && pending.joints.length === 2) {
-            const [j1, j2] = pending.joints;
-            // Quick optimistic check: if both joints are marked constrained, run a sandbox solve to confirm.
-            const status = analyzeConstraintStatus(state);
-            // Only treat as immovable when both endpoints are actually fixed (zero DOF), not merely constrained.
-            // Only set as driven if BOTH joints are fixed (not just one)
-            if (status.fixedJoints.has(j1) && status.fixedJoints.has(j2)) {
-                // Sandbox test: temporarily add a distance constraint and run the solver
-                const savedPositions = snapshotSolverState(state.joints, state.shapes, state.constraints);
-                const testConstraint = { type: CONSTRAINT_TYPES.DISTANCE, joints: [j1, j2], value: pending.value, __temp: true, isDriven: false };
-                state.constraints.push(testConstraint);
-                try { if (state.engine && typeof state.engine.solve === 'function') state.engine.solve(SolverConfig.ITERATIONS || 500); } catch(_) {}
-                const a = sceneJoints(state.joints).get(j1);
-                const b = sceneJoints(state.joints).get(j2);
-                const dist = (a && b) ? getDist(a, b) : null;
-                // Remove temp constraint
-                const idx = state.constraints.indexOf(testConstraint);
-                if (idx !== -1) state.constraints.splice(idx, 1);
-                // Restore geometry
-                restoreSolverState(state.joints, state.shapes, savedPositions);
-
-                // If the solver couldn't satisfy the constraint, mark as driven; otherwise allow driving
-                if (dist === null || Math.abs(dist - (pending.value || 0)) > 0.1) {
-                    // Adding as driving would distort => force driven
-                    pending.isDriven = true;
-                    pending.driven = true;
-                    finishPlacementWithoutEdit(pending, state);
-                    // Add joint status details for debugging
-                    const jointStatus = {
-                        j1,
-                        j2,
-                        fixedJoints: Array.from(status.fixedJoints),
-                        constrainedJoints: Array.from(status.constrainedJoints),
-                        jointDOFs: Object.fromEntries(status.jointDOFs)
-                    };
-                    logDiagnostic('constraints', 'ERR-DIM-02', 'Geometry is already fully defined; dimension added as driven.', { pending, jointStatus });
-                    return true;
-                }
-                // Else it's safe to be driving and we continue to open the edit input
-            }
-        }
 
         // FIX: Update value for H/V modes to projected distance so solver doesn't jump
         if (pending.dimMode === 'horizontal' && pending.joints && pending.joints.length >= 2) {

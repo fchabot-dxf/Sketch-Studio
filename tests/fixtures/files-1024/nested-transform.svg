@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100">
+  <g id="outer" transform="translate(10,20) scale(2)">
+    <g id="inner" transform="rotate(90)">
+      <line id="a" x1="0" y1="0" x2="10" y2="0"/>
+    </g>
+    <circle id="c" cx="5" cy="5" r="3"/>
+  </g>
+  <g transform="matrix(1 0 0 -1 0 100)"><line id="flip" x1="50" y1="10" x2="80" y2="10"/></g>
+</svg>

@@ -299,7 +299,11 @@ export function updateConstraintOffset(state, c, w) {
                 // Promote to reference on a same-edge conflict, but NEVER DEMOTE an upstream driven decision
                 // (e.g. a rank-redundant CROSS-edge dim already marked driven by ConstraintManager) back to a
                 // driver — that's the "renders as driver despite the reference notice" bug. Keep both flags in sync.
-                const isReference = !!(c.isDriven || c.driven || c._forcedDriven || hasConflict);
+                // TASK 1019 (R1-04): for a dimension born in this placement the upstream decision is ConstraintManager's (it names its reason);
+                // the same-edge conflict follows the mode under the pointer NOW: passing through the mode of the pair's driving dimension on
+                // the way to another mode no longer leaves the new dimension a reference.
+                const upstream = c.__newlyPlaced === true ? !!c.drivenReason : !!(c.isDriven || c.driven);
+                const isReference = !!(upstream || c._forcedDriven || hasConflict);
                 c.isDriven = isReference;
                 c.driven = isReference;
 

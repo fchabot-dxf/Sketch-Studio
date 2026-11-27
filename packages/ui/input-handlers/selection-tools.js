@@ -742,7 +742,7 @@ export function handleSelectionPointerMove(e, svg, state) {
 // dragged joint's solved position `reached` then takes the cursor's snap candidate (input-manager updateSnapTarget) only when the candidate's
 // point is within the snap magnet of it (a point held on a line that cannot reach the target does not snap, and the release adds nothing).
 // The inference stays found at the masked cursor (see below). A pin (the snap point, the inferred position) is a second pull. A free point
-// reaches the cursor: its snap is the cursor's, as before. A BODY / LINE drag is unchanged: its snap is taken at the cursor, no inference.
+// reaches the cursor: its snap is the cursor's, as before. A BODY / LINE drag takes no snap and no inference (TASK 1032, the group drag's rule).
 function dragToward(e, svg, state, wpt, atPointer) {
     const iters = atPointer ? (SolverConfig.QUICK_SOLVE || 8) : (SolverConfig.ITERATIONS || 500);
     const pointDrag = state.drag.type === DRAG_TYPES.JOINT || state.drag.type === DRAG_TYPES.CLUSTER;
@@ -850,7 +850,10 @@ function dragToward(e, svg, state, wpt, atPointer) {
     // point (the release distance when the previous step held this same target, as input-manager's hysteresis). A candidate it does not take
     // is no lock: the renderer shows none, the release adds no constraint, and input-manager's release-jitter recovery has no lock to restore.
     // TASK 588: a GROUP drag (the selection moving) takes no snap: it is a solver move only (and, a cluster drag, it infers nothing: task 584).
-    if (state.drag.group) {
+    // TASK 1032: nor does a drag that starts on a curve's BODY (DRAG_TYPES.LINE, startShapeDrag: a line by its middle, a circle / arc by its
+    // rim, a bezier ...), Fusion measured with the real mouse 2026-11-27: a line dragged by its middle, its end or the grabbed spot dropped
+    // 0.1 cm from a point, takes no snap and adds no constraint. The release adds nothing for either (only a point drag's release does, below).
+    if (state.drag.group || state.drag.type === DRAG_TYPES.LINE) {
         if (state.lastLockedSnap === state.activeSnap) state.lastLockedSnap = null;
         state.snapTarget = null;
         state.activeSnap = null;

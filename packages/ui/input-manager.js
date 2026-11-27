@@ -27,7 +27,7 @@ import { beginClosePath, handleClosePathPointerDown, closePathMenuActions } from
 import { handleTextPointerDown, commitTextEditor, cancelTextEditor, textEditorOpen, textMenuActions } from '#ui/input-handlers/text-tool.js'; // TASK 845: the Text tool and its editor, every app
 import { watchTextOutlines } from '#ui/text-fonts.js'; // TASK 845: a text's letters are rebuilt whenever its shape comes back without them (an undo)
 import { transformBoxPointerDown, transformBoxPointerMove, transformBoxPointerUp, cancelTransformGesture, closeTransformInput } from '#ui/transform-box.js'; // TASK 753: a group's transform box, every app
-import { updateHover, clearHover, glyphAt, constraintAt } from '#ui/hover-manager.js';
+import { updateHover, clearHover, constraintAt, glyphOrJointPick } from '#ui/hover-manager.js';
 import { setupDrawingTools, handleDrawingPointerDown, handleDrawingPointerMove, handleDrawingPointerUp, resetDrawingState } from '#ui/input-handlers/drawing-tools.js';
 import { setupConstraintTools, activateConstraintTool, handleConstraintPointerDown, handleConstraintPointerMove, handleConstraintPointerUp, resetConstraintState, constraintToolPicks, constraintPickPending } from '#ui/input-handlers/constraint-tools.js';
 import { setupPanZoom, handlePanZoomPointerDown, handlePanZoomPointerMove, handlePanZoomPointerUp, resetPanZoomState, handlePanZoomWheel } from '#ui/input-handlers/pan-zoom.js';
@@ -1416,15 +1416,17 @@ function pickContextTarget(svg, state, e) {
         if (c && !isConstraintInert(inertEntities(state), c)) return { kind: 'dimension', constraint: c };
     }
     // A constraint GLYPH is drawn on top of the geometry, so the pointer ON one means the glyph (task 571): it is picked before the joint /
-    // shape under it. ON = THE glyph pick (hover-manager glyphAt: on the drawn icon's box plus a small margin, a larger one on touch; task 588: the
-    // left click and the hover use it too); a pointer merely NEAR a glyph (on a line beside it) keeps the geometry's menu.
-    // (A left click is not this order: a joint wins there, then a glyph, then a shape.)
-    const glyph = glyphAt(svg, state, e.clientX, e.clientY, e.pointerType === 'touch');
+    // shape under it, by THE glyph-over-point rule the left click and the hover use too (hover-manager glyphOrJointPick, TASK 1044 BUG-D); a
+    // pointer merely NEAR a glyph (on a line beside it) keeps the geometry's menu. A glyph with no menu of its own leaves the geometry's.
+    const touch = e.pointerType === 'touch';
+    const scene = pickScene(state);
+    const snap = findSnap(scene.joints, scene.shapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, snapBoostFor(touch));
+    const hitJoint = snap && snap.type === 'joint' && snap.targetId !== 'j_origin' ? { id: snap.targetId } : null;
+    const pick = glyphOrJointPick(svg, state, hitJoint, e.clientX, e.clientY, touch);
+    const glyph = pick && pick.constraint;
     if (glyph && isDimension(glyph)) return { kind: 'dimension', constraint: glyph }; // a distance / angle / offset (task 650): its own menu
     if (glyph && CONSTRAINT_MENU_TYPES.includes(glyph.type)) return { kind: 'constraint', constraint: glyph };
-    const scene = pickScene(state);
-    const snap = findSnap(scene.joints, scene.shapes, svg, { x: e.clientX, y: e.clientY }, [], false, false, snapBoostFor(e.pointerType === 'touch'));
-    if (snap && snap.type === 'joint' && snap.targetId !== 'j_origin') return { kind: 'joint', id: snap.targetId };
+    if (hitJoint) return { kind: 'joint', id: hitJoint.id };
     if (snap && snap.shape && (snap.type === 'line' || snap.type === 'shape' || snap.type === 'midpoint')) return { kind: 'shape', id: snap.shape.id };
     return null;
 }
@@ -1645,10 +1647,12 @@ function finishMirrorStep(state) {
     if (mirrorDone(state) === 'mirrored') switchToTool(state, TOOL_MODES.SELECT);
 }
 
+// THE Delete (the Delete key, Backspace, the right-click / touch-and-hold menu's Delete, the footer red X): #core deleteSelection, then the hint
+// of a Delete the point rule refused (TASK 1044: a curve's point or the origin is never deleted; the hint says what to select instead)
 export function handleDelete(state) {
     try {
-        // Prefer centralized delete helpers which handle cascade cleanup and undo grouping
-        deleteSelection(state);
+        const res = deleteSelection(state);
+        if (res.hint) showNotification(res.hint, 'info');
     } catch (err) {
         console.error('[handleDelete] delete helpers failed', err);
     }

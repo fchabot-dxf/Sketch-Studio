@@ -1,6 +1,7 @@
 // tests/selection-origin-suppression.test.js -- the select tool's hover near the origin and a glyph. TASK 588: the hover is THE click's pick
-// (hover-manager selectPick: a joint in snap reach, else a glyph the pointer is ON, else a shape), so ONE target is hovered and it is what a
-// click selects. The old hover rule ("the origin yields to a glyph as close or closer", a 24 / 40 px glyph reach) is gone: the click never had
+// (hover-manager selectPick; TASK 1044 glyphOrJointPick: the pointer on a point's drawn ring picks the point, else a glyph the pointer is ON,
+// else a joint in snap reach, else a dimension label, else a shape), so ONE target is hovered and it is what a click selects. Here the pointer
+// is ON the origin (its ring), with a glyph's icon drawn over it: the origin. The old hover rule ("the origin yields to a glyph as close or closer", a 24 / 40 px glyph reach) is gone: the click never had
 // it (a joint in reach was always picked first), and hover = click.
 (async () => {
   const { updateHoverFeedback } = await import('#ui/input-handlers/selection-tools.js');

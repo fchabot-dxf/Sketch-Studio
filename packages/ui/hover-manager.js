@@ -3,7 +3,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 import { findSnap } from '#ui/snap-detection.js';
 import { constraintToolPicks } from '#ui/input-handlers/constraint-tools.js'; // TASK 1020: the hover lights what the click takes
-import { screenToWorld, getZoomFactor } from '#ui/coords.js';
+import { screenToWorld, worldToScreen, getZoomFactor } from '#ui/coords.js';
+import { pointMarkRadiusPx } from '#ui/svg-renderer.js'; // TASK 1044: the point's drawn ring is ON the point
 import { glyphPickHit } from '#ui/fusion-glyphs.js';
 import SettingsManager from '#core/settings-manager.js';
 import { ACTIVE_SKETCH_HOVER_TOOLS, TOOL_MODES } from '#core/constants.js';
@@ -61,13 +62,31 @@ export function constraintAt(svg, state, screenX, screenY, touch = false) {
     return glyphAt(svg, state, screenX, screenY, touch) || dimLabelAt(svg, state, screenX, screenY);
 }
 
-// THE select tool's pick (task 588: HOVER = CLICK, so what lights up on hover is exactly what a click selects): a joint in snap reach
-// (hitJoint), else a glyph the pointer is ON (glyphAt), else a shape (hitShape). Returns { joint } | { constraint } | { shape } | null.
-// selection-tools handleSelectionPointerDown (the click) and applyHoverPriority (the hover) both call it.
+// THE glyph-over-point rule (TASK 1044, BUG-D, audit D-48 / D-56 / D-60; advisor ruling): (1) the pointer ON a point's drawn marker ring
+// (svg-renderer pointMarkRadiusPx, the radius every point is drawn at) picks the point, even under a glyph's icon (a press exactly on a point is
+// meant for the point: to drag, split or dimension it); (2) else the pointer on a glyph's ink (glyphAt) picks the glyph, even inside a point's
+// snap reach (a tangent glyph sits 6 px off its tangency point; a symmetric glyph, a stacked coincident sit inside the 30 px joint reach);
+// (3) else the joint in reach (hitJoint). Returns { constraint } | { joint } | null. The ONE rule of the left click and the hover (selectPick)
+// and of the right click / touch hold (input-manager pickContextTarget).
+export function glyphOrJointPick(svg, state, hitJoint, screenX, screenY, touch = false) {
+    const j = hitJoint && state.joints.get(hitJoint.id);
+    if (j) {
+        const p = worldToScreen(svg, j);
+        if (Math.hypot(screenX - p.x, screenY - p.y) <= pointMarkRadiusPx()) return { joint: hitJoint };
+    }
+    const glyph = glyphAt(svg, state, screenX, screenY, touch);
+    if (glyph) return { constraint: glyph };
+    return hitJoint ? { joint: hitJoint } : null;
+}
+
+// THE select tool's pick (task 588: HOVER = CLICK, so what lights up on hover is exactly what a click selects): a glyph the pointer is ON, else
+// a joint in snap reach (glyphOrJointPick), else a dimension label (dimLabelAt), else a shape (hitShape). Returns { joint } | { constraint } |
+// { shape } | null. selection-tools handleSelectionPointerDown (the click) and applyHoverPriority (the hover) both call it.
 export function selectPick(svg, state, hitJoint, hitShape, screenX, screenY, touch = false) {
-    if (hitJoint) return { joint: hitJoint };
-    const constraint = constraintAt(svg, state, screenX, screenY, touch);
-    if (constraint) return { constraint };
+    const first = glyphOrJointPick(svg, state, hitJoint, screenX, screenY, touch);
+    if (first) return first;
+    const label = dimLabelAt(svg, state, screenX, screenY);
+    if (label) return { constraint: label };
     if (hitShape) return { shape: hitShape };
     return null;
 }

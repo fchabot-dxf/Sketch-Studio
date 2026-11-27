@@ -3696,6 +3696,81 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `solver`
 - **History:** found in task `1041` -> fixed in task `1041`. Probe before: `.evidence/1041/probe-pattern-copy-before.txt` `new joint still there: true used by a shape: false`; after: `.evidence/1041/probe-pattern-copy-after.txt` `new joint still there: false used by a shape: false`.
 
+### BUG-430
+- **Date / turn:** 2026-11-27 (found by the delete audit, task `1042`; owner ruling the same day)
+- **Reported by:** task `1042` audit (`docs/DELETE-AUDIT-1042.md`, "The main divergence: the point rule"); owner ruling 2026-11-27 after checking Fusion by hand
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** THE POINT RULE (D-02..D-19, D-22, D-25, D-75, D-81c). A picked point that belongs to a curve (an end, a centre, a shared or glued corner, a bezier anchor) + Delete deleted every curve using that point. A polygon corner took 2 sides and the radius line. Fusion never deletes a curve end, centre or the origin: the Delete key does nothing, and right-click Delete opens an empty Delete command.
+- **What was wrong:** `deleteSelection` added every shape that had a selected joint to the delete set.
+- **Cause:** `packages/core/delete-manager.js` `deleteSelection`, the cascade "b) Any of their joints are explicitly selected" (213-221 in the audit; 240-252 on `de2e4cc8`).
+- **Fix:** ONE plan, `delete-manager.js` `deletePlan`. `deleteSelection` reads it, so every Delete path does: the key, Backspace, the right-click and touch-and-hold menus, the footer red X, and Cut. `hasSelection` (the red X's enabled state) reads it too. A selected curve point, or the origin, is refused, and nothing goes because of it. A FREE point (on no curve) is still deleted with its constraints (D-01, D-21, Fusion D-25). A MIXED selection deletes its curves, constraints and free points, and ignores its curve points. When the point rule refused everything, `deleteSelection` returns `{ deleted: false, hint }`. `deleteRefusedHint` is the ONE function that chooses the hint text: "Select the line to delete it, or the corner mark to separate.", or "The origin can't be deleted." when only the origin was selected. `#ui/input-manager.js` `handleDelete`, the ONE handler of every path, shows the hint. The red X is now enabled for a curve-point selection (advisor-approved), so its click shows the same hint as the key.
+- **Task id(s):** `1042` (audit), `1044`
+- **Fix merge sha:** open (`agents/delete-fix-1044`, awaiting merge)
+- **Guarding test file(s):** `tests/delete-point-rule-1044-node.test.js` (section "THE POINT RULE": a line end and a polygon's shared corner, in SketchStudio, Shaper and Pen Plotter; each of the Delete key, Backspace, the footer red X, the right-click menu and the touch-and-hold menu deletes nothing, makes no undo step and shows the hint; sections "a FREE point still deletes" and "MIXED"), `tests/footer-delete-clear-node.test.js` (the origin alone: the red X is enabled and deletes nothing), `tests/delete-dims-709.test.js` (every `joint` row: a curve's point + Delete deletes nothing), `tests/delete-point-rule-1044-live.test.js` (desktop 1280x800 and phone 390x844: the hint and the footer agreement)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found by audit `1042` -> owner ruling 2026-11-27 -> fixed in task `1044`. Fail-first (`.evidence/1044/fail-first-2.out`, the new test on the old code): `FAIL THE POINT RULE, every path, a curve end and a shared corner: sketchstudio key at 30,10: a curve's point deletes NOTHING`. After: `.evidence/1044/after-test.out` `ok   THE POINT RULE, every path, a curve end and a shared corner`.
+
+### BUG-431
+- **Date / turn:** 2026-11-27 (found by the delete audit, task `1042`, rows O-09b / O-09c)
+- **Reported by:** task `1042` audit (`docs/DELETE-AUDIT-1042.md` BUG-A)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** a line drawn FROM the origin uses `j_origin` itself. Deleting that line also deleted the OTHER curves' dimensions and coincidents to the origin (O-09b: `cons [distance:d1]`; O-09c: `cons [coincident]`). The same happened in Shaper and Pen Plotter.
+- **What was wrong:** the deleted line's points included `j_origin`. Only points used by surviving SHAPES counted as kept, so `j_origin` went into `goneJ`, and every constraint naming it was spliced out. The origin point itself survived, because `removeOrphanJoints` protects it.
+- **Cause:** `packages/core/delete-manager.js` `removeGeometry`, the `goneJ` set (104 / 113 / 138-143 in the audit; 132 / 157-162 on `de2e4cc8`).
+- **Fix:** in that one place, the origin is never in `goneJ`. In our model, any other point of a deleted curve that no surviving curve uses is that curve's own point, and its glue and dimensions go with it, as in Fusion (D-27 SAME). The advisor agreed this reading of the task's general clause.
+- **Task id(s):** `1042` (audit), `1044`
+- **Fix merge sha:** open (`agents/delete-fix-1044`, awaiting merge)
+- **Guarding test file(s):** `tests/delete-point-rule-1044-node.test.js` (section "BUG-A": O-09b with a dimension to the origin, O-09c with a coincident, both drawn with the real tools)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found by audit `1042` -> fixed in task `1044`. Fail-first: `.evidence/1044/fail-first-2.out` `FAIL BUG-A: O-09b: the other line's distance to the origin SURVIVES`. After: `ok   BUG-A`.
+
+### BUG-432
+- **Date / turn:** 2026-11-27 (found by the delete audit, task `1042`, rows O-08b / O-08c)
+- **Reported by:** task `1042` audit (`docs/DELETE-AUDIT-1042.md` BUG-B)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** with only the origin selected, the Delete key deleted every curve drawn from the origin, while the footer red X refused the same selection (it was disabled).
+- **What was wrong:** the two paths used two rules. `deleteSelection` expanded the selected `j_origin` to its curves, while `hasSelection` counted an origin-only selection as empty.
+- **Cause:** `packages/core/delete-manager.js` `deleteSelection` (the joint-to-shape cascade, the same lines as BUG-430) against `hasSelection`.
+- **Fix:** the point rule (BUG-430). Both now read the ONE `deletePlan`. The origin is a refused curve point, so the key deletes nothing and shows "The origin can't be deleted.". The red X is enabled for that selection (advisor-approved), and its click does the same.
+- **Task id(s):** `1042` (audit), `1044`
+- **Fix merge sha:** open (`agents/delete-fix-1044`, awaiting merge)
+- **Guarding test file(s):** `tests/delete-point-rule-1044-node.test.js` (section "the origin": 2 lines from the origin; the Delete key, Backspace and the red X each delete nothing, show the origin's hint, and leave the origin at (0, 0), fixed), `tests/footer-delete-clear-node.test.js`, `tests/delete-point-rule-1044-live.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found by audit `1042` -> fixed in task `1044`. Fail-first: `.evidence/1044/fail-first-2.out` `FAIL the origin: hasSelection: Delete answers an origin selection (with the hint), so the red X is enabled`. After: `ok   the origin`.
+
+### BUG-433
+- **Date / turn:** 2026-11-27 (found by the delete audit, task `1042`, rows D-33 / D-09)
+- **Reported by:** task `1042` audit (`docs/DELETE-AUDIT-1042.md` BUG-C)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** deleting a fillet arc (D-33), or its rim point (D-09, now refused by the point rule), left the fillet's virtual-sharp point as a stray cross. Two point-on-line constraints held it on the trimmed sides. Fusion D-33: the arc, its 2 Tangent and 1 point go, and no point stays.
+- **What was wrong:** V is on no curve, so the arc's removal never made it a candidate, and `removeOrphanJoints` keeps any point a constraint names.
+- **Cause:** `packages/core/delete-manager.js` `removeGeometry`. It collects a deleted shape's dependants only from `shape.joints`, and never followed the arc's `filletSharp`. `svg-renderer.js` 1632-1641 only drew what was left.
+- **Fix:** in that one place, where a removed shape's dependants are collected: a deleted fillet arc's `filletSharp` V goes with it, in the same undo step. So do the constraints that exist only to hold V (its point-on-line constraints, which name V). V stays while a surviving curve still claims it (a construction radial re-linked to V, or the other piece of a broken fillet arc). It also stays while a measurement dimension holds it (`virtualSharpProtectedJoints`, the documented exception, D-33b). A FIXED joint kept as the sharp (the origin, or a locked point) is not a virtual sharp and is never touched. The Trim tool removes geometry through the same function, so trimming a whole fillet arc away also takes its V.
+- **Task id(s):** `1042` (audit), `1044`
+- **Fix merge sha:** open (`agents/delete-fix-1044`, awaiting merge)
+- **Guarding test file(s):** `tests/delete-point-rule-1044-node.test.js` (section "BUG-C": a rectangle with an R6 fillet; the arc is clicked and deleted. V and its point-on-line constraints are gone, no virtual sharp is left, it is ONE undo step, and one Undo gives everything back), `tests/fillet-virtual-sharp.test.js` (the dimension-held V still stays)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found by audit `1042` -> fixed in task `1044`. Fail-first: `.evidence/1044/fail-first-2.out` `FAIL BUG-C: BUG-C: the virtual sharp goes with its fillet arc`. After: `ok   BUG-C`.
+
+### BUG-434
+- **Date / turn:** 2026-11-27 (found by the delete audit, task `1042`, rows D-48 / D-56 / D-60)
+- **Reported by:** task `1042` audit (`docs/DELETE-AUDIT-1042.md` BUG-D)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** a LEFT click could not pick a constraint glyph drawn within a point's pick reach: a Tangent glyph 6 px off its touch point, a Symmetric glyph, a 2nd glued Coincident. The click took the point instead, and Delete then removed curves (D-56: a slot's side and cap plus 6 constraints). The right-click took the glyph.
+- **What was wrong:** there were two pick orders. The left click and the hover (`hover-manager.js` `selectPick`) took a joint first and the glyph second. The right-click (`input-manager.js` `pickContextTarget`) took the glyph first.
+- **Cause:** `packages/ui/hover-manager.js` `selectPick` (65-66 in the audit).
+- **Fix:** ONE rule, `hover-manager.js` `glyphOrJointPick`, called by `selectPick` (the left click and the hover) and by `pickContextTarget` (the right click and the touch hold). The order, per the advisor ruling: (1) the pointer on a point's drawn marker ring picks the point, even under a glyph's icon. The ring is `svg-renderer.js` `pointMarkRadiusPx`, the radius `draw()` draws every point at; the renderer's local copy of `computeBaseJointRadiusFor` is gone. (2) Otherwise, the pointer on a glyph's ink (`glyphAt`) picks the glyph. (3) Otherwise, the joint in reach. A dimension label still comes after a joint, and a shape last, as before.
+- **Task id(s):** `1042` (audit), `1044`
+- **Fix merge sha:** open (`agents/delete-fix-1044`, awaiting merge)
+- **Guarding test file(s):** `tests/delete-point-rule-1044-node.test.js` (sections "BUG-D Tangent (D-56)", "BUG-D Symmetric (D-60)" and "BUG-D the 2nd glued Coincident (D-48)": the glyph's ink outside every ring but inside a point's 30 px reach; the hover lights the glyph, the left click selects it alone, and Delete removes only it. Section "the point ring wins over a glyph drawn on it": a slot's tangency point under its tangent glyph's ink; the hover, the click and the right click all take the point), `tests/split-shared-point-1041-node.test.js` (its exact-pixel press on a slot's shared point still selects the point), `tests/selection-origin-suppression.test.js`
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found by audit `1042` -> fixed in task `1044` (the ring step added on the advisor's ruling, after the first glyph-first version stole an exact press on a slot's tangency point: `tests/split-shared-point-1041-node.test.js` went red). Fail-first: `.evidence/1044/fail-first-2.out` `FAIL BUG-D Tangent (D-56): D-56: the hover on the glyph's ink lights the glyph (hover = click)` and `FAIL BUG-D Symmetric (D-60): ...`. The D-48 section already passed on the old code in this scene (it is a guard here, not a fail-first). After: `ok   BUG-D Tangent (D-56)`, `ok   BUG-D Symmetric (D-60)`, `ok   BUG-D the 2nd glued Coincident (D-48)`, `ok   the point ring wins over a glyph drawn on it`.
+
 ---
 
 ## Family index
@@ -3711,7 +3786,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27), BUG-350 (11-27), BUG-352 (11-27), BUG-360 (11-27) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27), BUG-411 (11-27) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27), BUG-411 (11-27), BUG-431 (11-27), BUG-433 (11-27) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -3719,7 +3794,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22), BUG-374 (11-27, open), BUG-400 (11-27) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27), BUG-410 (11-27) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27), BUG-410 (11-27), BUG-430 (11-27), BUG-432 (11-27), BUG-434 (11-27) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 

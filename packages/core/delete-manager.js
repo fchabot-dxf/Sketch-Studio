@@ -13,15 +13,19 @@ import { isSharedPointCoincident, sharedPointCoincidents, detachFromSharedPoint 
 // surviving shape uses it": the overall dimensions at a filleted corner stay attached to V as a standalone point
 // even after the lines/arc around it are deleted (Fusion parity). Returns the joint ids to KEEP: every V that a
 // measurement dimension (joint-pair DISTANCE, joint-form EQUAL) is attached to, plus that dimension's other joints.
-// Deleting V explicitly (deleteJoints) is unaffected and still removes V and its dimensions.
+// TASK 1050: and a V that is a corner of a POLYGON constraint whose sides all remain (#core/polygon.js; a filleted polygon corner is its virtual
+// sharp, fillet.js): V alone, so deleting the fillet arc leaves the polygon whole (the construction radial of a polygon saved before task 1050
+// kept that V the same way). Deleting V explicitly (deleteJoints) is unaffected and still removes V and its dimensions.
 function virtualSharpProtectedJoints(state) {
   const keep = new Set();
   if (!state || !state.joints || !Array.isArray(state.constraints)) return keep;
   const isV = (id) => { const j = state.joints.get(id); return !!(j && j.virtualSharp); };
+  const shapeIds = new Set((state.shapes || []).map((s) => s && s.id));
   for (const c of state.constraints) {
     if (!c || c.isRadius || !Array.isArray(c.joints)) continue;
     const measure = (c.type === 'distance' && c.joints.length >= 2) || (c.type === 'equal' && c.joints.length >= 4);
     if (measure && c.joints.some(isV)) c.joints.forEach(j => keep.add(j));
+    if (c.type === CONSTRAINT_TYPES.POLYGON && asList(c.shapes).every((id) => shapeIds.has(id))) c.joints.filter(isV).forEach((j) => keep.add(j));
   }
   return keep;
 }

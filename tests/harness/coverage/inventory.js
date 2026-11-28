@@ -56,7 +56,7 @@ const TOOL_SOLVER_ROLE = {
   select: 'drag (mouse_spring) and pick; the delete / lock / driving actions work on its selection',
   line: 'creates line shapes + joints + coincident joins', rect: 'creates 4 lines + H/V (+ construction diagonals for centre mode)',
   slot: 'creates straight or arc slots (real lines + makeArc caps + construction center + tangent/parallel/midpoint/pointOnLine + diameter width dim, #core/slot.js)',
-  circle: 'creates a circle shape (1 joint, radius is shape data)', polygon: 'creates N sides + N radii + equal constraints',
+  circle: 'creates a circle shape (1 joint, radius is shape data)', polygon: 'creates N sides (shared corners) + a lone centre + ONE polygon constraint (task 1050, #core/polygon.js)',
   arc: 'creates an arc (3 joints + equal radius)', bezier: 'creates bezier shapes (2 joints, control points are data)',
   text: 'creates ONE text shape whose anchor joint is a plain point; its derived letters (lines / beziers in its rigid group) take no constraint (task 845, #core/text.js)',
   trim: 'splits / removes segments: rewrites shapes, joints and constraints', break: 'splits a line: new joint, constraints migrate',
@@ -108,6 +108,10 @@ function creationSites() {
       }
       if (file.endsWith('/pattern.js')) {  // task 658: the pattern constraints' one record builder (patternConstraintRecord)
         m = l.match(/^\s*type:\s*T\.(\w+),/);
+        if (m) return add(valueOfKey(m[1]), file, i + 1);
+      }
+      if (file.endsWith('/polygon.js')) {  // task 1050: the polygon constraint's one record builder (polygonConstraintRecord; makePolygon makes its params)
+        m = l.match(/^\s*return \{ type: CONSTRAINT_TYPES\.(\w+),/);
         if (m) return add(valueOfKey(m[1]), file, i + 1);
       }
       if (file.endsWith('/slot.js')) {     // task 673: slot builders call createConstraint(CONSTRAINT_TYPES.<X>, ...)

@@ -46,9 +46,10 @@ export const CASES = 300;
 const MODE_TO_KIND = { aligned: 'dist-aligned', horizontal: 'dist-horizontal', vertical: 'dist-vertical', 'line length': 'dist-line', 'point-line': 'dist-point-line', 'line-line': 'dist-line-line', angle: 'angle', radius: 'radius' };
 // 'lock' = the Lock action of inventory.editFeatures ('lock / fix'): j.fixed = true, then a solve (input-manager.js toggleFixedSelection)
 // (not 'offset', task 650: the Offset tool makes it with its own new chain, not between existing operands; tests/offset-650.test.js covers it;
-// not the patterns, task 658: their tools make them with their own copies; tests/pattern-658.test.js covers them)
+// not the patterns, task 658: their tools make them with their own copies; tests/pattern-658.test.js covers them; not 'polygon', task 1050: the
+// Polygon tool makes it with its own sides; tests/polygon-1050-node.test.js covers it)
 export const KINDS = [...new Set([
-  ...inventory.constraintTypes.map(c => c.type).filter(t => t !== 'distance' && t !== 'offset' && t !== 'circularPattern' && t !== 'rectangularPattern'),
+  ...inventory.constraintTypes.map(c => c.type).filter(t => t !== 'distance' && t !== 'offset' && t !== 'circularPattern' && t !== 'rectangularPattern' && t !== 'polygon'),
   ...inventory.dimensionModes.map(m => MODE_TO_KIND[m.mode]),
   'lock',
 ])];

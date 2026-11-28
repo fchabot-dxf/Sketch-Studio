@@ -107,7 +107,8 @@ console.log(`dimension fields: ${modes.length} modes x {driving, reference} x {s
   const O = L.point(S, 0, 0), k0 = L.point(S, 40, 0);
   const built = L.polygon(S, O, k0, 6);
   const sides = built.shapes.filter(s => !s.isConstruction);
-  const radials = built.shapes.filter(s => s.isConstruction);
+  // TASK 1050: no construction radials; the polygon constraint's corners [centre, v0, ...] are the radii (a filleted corner: its virtual sharp V)
+  const poly = S.state.constraints.find(c => c.type === 'polygon');
   S.engine.solve(L.ITER);
   const n0 = L.nullity(S);
   const R = 4;
@@ -117,14 +118,15 @@ console.log(`dimension fields: ${modes.length} modes x {driving, reference} x {s
     const res = applyFillet(S.state, corner, R);
     assert(res && res.success, `hexagon corner ${i} fillet accepted: ${res && res.reason}`);
     assert(S.engine.solve(L.ITER).converged, `hexagon solves after fillet ${i}`);
-    if (i === 0) assert(radials.every(r => r.joints.every(j => S.state.joints.has(j))), 'the radials keep valid joints after the first fillet');
+    if (i === 0) assert(poly.joints.every(j => S.state.joints.has(j)) && poly.joints.filter(j => S.state.joints.get(j).virtualSharp).length === 1, 'the polygon constraint keeps valid joints after the first fillet: the filleted corner is its virtual sharp');
   }
   const arcs = S.state.shapes.filter(s => s.type === 'arc');
   assert(arcs.length === 6, `six fillet arcs (${arcs.length})`);
   for (const a of arcs) { const [c, p] = a.joints.map(j => S.state.joints.get(j)); assert(Math.abs(Math.hypot(p.x - c.x, p.y - c.y) - R) < 1e-4, 'arc radius ' + R); }
   const len = (s) => { const [a, b] = s.joints.map(j => S.state.joints.get(j)); return Math.hypot(a.x - b.x, a.y - b.y); };
-  const rl = radials.map(len), sl = sides.map(len);
-  assert(Math.max(...rl) - Math.min(...rl) < 1e-4, `radials equal (the free polygon may rescale): ${rl.map(v => v.toFixed(4))}`);
+  const rl = poly.joints.slice(1).map(j => len({ joints: [poly.joints[0], j] })), sl = sides.map(len);
+  assert(rl.length === 6 && poly.joints.slice(1).every(j => S.state.joints.get(j).virtualSharp), 'the six corners of the polygon constraint are the six virtual sharps');
+  assert(Math.max(...rl) - Math.min(...rl) < 1e-4, `radii equal (the free polygon may rescale): ${rl.map(v => v.toFixed(4))}`);
   assert(Math.max(...sl) - Math.min(...sl) < 1e-4, `trimmed sides equal: ${sl.map(v => v.toFixed(4))}`);
   console.log(`polygon: six corners filleted (R ${R}), nullity ${n0} -> ${L.nullity(S)}`);
 }

@@ -5,6 +5,7 @@ import { angleSectorOf, angleSectorTarget, angleSectorUnderLabel, angleLabelAngl
 import { symmetricResidual } from './symmetric.js';
 import { offsetResidual } from './offset.js';
 import { patternResidual } from './pattern.js';
+import { polygonResidual } from './polygon.js';
 import { SolverConfig } from './solver-config.js';
 
 // What a DISTANCE dimension measures in the geometry now (the same convention as its solver row): a radius / diameter, a point-to-line or a
@@ -385,6 +386,10 @@ export function measureResidual(c, joints, shapes) {
                 const center = joints.get(s.joints[0]), rim = joints.get(s.joints[1]);
                 return center && rim ? getDist(center, rim) : 0;
             });
+
+        // task 1050: the largest distance of a corner from where the regular N-gon puts it (#core/polygon.js polygonRowValues: the solver rows' formula)
+        case CONSTRAINT_TYPES.POLYGON:
+            return polygonResidual(c, joints);
 
         default:
             return 0;

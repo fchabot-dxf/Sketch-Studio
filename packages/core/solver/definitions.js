@@ -2,6 +2,7 @@ import { angleSectorOf } from '../angle-sector.js';
 import { symmetricRowCount } from '../symmetric.js';
 import { offsetRowCount, offsetRowValues } from '../offset.js';
 import { patternRowCount, patternRowValues } from '../pattern.js';
+import { polygonRowCount, polygonRowValues, polygonCornerTurn } from '../polygon.js';
 import { arcMidpointFromChord } from '../geometry.js';
 
 // Constraint definitions: computeError(params, positions) and computeJacobian(params, positions)
@@ -860,6 +861,24 @@ export const Definitions = {
   // are here (patternJacobian), every operand taking part (a free source, the centre and a direction line move too).
   circularPattern: { rows: (c, shapes) => patternRowCount(c, shapes), computeError: (p, x) => patternError(p, x), computeJacobian: (p, x, out) => patternJacobian(p, x, out) },
   rectangularPattern: { rows: (c, shapes) => patternRowCount(c, shapes), computeError: (p, x) => patternError(p, x), computeJacobian: (p, x, out) => patternJacobian(p, x, out) },
+
+  // Polygon (task 1050, #core/polygon.js): params.joints = [centre, v0, ..., v(N-1)] as dense indices (engine.js, the stored joints). The VALUES
+  // come from the one formula, polygonRowValues (the verifier reads the same): v(i) - c - R(t_i)(v0 - c), t_i = i 2 pi / N, i = 1 .. N-1, two rows
+  // each (x, y). Linear, so the derivatives are the constant coefficients: d/dv(i) = I, d/dv0 = -R(t_i), d/dc = R(t_i) - I.
+  polygon: {
+    rows: (c) => polygonRowCount(c),
+    computeError: (params, positions) => polygonRowValues(params.joints, (i) => ({ x: positions[i*2], y: positions[i*2+1] })),
+    computeJacobian: (params, positions, outRows) => {
+      const j = params.joints, n = j.length - 1, c = j[0], v0 = j[1];
+      for (let i = 1; i < n; i++) {
+        const t = polygonCornerTurn(i, n), cos = Math.cos(t), sin = Math.sin(t);
+        const rx = outRows[2 * (i - 1)], ry = outRows[2 * (i - 1) + 1];
+        // row x = vi.x - c.x - (cos (v0.x - c.x) - sin (v0.y - c.y));  row y = vi.y - c.y - (sin (v0.x - c.x) + cos (v0.y - c.y))
+        addGrad(rx, j[i + 1], 1, 0); addGrad(rx, v0, -cos, sin); addGrad(rx, c, cos - 1, -sin);
+        addGrad(ry, j[i + 1], 0, 1); addGrad(ry, v0, -sin, -cos); addGrad(ry, c, sin, cos - 1);
+      }
+    }
+  },
 
   // Mouse-spring: soft target used by InteractionSolver to represent a drag 'weak constraint'
   mouse_spring: {

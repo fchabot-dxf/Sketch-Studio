@@ -32,6 +32,7 @@ const TYPE_META = {
   angle:        { icon: '∠', label: 'Angle' },
   midpoint:     { icon: '◐', label: 'Midpoint' },
   symmetric:    { icon: '⇹', label: 'Symmetric' },
+  polygon:      { icon: '⬡', label: 'Polygon' },   // TASK 1050: Fusion's Polygon constraint (#core/polygon.js)
 };
 
 let stylesInjected = false;

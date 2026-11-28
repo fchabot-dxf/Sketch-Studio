@@ -377,6 +377,8 @@ export function classify(c) {
   if (r === 'equal' && has('refused-feasible')) return { v: 'F2' };
   if (r === 'tangent' && has('refused-feasible')) return { v: 'NEW-6' };
   if (r === 'coincident' && has('refused-feasible') && shared) return { v: 'NEW-10' };   // task 550: the nearest solve collapses a fillet arc (zero sweep), now refused
+  // task 1050: a polygon side parallel to a rectangle top that a dimension ties to it: the forced start turns the rectangle top, the solve collapses a side
+  if (r === 'parallel' && c.cols === 'SR' && c.variant === 'dimmed' && c.issues.length === 1 && has('refused-feasible')) return { v: 'NEW-12' };
   if ((r === 'dim-horizontal' || r === 'dim-vertical') && has('demoted')) return { v: 'F1' };
   if (r.startsWith('dim-angle') && has('bite') && shared) return { v: 'F4' };   // shared-joint angle not enforced (F4; tolerated)
   // the clockwise pick order moves the drawing at the angle's own measured value (F3), with or without a shared joint (after task 510 a shared-corner angle is enforced, so it shows F3 too)

@@ -26,7 +26,11 @@ export const CONSTRAINT_TYPES = {
   // task 658 (#core/pattern.js): Fusion's CircularPatternConstraint / RectangularPatternConstraint. ONE constraint per pattern holds its sources,
   // its copies (instances) and its values; the copies follow the sources through its solver rows. Stored by #core/pattern.js patternConstraintRecord.
   CIRCULAR_PATTERN: 'circularPattern',
-  RECTANGULAR_PATTERN: 'rectangularPattern'
+  RECTANGULAR_PATTERN: 'rectangularPattern',
+  // TASK 1050 (#core/polygon.js): Fusion's Polygon constraint (recorded: a Polygon tool makes N lines, a lone centre and ONE Polygon()). ONE
+  // constraint per polygon: its N corners lie on one circle about the centre and are evenly spaced. Stored { joints: [centre, v0, ..., vN-1],
+  // shapes: [side0, ..., sideN-1] } (#core/polygon.js polygonConstraintRecord).
+  POLYGON: 'polygon'
 };
 
 // Snap tolerances (in screen pixels)
@@ -101,6 +105,7 @@ export const CONSTRAINT_COLORS = {
   [CONSTRAINT_TYPES.OFFSET]:        { fill: '#60A5FA', stroke: '#2563eb' },
   [CONSTRAINT_TYPES.CIRCULAR_PATTERN]:    { fill: '#60A5FA', stroke: '#2563eb' },
   [CONSTRAINT_TYPES.RECTANGULAR_PATTERN]: { fill: '#60A5FA', stroke: '#2563eb' },
+  [CONSTRAINT_TYPES.POLYGON]:       { fill: '#60A5FA', stroke: '#2563eb' },
 };
 
 // Drawing tool modes

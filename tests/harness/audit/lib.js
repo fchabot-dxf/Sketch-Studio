@@ -414,6 +414,15 @@ export function toPlanegcs(S) {
         add({ type: 'l2l_angle_ll', l1_id: l1.id, l2_id: l2.id, angle: (d < 0 ? -1 : 1) * radiansOf(c.value) });
         break;
       }
+      case 'polygon': {
+        // task 1050 (#core/polygon.js): a regular N-gon about the centre, 2(N-1) equations as PlaneGCS has them: every corner as far from the
+        // centre as the first (N-1 equal lengths) and every step between neighbouring corners as long as the first (N-1 equal lengths)
+        const [cen, ...v] = c.joints, n = v.length;
+        const r0 = helperLine(cen, v[0]), s0 = helperLine(v[0], v[1]);
+        for (let i = 1; i < n; i++) add({ type: 'equal_length', l1_id: r0, l2_id: helperLine(cen, v[i]) });
+        for (let i = 1; i < n; i++) add({ type: 'equal_length', l1_id: s0, l2_id: helperLine(v[i], v[(i + 1) % n]) });
+        break;
+      }
       default: unmapped.push(c);
     }
   }

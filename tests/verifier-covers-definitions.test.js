@@ -45,6 +45,7 @@ const VIOLATED = {
     symmetric: false, suppressed: [], instances: [{ at: [1], shapes: ['L2'], joints: ['c', 'd'] }] },
   rectangularPattern: { type: 'rectangularPattern', sources: { shapes: ['L1'], points: ['a', 'b'], shapeJoints: [[0, 1]] }, directions: [null, null],
     quantity: [2, 1], distance: [5, 5], distanceType: 'spacing', symmetric: [false, false], suppressed: [], instances: [{ at: [1, 0], shapes: ['L2'], joints: ['c', 'd'] }] },
+  polygon: { type: 'polygon', joints: ['m', 'a', 'b', 'c'], shapes: ['L1', 'L2', 'L1'] }, // task 1050: a, b, c are not a regular triangle about m
 };
 
 let checked = 0;

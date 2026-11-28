@@ -704,3 +704,32 @@ when the fillet is near 180 deg: in LF / CF / OF `locked` (both rows) the creati
 moves the fillet but not its virtual-sharp point V, which is held on the two lines by point-on-line rows, so the solve repairs V by turning the
 lines), and in FF `shared` the shared joint moves it. The re-solve does not come back (residual 2.3 and 4.1). An arc with a stored direction
 (the Arc tool's, `A`) passes every cell. Follow-up: carry V with its fillet in the placement.
+
+## Polygon constraint (task 1050)
+
+The Polygon tool makes Fusion's recipe: N sides sharing N corners, a lone centre and ONE `polygon` constraint (#core/polygon.js: the corners on
+one circle about the centre, evenly spaced; 2(N-1) linear rows, DOF 4). It is made only by the Polygon tool, so the matrix defers it
+(`constraintTypesDeferred.polygon`, its own tests: tests/polygon-1050-node.test.js, tests/jacobian-fd-guard.test.js); the property generator
+does not make it (prop-random.js KINDS, like the offset and the patterns). The PlaneGCS translation (tests/harness/audit/lib.js) gives it as
+2(N-1) `equal_length` of helper lines: every corner as far from the centre as the first, every step between neighbouring corners as long as the
+first. The polygon side kind `S` of the matrix is built with the new recipe.
+
+Matrix before / after (origin/main 025e9d63 -> this task): `N/A=1516 NA-BUILD=162 NEW-10=3 NEW-6=1 PASS=2062` ->
+`N/A=1516 NA-BUILD=163 NEW-10=2 NEW-12=1 NEW-6=1 PASS=2061`. The four cells that changed:
+
+* `coincident SF shared`: NEW-10 -> PASS (the coincident onto the fillet arc is accepted now).
+* `horizontal-2pt SS shared`: PASS -> NA-BUILD (the shared joint's solve leaves the second polygon turned, so the tool picks a vertical).
+* `tangent SA shared` (a polygon side tangent to an arc centred on that side's own end: infeasible): the app refuses it before and after; its
+  PlaneGCS verdict changed from a failed solve to a "solution" that shrinks the arc to a point. The oracle's collapse check now also applies
+  the app's radius rule (constraint-verifier.js findCollapsedShape: a radius below 1 % of what it was), so the cell stays PASS.
+* `parallel SR dimmed`: PASS -> NEW-12 (below).
+
+### NEW-12 (LOW): parallel between a polygon side and a rectangle top that a dimension ties to it is refused, although feasible (1 cell)
+
+The polygon can turn to make its side horizontal, keeping the dimension (PlaneGCS solves it). Not new behaviour: origin/main 025e9d63 refuses
+the same cell (reproduced on a copy of main: `Parallel rejected: creates a conflict`); its PlaneGCS verdict was
+"infeasible" with the polygon's old recipe (radii + equals) and is "feasible" with the Polygon constraint's translation. Cause (read, not fixed):
+neither operand can satisfy it alone without worsening a driving constraint (the polygon's turn about its centre changes the corner-to-corner
+dimension, the rectangle's turn breaks its H / V), so the solve starts from the forced placement of the second pick (the rectangle top turned,
+creation-placement.js placeForCreation) and that solve collapses a rectangle side: refused (task 521). Follow-up: let the forced start be the
+operand whose turn keeps its own structural constraints.

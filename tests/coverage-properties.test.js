@@ -44,7 +44,7 @@ const t0 = Date.now();
 
 // ------------------------------------------------------------------ 0. the generator covers the inventory (drift)
 {
-  const types = inventory.constraintTypes.map(c => c.type).filter(t => t !== 'distance' && t !== 'offset' && t !== 'circularPattern' && t !== 'rectangularPattern'); // offset / patterns: made by their tools (prop-random.js KINDS)
+  const types = inventory.constraintTypes.map(c => c.type).filter(t => t !== 'distance' && t !== 'offset' && t !== 'circularPattern' && t !== 'rectangularPattern' && t !== 'polygon'); // offset / patterns / polygon: made by their tools (prop-random.js KINDS)
   check('generator: every constraint type of the inventory has an op kind', types.every(t => KINDS.includes(t)), types.filter(t => !KINDS.includes(t)).join(','));
   const modes = ['dist-aligned', 'dist-horizontal', 'dist-vertical', 'dist-line', 'dist-point-line', 'dist-line-line', 'angle', 'radius'];
   check('generator: every dimension mode of the inventory has an op kind', inventory.dimensionModes.length === modes.length && modes.every(m => KINDS.includes(m)), `${inventory.dimensionModes.length} modes in the inventory`);

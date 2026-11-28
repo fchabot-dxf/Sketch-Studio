@@ -111,6 +111,9 @@ function bodyOf(state, op, anchorJoints, mode) {
       for (const k of linked) for (const t of state.shapes) if (!seen.has(t.id) && Array.isArray(t.joints) && t.joints.includes(k) && !t.joints.some(x => anchorJoints.has(x))) queue.push(t);
     }
   }
+  // TASK 1050: a polygon's lone CENTRE is part of its body (#core/polygon.js: its one constraint ties the centre to the corners; the construction
+  // radii of a polygon saved before task 1050 brought it in as a shape): it moves with the polygon, or holds it as a pivot when it cannot move
+  for (const c of state.constraints) if (isDriving(c) && c.type === T.POLYGON && Array.isArray(c.shapes) && c.shapes.some(id => seen.has(id))) joints.add(c.joints[0]);
   return { joints, shapes };
 }
 

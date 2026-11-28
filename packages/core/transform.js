@@ -47,6 +47,7 @@ export const TRANSFORM_EFFECT = Object.freeze({
   distanceHV: { rotate: 'swapAt90', scale: 'scaleValue' },     // a horizontal / vertical dimension (dimMode)
   offset: { rotate: 'keep', scale: 'scaleValue' },
   circularPattern: { rotate: 'keep', scale: 'keep' },
+  polygon: { rotate: 'keep', scale: 'keep' },                  // TASK 1050: a regular N-gon stays one under a turn and a uniform scale
   rectangularPattern: { rotate: 'refuse', scale: 'refuse' },   // its directions / spacings: stage C
 });
 export const effectKey = (c) => (c.type === T.DISTANCE && (c.dimMode === 'horizontal' || c.dimMode === 'vertical') ? 'distanceHV' : c.type);

@@ -2434,6 +2434,17 @@ switch(c.type){
         break;
       }
 
+      case CONSTRAINT_TYPES.POLYGON: {
+        // TASK 1050: ONE glyph per polygon (Fusion shows one Polygon constraint), beside its centre: the centre's joint glyph bucket (the smart
+        // layout below: alone, up and right of the point like a point's glyph; fanned with the other glyphs of that point)
+        const centre = opJoints.get(c.joints && c.joints[0]);
+        if (!centre) return;
+        const smartPos = smartGlyphPosMap.get(c), offset = scale(GLYPH_OFFSET_PX);
+        const pos = c.__pos ? { x: c.__pos.x, y: c.__pos.y } : (smartPos ? { x: smartPos.x, y: smartPos.y } : { x: centre.x + offset, y: centre.y - offset });
+        drawUnifiedGlyph(c, pos.x, pos.y);
+        break;
+      }
+
       default: return;
     }
   }
@@ -2464,6 +2475,7 @@ switch(c.type){
       let primaryJoint = null;
       if ((c.type === CONSTRAINT_TYPES.COINCIDENT || c.type === SHARED_POINT_COINCIDENT) && c.joints && c.joints.length > 0) primaryJoint = c.joints[0];
       else if (c.type === CONSTRAINT_TYPES.POINT_ON_LINE && c.joint) primaryJoint = c.joint;
+      else if (c.type === CONSTRAINT_TYPES.POLYGON && c.joints && c.joints.length > 0) primaryJoint = c.joints[0]; // TASK 1050: the polygon's centre
       else if (c.joint) primaryJoint = c.joint; // Fallback for generic joint constraints
 
       if (primaryJoint) {
@@ -2651,8 +2663,8 @@ switch(c.type){
       const b = getClusterLeader(c.joints[1]);
       // Default anchor (if not explicitly placed) will be computed dynamically in drawConstraintGlyph
       drawConstraintGlyph(svg, c);
-    } else if(c.type === CONSTRAINT_TYPES.MIDPOINT){
-      drawConstraintGlyph(svg, c);
+    } else if(c.type === CONSTRAINT_TYPES.MIDPOINT || c.type === CONSTRAINT_TYPES.POLYGON){
+      drawConstraintGlyph(svg, c); // TASK 1050: a polygon has ONE glyph, at its centre
     } else if((c.type === CONSTRAINT_TYPES.PARALLEL || c.type === CONSTRAINT_TYPES.EQUAL || c.type === CONSTRAINT_TYPES.COLLINEAR) && c.shapes && c.shapes.length >= 2){
       // Dual-glyph rendering for shape-pair constraints (parallel, equal, collinear)
       // Draw two glyphs - one attached to each shape involved in the parallel constraint

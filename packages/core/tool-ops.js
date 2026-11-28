@@ -24,7 +24,8 @@
 //   polygon(state, c, v, n, construction)   Polygon tool (polygon-tool.js): makePolygon, shapes pushed, constraints through the raw addConstraint
 //   slot(state, c1, c2, width, construction)
 //                                            Slot tool, centre to centre (slot-tool.js, task 673): makeSlotCenterToCenter, the shapes pushed,
-//                                            its constraints through the raw addConstraint; a pick on an existing joint REUSES it
+//                                            its constraints through the raw addConstraint; a pick on an existing joint REUSES it; `width` is
+//                                            TYPED in its box, so it is the slot's driving width dimension (task 1049: a clicked width has none)
 //   fillet(state, lineA, lineB, r)          Fillet tool, two-line pick (fillet-tool.js): findCornerBetweenLines -> applyFillet
 //   snap(state, joint, target)              an existing point dragged onto a joint (target = joint id) or a curve (target = { shape }):
 //                                            #core/snap-constraints.js applySnapConstraint, SNAP_JOIN.GLUE (coincident / point on the curve)
@@ -148,9 +149,10 @@ export function polygon(state, c, v, n, construction = false) {
   return built;
 }
 
-/** Slot tool, centre to centre: the two end centres (joint ids: a pick on a joint reuses it) and the width. -> makeSlotCenterToCenter's result. */
+/** Slot tool, centre to centre: the two end centres (joint ids: a pick on a joint reuses it) and the width typed in its box (its width dimension).
+ *  -> makeSlotCenterToCenter's result. */
 export function slot(state, c1, c2, width, construction = false) {
-  const built = makeSlotCenterToCenter(state.joints, c1, c2, width, state.genJ, construction);
+  const built = makeSlotCenterToCenter(state.joints, c1, c2, width, state.genJ, construction, { widthDimension: true });
   if (!built.shapes.length) throw new Error('slot: no slot between those centres');
   built.shapes.forEach((s) => state.shapes.push(s));
   built.constraints.forEach((k) => addConstraint(state, k.type, k));

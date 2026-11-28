@@ -86,8 +86,11 @@ await run('B-01 slot: span 40 then empty, end by click: the clicked span; width 
     app.type('12'); backspaces(app, 2); moveW(app, -15, 15); clickW(app, -15, 15);
     const spans = dists(app).filter((d) => !d.isDiameter && !d.isRadius);
     assert.strictEqual(spans.length, 0, `no span dimension from a deleted number (${JSON.stringify(dists(app).map((d) => d.value))})`);
-    const wd = dists(app).find((d) => d.isDiameter || d.isRadius);
-    assert(wd && Math.abs(wd.value - 1) > 0.5, `the width is not the deleted 1 (${wd && wd.value})`);
+    // TASK 1049 (audit 1037 D-6): a width not typed (here: typed, then deleted) places no width dimension, as Fusion; the slot has the cursor width
+    assert.strictEqual(dists(app).filter((d) => d.isDiameter || d.isRadius).length, 0, 'no width dimension from a deleted number');
+    const cap = app.state.shapes.find((s) => s.type === 'arc' && !s.isConstruction);
+    const width = cap && 2 * Math.hypot(J(app, cap.joints[1]).x - J(app, cap.joints[0]).x, J(app, cap.joints[1]).y - J(app, cap.joints[0]).y);
+    assert(cap && Math.abs(width - 1) > 0.5 && Math.abs(width - 10) < 0.05, `the width is the cursor's 10 (screen pixel rounding), not the deleted 1 (${width})`);
   } finally { await app.close(); }
 });
 await run('B-01 polygon: N 4 typed then emptied falls back to the remembered N', async () => {

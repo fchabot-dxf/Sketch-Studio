@@ -1,4 +1,4 @@
-// Slot tool (TASK 673) — supports Fusion 360's five slot types using real lines, makeArc, and a diameter width dim.
+// Slot tool (TASK 673) — supports Fusion 360's five slot types using real lines and makeArc; a TYPED width is its diameter width dim (TASK 1049).
 import { TOOL_MODES, SLOT_MODES, CONSTRAINT_TYPES, INFERENCE_TYPES } from '#core/constants.js';
 import { findInference } from '#core/inference-engine.js';
 import { addConstraint } from '#core/constraints.js';
@@ -53,6 +53,7 @@ const localState = {
     spanName: null,
     spanAssign: null,
     lockedWidth: null,
+    widthTyped: false,      // TASK 1049 (audit 1037 D-6): the width was TYPED (it becomes the slot's width dimension); Enter on the shown width locks it, untyped
     widthExpression: null,  // TASK 1013 (B-19c): the formula / name / assign of the typed width
     widthName: null,
     widthAssign: null,
@@ -187,6 +188,7 @@ function closeSlotBoxes() {
     localState.spanName = null;
     localState.spanAssign = null;
     localState.lockedWidth = null;
+    localState.widthTyped = false;
     localState.widthExpression = null;
     localState.widthName = null;
     localState.widthAssign = null;
@@ -281,6 +283,7 @@ function commitSlot(svg, state, cursorPt) {
     let built = null;
     let snapsToApply = [];
     const cursor = cursorPt || localState.cursor || (active.picks[2] && active.picks[2].pt) || p2Pick.pt;
+    const widthDimension = localState.widthTyped;   // TASK 1049 (audit 1037 D-6): only a typed width is a dimension (Fusion places none for a clicked one)
 
     if (isArcMode(mode)) {
         const geom = currentArcGeom(active, cursor);
@@ -301,7 +304,7 @@ function commitSlot(svg, state, cursorPt) {
                 thirdArg = thirdJointId;
                 bindThird = true;
             }
-            built = makeSlotThreePointArc(state.joints, j1Id, j2Id, thirdArg, geom.width, state.genJ, isConstruction, { bindThirdJoint: bindThird });
+            built = makeSlotThreePointArc(state.joints, j1Id, j2Id, thirdArg, geom.width, state.genJ, isConstruction, { bindThirdJoint: bindThird, widthDimension });
             snapsToApply.push([j1Id, p1Pick.snap]);
             snapsToApply.push([j2Id, p2Pick.snap]);
         } else {
@@ -309,7 +312,7 @@ function commitSlot(svg, state, cursorPt) {
             const jc1Id = allocJoint(state, p2Pick.pt);
             const p3Pick = active.picks[2];
             const jc2Id = allocJoint(state, geom.c2);
-            built = makeSlotCenterPointArc(state.joints, jcmId, jc1Id, jc2Id, geom.sweep, geom.width, state.genJ, isConstruction);
+            built = makeSlotCenterPointArc(state.joints, jcmId, jc1Id, jc2Id, geom.sweep, geom.width, state.genJ, isConstruction, { widthDimension });
             snapsToApply.push([jcmId, p1Pick.snap]);
             snapsToApply.push([jc1Id, p2Pick.snap]);
             if (p3Pick) snapsToApply.push([jc2Id, p3Pick.snap]);
@@ -324,11 +327,11 @@ function commitSlot(svg, state, cursorPt) {
         const j1Id = allocJoint(state, p1Pick.pt);
         const j2Id = allocJoint(state, p2Pick.pt);
         if (mode === SLOT_MODES.CENTER_TO_CENTER) {
-            built = makeSlotCenterToCenter(state.joints, j1Id, j2Id, geom.width, state.genJ, isConstruction);
+            built = makeSlotCenterToCenter(state.joints, j1Id, j2Id, geom.width, state.genJ, isConstruction, { widthDimension });
         } else if (mode === SLOT_MODES.OVERALL) {
-            built = makeSlotOverall(state.joints, j1Id, j2Id, geom.width, state.genJ, isConstruction);
+            built = makeSlotOverall(state.joints, j1Id, j2Id, geom.width, state.genJ, isConstruction, { widthDimension });
         } else {
-            built = makeSlotCenterPoint(state.joints, j1Id, j2Id, geom.width, state.genJ, isConstruction);
+            built = makeSlotCenterPoint(state.joints, j1Id, j2Id, geom.width, state.genJ, isConstruction, { widthDimension });
         }
         snapsToApply.push([j1Id, p1Pick.snap]);
         snapsToApply.push([j2Id, p2Pick.snap]);
@@ -340,8 +343,8 @@ function commitSlot(svg, state, cursorPt) {
         return false;
     }
 
-    // TASK 1013 (B-19c): preserve typed width formula / name on the slot's width dimension (straight & arc modes)
-    if (built.meta && built.meta.widthDim && localState.lockedWidth != null) {
+    // TASK 1013 (B-19c): preserve typed width formula / name on the slot's width dimension (straight & arc modes; it exists for a typed width only)
+    if (built.meta && built.meta.widthDim) {
         if (localState.widthAssign) applyLiveAssign(state, localState.widthAssign);
         if (localState.widthExpression && Math.abs(built.meta.widthDim.value - localState.lockedWidth) < 1e-4) {
             built.meta.widthDim.expression = localState.widthExpression;
@@ -467,6 +470,7 @@ export function setupSlotTool(svg, state) {
                 localState.spanAssign = localState.lockedSpan !== null ? liveAssign(detail, 0) : null;
             } else if (detail.field === FIELD_WIDTH) {
                 localState.lockedWidth = (detail.reset && detail.reset[0]) ? null : ((detail.typed[0] && v > 0) ? v : null);
+                localState.widthTyped = localState.lockedWidth !== null;
                 localState.widthExpression = localState.lockedWidth !== null ? liveExpression(detail, 0) : null;
                 localState.widthName = localState.lockedWidth !== null ? liveName(detail, 0) : null;
                 localState.widthAssign = localState.lockedWidth !== null ? liveAssign(detail, 0) : null;
@@ -501,7 +505,8 @@ export function setupSlotTool(svg, state) {
                 }
                 detail.keepOpen = true;
             } else if (active.phase === 'width') {
-                if (detail.typed[0] && v > 0) {
+                localState.widthTyped = !!(detail.typed[0] && v > 0);
+                if (localState.widthTyped) {
                     localState.lockedWidth = v;
                     localState.widthExpression = liveExpression(detail, 0);
                     localState.widthName = liveName(detail, 0);
@@ -522,6 +527,7 @@ export function setupSlotTool(svg, state) {
             localState.spanName = null;
             localState.spanAssign = null;
             localState.lockedWidth = null;
+            localState.widthTyped = false;
             localState.widthExpression = null;
             localState.widthName = null;
             localState.widthAssign = null;
@@ -572,6 +578,7 @@ export function handleSlotPointerDown(e, svg, state, hitSnap, w) {
     localState.spanName = null;
     localState.spanAssign = null;
     localState.lockedWidth = null;
+    localState.widthTyped = false;
     localState.widthExpression = null;
     localState.widthName = null;
     localState.widthAssign = null;

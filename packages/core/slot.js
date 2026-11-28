@@ -145,6 +145,8 @@ function allocJoint(joints, pt, genJ, extra = null) {
   return id;
 }
 
+// TASK 1049 (audit 1037 D-6): a slot's width dimension is placed ONLY for a width the user TYPED (`widthDimension`, the way every tool's typed size
+// becomes its dimension); a clicked width leaves none, as Fusion (its recording: dims 0 for all five slots).
 function makeWidthDimension(shapeId, width, r, labelAngle) {
   return createConstraint(CONSTRAINT_TYPES.DISTANCE, {
     shape: shapeId,
@@ -156,7 +158,7 @@ function makeWidthDimension(shapeId, width, r, labelAngle) {
   });
 }
 
-function buildStraightSlotCore(joints, { c1Id, c2Id, cl1Id, cl2Id, geom, seq, isConstruction, extraConstraints = [] }) {
+function buildStraightSlotCore(joints, { c1Id, c2Id, cl1Id, cl2Id, geom, seq, isConstruction, widthDimension, extraConstraints = [] }) {
   const a1Id = allocJoint(joints, geom.a1, geom.genJ);
   const a2Id = allocJoint(joints, geom.a2, geom.genJ);
   const b1Id = allocJoint(joints, geom.b1, geom.genJ);
@@ -189,7 +191,7 @@ function buildStraightSlotCore(joints, { c1Id, c2Id, cl1Id, cl2Id, geom, seq, is
   ].filter(Boolean);
 
   const labelAngle = Math.atan2(-geom.uy, -geom.ux) - Math.PI / 5;
-  const widthDim = makeWidthDimension(e1.id, geom.width, geom.r, labelAngle);
+  const widthDim = widthDimension ? makeWidthDimension(e1.id, geom.width, geom.r, labelAngle) : null;
   if (widthDim) constraints.push(widthDim);
 
   return {
@@ -200,9 +202,9 @@ function buildStraightSlotCore(joints, { c1Id, c2Id, cl1Id, cl2Id, geom, seq, is
 }
 
 /**
- * 1. Center to Center Slot: pick two end arc centers c1Id, c2Id, then width.
+ * 1. Center to Center Slot: pick two end arc centers c1Id, c2Id, then width. `widthDimension`: the width was typed (its driving width dimension).
  */
-export function makeSlotCenterToCenter(joints, c1Id, c2Id, width, genJ, isConstruction = false) {
+export function makeSlotCenterToCenter(joints, c1Id, c2Id, width, genJ, isConstruction = false, { widthDimension = false } = {}) {
   const p1 = joints.get(c1Id), p2 = joints.get(c2Id);
   const geom = computeStraightSlotPoints({ mode: SLOT_MODES.CENTER_TO_CENTER, p1, p2, width });
   if (!geom) return { shapes: [], constraints: [] };
@@ -210,14 +212,14 @@ export function makeSlotCenterToCenter(joints, c1Id, c2Id, width, genJ, isConstr
   return buildStraightSlotCore(joints, {
     c1Id, c2Id, cl1Id: c1Id, cl2Id: c2Id,
     geom: { ...geom, genJ },
-    seq, isConstruction,
+    seq, isConstruction, widthDimension,
   });
 }
 
 /**
  * 2. Overall Slot: pick two overall tip points t1Id, t2Id, then width.
  */
-export function makeSlotOverall(joints, t1Id, t2Id, width, genJ, isConstruction = false) {
+export function makeSlotOverall(joints, t1Id, t2Id, width, genJ, isConstruction = false, { widthDimension = false } = {}) {
   const p1 = joints.get(t1Id), p2 = joints.get(t2Id);
   const geom = computeStraightSlotPoints({ mode: SLOT_MODES.OVERALL, p1, p2, width });
   if (!geom) return { shapes: [], constraints: [] };
@@ -228,7 +230,7 @@ export function makeSlotOverall(joints, t1Id, t2Id, width, genJ, isConstruction 
   const built = buildStraightSlotCore(joints, {
     c1Id, c2Id, cl1Id: t1Id, cl2Id: t2Id,
     geom: { ...geom, genJ },
-    seq, isConstruction,
+    seq, isConstruction, widthDimension,
     extraConstraints: [
       ({ e1, e2, cl }) => createConstraint(CONSTRAINT_TYPES.POINT_ON_LINE, { joint: t1Id, shape: e1.id }),
       ({ e2 }) => createConstraint(CONSTRAINT_TYPES.POINT_ON_LINE, { joint: t2Id, shape: e2.id }),
@@ -244,7 +246,7 @@ export function makeSlotOverall(joints, t1Id, t2Id, width, genJ, isConstruction 
 /**
  * 3. Center Point Slot: pick slot center mId and one end arc center c2Id, then width.
  */
-export function makeSlotCenterPoint(joints, mId, c2Id, width, genJ, isConstruction = false) {
+export function makeSlotCenterPoint(joints, mId, c2Id, width, genJ, isConstruction = false, { widthDimension = false } = {}) {
   const pm = joints.get(mId), pc2 = joints.get(c2Id);
   const geom = computeStraightSlotPoints({ mode: SLOT_MODES.CENTER_POINT, p1: pm, p2: pc2, width });
   if (!geom) return { shapes: [], constraints: [] };
@@ -255,7 +257,7 @@ export function makeSlotCenterPoint(joints, mId, c2Id, width, genJ, isConstructi
   const built = buildStraightSlotCore(joints, {
     c1Id, c2Id, cl1Id: c1Id, cl2Id: c2Id,
     geom: { ...geom, genJ },
-    seq, isConstruction,
+    seq, isConstruction, widthDimension,
     extraConstraints: [
       () => createConstraint(CONSTRAINT_TYPES.MIDPOINT, { joints: [c1Id, c2Id, mId] }),
     ],
@@ -264,7 +266,7 @@ export function makeSlotCenterPoint(joints, mId, c2Id, width, genJ, isConstructi
   return built;
 }
 
-function buildArcSlotCore(joints, { centerId, c1Id, c2Id, sweep, width, genJ, isConstruction, seq, extraConstraints = [] }) {
+function buildArcSlotCore(joints, { centerId, c1Id, c2Id, sweep, width, genJ, isConstruction, seq, widthDimension, extraConstraints = [] }) {
   const center = joints.get(centerId), c1 = joints.get(c1Id), c2 = joints.get(c2Id);
   const geom = computeArcSlotPoints({ center, c1, c2, sweep, width });
   if (!geom) return { shapes: [], constraints: [] };
@@ -315,11 +317,11 @@ function buildArcSlotCore(joints, { centerId, c1Id, c2Id, sweep, width, genJ, is
     ...extraConstraints.map((fn) => fn({ ac, ao, ai, e1, e2 })),
   ].filter(Boolean);
 
-  // Place width dimension radially outward from e1's cap away from center
+  // Place the (typed) width dimension radially outward from e1's cap away from center
   const baseAng = Math.atan2(geom.c1.y - geom.center.y, geom.c1.x - geom.center.x);
   const tangSign = geom.sweep ? -1 : 1;
   const labelAngle = baseAng + tangSign * (Math.PI * 0.5);
-  const widthDim = makeWidthDimension(e1.id, geom.width, geom.r, labelAngle);
+  const widthDim = widthDimension ? makeWidthDimension(e1.id, geom.width, geom.r, labelAngle) : null;
   if (widthDim) constraints.push(widthDim);
 
   return {
@@ -332,7 +334,7 @@ function buildArcSlotCore(joints, { centerId, c1Id, c2Id, sweep, width, genJ, is
 /**
  * 4. Three Point Arc Slot: pick start center c1Id, end center c2Id, third point p3 (with optional p3Id), then width.
  */
-export function makeSlotThreePointArc(joints, c1Id, c2Id, p3OrId, width, genJ, isConstruction = false, { bindThirdJoint = false } = {}) {
+export function makeSlotThreePointArc(joints, c1Id, c2Id, p3OrId, width, genJ, isConstruction = false, { bindThirdJoint = false, widthDimension = false } = {}) {
   const c1 = joints.get(c1Id), c2 = joints.get(c2Id);
   const p3IsId = typeof p3OrId === 'string';
   const p3 = p3IsId ? joints.get(p3OrId) : p3OrId;
@@ -346,16 +348,16 @@ export function makeSlotThreePointArc(joints, c1Id, c2Id, p3OrId, width, genJ, i
     extraConstraints.push(({ ac }) => createConstraint(CONSTRAINT_TYPES.POINT_ON_LINE, { joint: p3OrId, shape: ac.id }));
   }
   return buildArcSlotCore(joints, {
-    centerId, c1Id, c2Id, sweep, width, genJ, isConstruction, seq, extraConstraints,
+    centerId, c1Id, c2Id, sweep, width, genJ, isConstruction, seq, widthDimension, extraConstraints,
   });
 }
 
 /**
  * 5. Center Point Arc Slot: pick center arc centerId, start center c1Id, end center c2Id, sweep, then width.
  */
-export function makeSlotCenterPointArc(joints, centerId, c1Id, c2Id, sweep, width, genJ, isConstruction = false) {
+export function makeSlotCenterPointArc(joints, centerId, c1Id, c2Id, sweep, width, genJ, isConstruction = false, { widthDimension = false } = {}) {
   const seq = newShapeId('');
   return buildArcSlotCore(joints, {
-    centerId, c1Id, c2Id, sweep, width, genJ, isConstruction, seq,
+    centerId, c1Id, c2Id, sweep, width, genJ, isConstruction, seq, widthDimension,
   });
 }

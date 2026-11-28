@@ -337,7 +337,7 @@ await run('8 the 3-point arc slot gives main\'s geometry (numbers from origin/ma
   for (const [[c1, c2, p3], sweep, pts] of MAIN) {
     let n = 0; const genJ = () => 'g' + (++n);
     const joints = new Map([['c1', { ...c1 }], ['c2', { ...c2 }]]);
-    const r = makeSlotThreePointArc(joints, 'c1', 'c2', p3, 6, genJ, false);
+    const r = makeSlotThreePointArc(joints, 'c1', 'c2', p3, 6, genJ, false, { widthDimension: true });   // task 1049: the width 6 TYPED (main always placed its dimension)
     assert.strictEqual(r.meta.ac.sweep, sweep, 'the slot arc direction');
     assert.strictEqual(r.shapes.length, 5, 'five shapes'); assert.strictEqual(r.constraints.length, 10, 'ten constraints (task 1038: the 4th tangent, BUG-383)');
     pts.forEach(([x, y], i) => { const j = joints.get('g' + (i + 1)); near(j.x, x, 1e-8, `g${i + 1}.x`); near(j.y, y, 1e-8, `g${i + 1}.y`); });

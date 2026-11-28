@@ -53,6 +53,7 @@ export function constraintSketch(constraint, state) {
   }
   if (constraint && Array.isArray(constraint.shapes)) {
     for (const sid of constraint.shapes) {
+      if (sid == null) continue; // TASK 1046: a deleted offset piece is null in its record (#core/offset.js offsetsAfterDelete)
       ids.add(sketchOf(resolveShape(sid)));
     }
   }
@@ -165,7 +166,7 @@ export function inertEntities(state) {
 const operandsOf = (c) => {
   const shapes = [];
   if (c && c.shape) shapes.push(c.shape);
-  if (c && Array.isArray(c.shapes)) shapes.push(...c.shapes);
+  if (c && Array.isArray(c.shapes)) shapes.push(...c.shapes.filter((s) => s != null)); // TASK 1046: a deleted offset piece is null
   return { joints: (c && c.joints) || [], shapes: shapes.map((s) => (s && typeof s === 'object' ? s.id : s)) };
 };
 /** THE pick rule of Fillet, Trim, Break, Offset and Mirror: a SHAPE is pickable only in the ACTIVE sketch and when that sketch is not locked / hidden.

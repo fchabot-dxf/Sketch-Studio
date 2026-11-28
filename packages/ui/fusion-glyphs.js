@@ -12,6 +12,7 @@ export const CONSTRAINT_GLYPH = {
   sharedPointCoincident: 'glyph-coincident', // TASK 1041: Fusion's SharedPointCoincident (#core/shared-point.js) has the coincident's look
   collinear: 'glyph-collinear', tangent: 'glyph-tangent', equal: 'glyph-equal', midpoint: 'glyph-midpoint',
   concentric: 'glyph-concentric', polygon: 'glyph-polygon', symmetric: 'glyph-symmetric',
+  offsetRelation: 'glyph-offset', // TASK 1046: Fusion's Offset constraint glyph (#core/offset.js OFFSET_RELATION), declared in the sheet
 };
 
 // Fetch the sheet once (idempotent); every host calls this at start. Reports a failed load / missing glyph once.

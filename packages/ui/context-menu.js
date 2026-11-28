@@ -7,6 +7,7 @@ import { CONSTRAINT_TYPES } from '#core/constants.js';
 import { isDimension } from '#core/parameters.js';
 import { GROUP_LOCKS } from '#core/group-model.js'; // TASK 753: the two group locks' labels
 import { SHARED_POINT_COINCIDENT } from '#core/shared-point.js'; // TASK 1041
+import { OFFSET_RELATION } from '#core/offset.js'; // TASK 1046
 
 const STYLE_ID = 'sk-context-menu-styles';
 const CSS = `
@@ -168,7 +169,8 @@ export function showContextMenu({ x, y, items, returnFocusTo = null, touch = fal
 // The constraints whose GLYPH opens the 'constraint' menu (its Delete): every geometric constraint. (A distance / angle / offset is a dimension:
 // its own menu.) Task 571: the glyph wins the right-click over the geometry under it, so a geometric glyph must always open a menu.
 // TASK 1041: + the SharedPointCoincident glyph (#core/shared-point.js): its Delete detaches its curve from the shared point.
-export const CONSTRAINT_MENU_TYPES = Object.freeze([...Object.values(CONSTRAINT_TYPES).filter(t => !isDimension({ type: t })), SHARED_POINT_COINCIDENT]); // a dimension (#core/parameters.js isDimension)
+// TASK 1046: + the offset RELATION glyph (#core/offset.js): its Delete removes the relation (the copies stay as plain geometry).
+export const CONSTRAINT_MENU_TYPES = Object.freeze([...Object.values(CONSTRAINT_TYPES).filter(t => !isDimension({ type: t })), SHARED_POINT_COINCIDENT, OFFSET_RELATION]); // a dimension (#core/parameters.js isDimension)
 
 // TASK 577: "Move to sketch ▸" is ONE row with a submenu: every sketch (a locked one, and the one the selection is already in, greyed out
 // with its reason) plus "New sketch…" (the selection moves into a new sketch). Only when the document has 2+ sketches.

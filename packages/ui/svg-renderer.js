@@ -23,6 +23,7 @@ import { quantityText, dimensionUnit } from '#core/parameters.js';
 import { isAutoDimName } from '#core/expression.js';
 import { isShapeLocked } from '#core/lock-state.js';
 import { SHARED_POINT_COINCIDENT, sharedPointCoincidents } from '#core/shared-point.js'; // TASK 1041: the SharedPointCoincident glyphs of the scene's shared points
+import { offsetRelations, offsetRelationCurves } from '#core/offset.js'; // TASK 1046: the offset RELATION glyphs (derived from the stored offset records)
 
 // U3c: LENGTH dimension labels display in the document unit (base = world units = 1 mm). Angle labels stay degrees.
 // At DOC_UNIT='mm' + decimals 1, formatUnit(v,'mm',{decimals:1}) === v.toFixed(1) → byte-identical to the old label.
@@ -415,7 +416,7 @@ export function computeDimLabelBounds(state, zoom = 0) {
     }
     if (c.shape) { const sh = shapeById.get(c.shape); return !!sh && hidden.has(sketchOf(sh)); }
     if (Array.isArray(c.shapes) && c.shapes.length > 0) {
-      return c.shapes.every((id) => { const sh = shapeById.get(id); return sh && hidden.has(sketchOf(sh)); });
+      return c.shapes.every((id) => { if (id == null) return true; const sh = shapeById.get(id); return sh && hidden.has(sketchOf(sh)); }); // TASK 1046: a deleted offset piece is null
     }
     return false;
   };
@@ -2582,8 +2583,8 @@ switch(c.type){
 
   // The glyph anchor of a constraint operand SHAPE (a dual-glyph constraint draws one per operand): a line's midpoint pushed out along its
   // normal; a circle / arc just outside its rim at a stable angle. { x, y, dir } or null.
-  const glyphAnchorOfShape = (shape) => {
-    const offset = scale(GLYPH_OFFSET_PX);
+  const glyphAnchorOfShape = (shape, offsetPx = GLYPH_OFFSET_PX) => {
+    const offset = scale(offsetPx);
     if (!shape || !shape.joints || shape.joints.length < 1) return null;
     if (shape.type === 'line' && shape.joints.length >= 2) {
       const a = opJoints.get(shape.joints[0]);
@@ -2930,6 +2931,32 @@ switch(c.type){
 
   }
   for (const c of sharedGlyphs) drawConstraintGlyph(svg, c); // TASK 1041: the SharedPointCoincident glyphs (one per non-owner curve of a shared point)
+  // TASK 1046: the offset RELATION glyphs (#core/offset.js offsetRelations, derived from each stored offset record; Fusion's Offset constraint
+  // glyph): TWO, one beside a source curve and one beside its copy (offsetRelationCurves), JUST beside each curve's middle (Fusion: about 7 px
+  // off the line; here half the icon + 4 px, OFFSET_RELATION_GLYPH_PX, so the icon clears the line and stays clear of the curve's own glyphs at
+  // GLYPH_OFFSET_PX), each on the side AWAY from the other curve (so the two never sit on each other or on the other curve, at any offset
+  // distance); on a LINE it sits one icon and a quarter along from the middle (OFFSET_RELATION_ALONG_PX: the line's own glyph, an H / V,
+  // sits AT the middle), drawn by the ONE glyph helper. Both glyphs are the SAME entity: hovering / selecting either lights both, and
+  // constraintTargets lights its curves.
+  const OFFSET_RELATION_GLYPH_PX = SYMBOL_SIZE_PX / 2 + 4, OFFSET_RELATION_ALONG_PX = SYMBOL_SIZE_PX * 1.25;
+  const offsetRelationAnchors = (pair) => {
+    const on = pair.map((sh) => glyphAnchorOfShape(sh, 0)), out = pair.map((sh) => glyphAnchorOfShape(sh, OFFSET_RELATION_GLYPH_PX));
+    if (!on.every(Boolean) || !out.every(Boolean)) return null;
+    return [0, 1].map((k) => {
+      const nx = out[k].x - on[k].x, ny = out[k].y - on[k].y, other = on[1 - k];
+      const side = (other.x - on[k].x) * nx + (other.y - on[k].y) * ny > 0 ? -1 : 1;
+      const d = pair[k].type === 'line' ? on[k].dir : null, dl = d ? Math.hypot(d.x, d.y) : 0, along = dl ? scale(OFFSET_RELATION_ALONG_PX) / dl : 0;
+      return { x: on[k].x + side * nx + (d ? d.x * along : 0), y: on[k].y + side * ny + (d ? d.y * along : 0) };
+    });
+  };
+  for (const g of offsetRelations(constraints)) {
+    const pair = show.glyphs ? offsetRelationCurves(g.offset, opShapes) : null;
+    const anchors = pair ? offsetRelationAnchors(pair) : null;
+    if (!anchors) { g.__visible = false; continue; }
+    dimConstraintUnlessLit(g, (selectedConstraints && selectedConstraints.has(g)) || hoveredConstraint === g);
+    g.glyphPos = anchors.map((p) => { drawUnifiedGlyph(g, p.x, p.y); return g.glyphPos; });
+    g.__visible = true;
+  }
   out.dim = null;
 
   // Debug: constraint visibility summary (use: ug.debug.enable('renderer')). Logged only when {total, visible} CHANGES —

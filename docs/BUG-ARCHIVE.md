@@ -3598,7 +3598,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Fix:** the end step declares its winding as a `path` (`WINDING` in `arc-tool.js`): the session adds every hover AND the step's own point to it (`#ui/tool-session.js`, one rule), so a tap with no hover before it winds the short way, as a hovered click does.
 - **Task id(s):** `1039`
 - **Fix merge sha:** open (`agents/arc-session-1039`, awaiting merge)
-- **Guarding test file(s):** `tests/arc-session-1039-node.test.js` (`CB3 touch: tap centre, start, p` = `CB1 mouse: click centre, start, wind, click p`: the same document, `sweep:true`), `tests/arc-session-1039-live.test.js` (phone `centre-tap-x3` / `centre-finger-drag-tap`: the short way round)
+- **Guarding test file(s):** `tests/arc-session-1039-node.test.js` (`CB3 touch: tap centre, start, p` = `CB1 mouse: click centre, start, wind, click p`: the same document, `sweep:true`), `tests/arc-session-1039-phone-live.test.js` (split from `arc-session-1039-live.test.js` by task `1043`; phone `centre-tap-x3` / `centre-finger-drag-tap`: the short way round)
 - **Status:** fixed
 - **Family:** `ui-input`
 - **History:** found in task `1039` -> fixed in task `1039`. Probe `C04 tap-tap-tap`, before: `"sweep":false,"type":"arc"` (end `{"x":-14.8889,"y":39.5614}`, the clicks' `C01` `"sweep":true`); after: `"sweep":true,"type":"arc"`.
@@ -3651,20 +3651,82 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **History:** measured by the advisor 2026-11-27 -> fixed in task `1040`. Counts after (`tests/svg-loops-1040-node.test.js`): rect + line `closed 1, open 1`, two rects `closed 2`, slot `closed 1`, filleted rect `closed 1`.
 
 ### BUG-402
-- **Date / turn:** 2026-11-27 (found in task `1040`)
+- **Date / turn:** 2026-11-27 (found in task `1040`; fixed in task `1043`)
 - **Reported by:** task `1040` (the DXF check the task asked for)
 - **App(s) & host:** SketchStudio (Export, "Download DXF")
 - **Report:** the DXF export never joins curves: every line / arc / bezier / circle is its own entity (`LINE` / `ARC` / `SPLINE` / `CIRCLE`), no closed outline is ever one `LWPOLYLINE` (with bulges for arcs). One closed rectangle: `{"LINE":4}`.
 - **What was wrong:** a closed outline is 4 (or more) loose entities in the DXF, the same problem BUG-401 fixed in the SVG.
 - **Cause:** `apps/sketchstudio/ui/export-manager.js` `buildDXF` writes one entity per exported shape; it reads no loop.
-- **Fix:** open (task `1040` stopped on DXF, as told: not fixed there)
-- **Task id(s):** `1040` (found)
+- **Fix:** task `1043`. The decomposition BUG-401's fix wrote inline in `buildSVG` (`findLoops` / `findOpenChains` / `chainWalk` on `exportedShapes`, each curve in one place) is now ONE helper, `exportOutlines(state)` in `export-manager.js`, read by BOTH `buildSVG` (its output byte-identical: 453 fixture exports compared before / after) and `buildDXF`.
+  - Closed outlines: each is ONE closed R12 polyline: `POLYLINE` (`66` = 1, its point the R12 dummy 0, `70` = 1), then a `VERTEX` per point, then `SEQEND`. An arc is a bulge `42` = tan(sweep / 4) on the VERTEX that starts it; its sign is the way the walk turns in the DXF's Y-up plane, from the one `arcSweepInfo`.
+  - Beziers: a bezier is its sampled points inside the polyline. This is the kind's own sampling (`#core/curve-kinds.js` `CURVE_KINDS.bezier.points`, chord deviation <= `CURVE_TOLERANCE_MM` = 0.005 mm), so an outline with a bezier is ONE closed POLYLINE too and no SPLINE is ever written (BUG-421).
+  - Open strokes of 2+ curves: each is ONE open `POLYLINE` (`70` = 0).
+  - Single entities: a circle is a `CIRCLE`; a lone line or arc is its `LINE` / `ARC` (advisor ruling b).
+  - Bulge decimals: `precision` + log10(chord / (4 bulge^2)), so a nearly flat arc reads back as exact as a coordinate. At the coordinates' 6 decimals, the 17188 mm arc of `angle-dimension/owner-trapezoid-angle.json` came back 0.1 mm off.
+  - Shared end points: a step's ends are its NODES' points (coincident joints merged, `buildNodeMap`), so two curves meeting at a node are written at the very same coordinates.
+  - Y-up as before (BUG-301: the writer negates Y; "Invert Y axis" is SVG only). Construction stays out (`exportedShapes`).
+  - arcApprox: arcs are sampled (arcSeg segments) into the polylines, with no bulge. A circle is one closed `POLYLINE` of its points (was arcSeg `LINE`s).
+  - NOT `LWPOLYLINE`: the advisor measured Fusion's DXF import (importManager, 2026-11-27) refusing every LWPOLYLINE sample of the first version (`InternalValidationError : bRet`), also with a HEADER (`$ACADVER` AC1015, `$INSUNITS`) and subclass markers. A headerless R12 `POLYLINE` / `VERTEX` / `SEQEND` (66 = 1, 70 = 1, bulge 42 on the VERTEX) imported: a closed slot came in as 2 lines + 2 arcs, 1 profile. The Export view's default is R12 too.
+- **Declared limit:** our own DXF import (`#core/dxf-import`) reads a bezier back as the lines of its samples, not as a bezier. Advisor ruling (a) (bezier = SPLINE + open polylines) was REVERSED after Fusion refused every SPLINE file (BUG-421).
+- **Task id(s):** `1040` (found), `1043` (fixed)
+- **Fix merge sha:** open (`agents/dxf-loops-1043`, awaiting merge)
+- **Guarding test file(s):**
+  - `tests/dxf-loops-1043-node.test.js`:
+    - `D-1`: the svg-loops-1040 drawings, drawn with the real tools. Checks entity kinds / counts, closed flags, bulges and their sign, and every curve once. A bezier must be one chain of segments from its start to its end, every vertex on the curve, the curve within `CURVE_TOLERANCE_MM` of the chain. Also no SPLINE, no LWPOLYLINE, every POLYLINE in R12 form (66, dummy point, VERTEXes, SEQEND), and Y-up.
+    - `D-2`: arcApprox.
+    - `D-3`: the round trip through `#core/dxf-import`: exactly the file's segments come back (arcs: centre / radius / direction), a bezier as lines, the same loops.
+    - `D-4`: the 151 fixture drawings of bezier-loops-761, the same checks.
+  - `tests/export-roundtrip-1027-node.test.js`: the 3-line chain is one `POLYLINE`.
+  - `tests/bezier-loops-761-node.test.js`: its `studioDxf` facet changed on purpose; the bezier outline is one POLYLINE, no SPLINE, read back as lines.
+  - `tests/text-845-node.test.js`: the letters are POLYLINEs, no SPLINE.
+  - `tests/bezier-loops-761-sketchstudio-live.test.js`: the Export button's DXF is 1 closed POLYLINE (82 VERTEXes), no LINE / LWPOLYLINE / SPLINE.
+- **Status:** fixed
+- **Family:** `export-svg`
+- **Related:** BUG-301, BUG-401, BUG-420, BUG-421
+- **History:** found in task `1040` (`.evidence/1040/sample-output.txt`: `DXF of one closed rectangle (4 lines): {"LINE":4}`) -> fixed in task `1043` (fail-first: `dxf-loops-1043-node: 1 passed, 9 failed` on the old writer; after: `11 passed, 0 failed`).
+  - The first version (LWPOLYLINE) was refused by Fusion (advisor, measured) and rewritten as R12 POLYLINE in the same task.
+  - The advisor measured the R12 samples in Fusion: rect-filleted OK (4 lines + 1 arc, convex, 1 profile), slot OK (2 lines + 2 arcs, 1 profile), two-rects-and-circle OK (7 lines + circle, 3 profiles); bezier-loop (with a SPLINE) failed, see BUG-421. The bezier-loop sample was then rewritten as one POLYLINE; its Fusion import is still to be measured.
+
+---
+
+### BUG-420
+- **Date / turn:** 2026-11-27 (found in task `1043`)
+- **Reported by:** task `1043`
+- **App(s) & host:** SketchStudio (Export, "Download DXF")
+- **Report:** the Export view's "DXF version" select (`#export-dxf-version`: "R12 (default)" / "R2000") is read into the options (`dxfVersion`, `ui-manager.js`; `main.js` passes `'r12'`), but `buildDXF` never reads it, and the file has no HEADER section (no `$ACADVER`, no `$INSUNITS`).
+  - Task `1043` writes R12 entities only: its polylines are R12 `POLYLINE` / `VERTEX` / `SEQEND` (Fusion refused `LWPOLYLINE`), and there is no `SPLINE` (BUG-421). So the file matches the default "R12"; choosing "R2000" still changes nothing.
+  - Units: a headerless DXF imports into Fusion in the DOCUMENT's units (the advisor, measured 2026-11-27). An mm file opened in an inch document comes in 25.4x too big; the files exported before task `1043` did the same.
+- **What was wrong:** a choice offered to the user does nothing; the file declares no version or units (our own import assumes mm and says so; Fusion takes the open document's units).
+- **Cause:** `apps/sketchstudio/ui/export-manager.js` `buildDXF` ignores `opts.dxfVersion` and writes the ENTITIES section only.
+- **Fix:** open (not in task `1043`'s scope: reported)
+- **Task id(s):** `1043` (found)
 - **Fix merge sha:** none
 - **Guarding test file(s):** none yet
 - **Status:** open
 - **Family:** `export-svg`
-- **Related:** BUG-401
-- **History:** found in task `1040` (`.evidence/1040/sample-output.txt`: `DXF of one closed rectangle (4 lines): {"LINE":4}`).
+- **Related:** BUG-402, BUG-421
+- **History:** found in task `1043` (`grep -n dxfVersion`: read in `ui-manager.js:107`, passed in `main.js:74`, used nowhere in `export-manager.js`).
+
+---
+
+### BUG-421
+- **Date / turn:** 2026-11-27 (found in task `1043`, measured by the advisor; pre-existing since task `761`)
+- **Reported by:** advisor (Fusion `importManager` DXF 2D import)
+- **App(s) & host:** SketchStudio (Export, "Download DXF")
+- **Report:** any SketchStudio DXF holding a bezier was refused by Fusion (`InternalValidationError`). Both cases fail: the task-1043 `bezier-loop.dxf` (an R12 POLYLINE + a SPLINE), and a headerless SPLINE-only file cut from it, which is exactly what origin/main's export wrote for a bezier.
+- **What was wrong:** a drawing with a curve (a bezier, a text's letters) could not be brought into Fusion from our DXF at all.
+- **Cause:** `buildDXF` wrote a bezier as a cubic `SPLINE` entity (TASK 761: degree 3, knots 0 0 0 0 1 1 1 1). SPLINE is an R13+ entity, and the file is a headerless R12 one, which cannot carry it.
+- **Fix:** task `1043`: no SPLINE is written. A bezier is its sampled points inside the R12 polyline of its outline or chain (`CURVE_KINDS.bezier.points`, chord deviation <= `CURVE_TOLERANCE_MM` = 0.005 mm, the tolerance the hold part / pocket clearing / plotter polylines use), so an outline with a bezier is one closed POLYLINE. A lone bezier is one open POLYLINE.
+- **Declared limit:** our DXF import reads such a curve back as lines. The SVG export keeps the exact cubic.
+- **Task id(s):** `761` (introduced the SPLINE), `1043` (found, fixed)
+- **Fix merge sha:** open (`agents/dxf-loops-1043`, awaiting merge)
+- **Guarding test file(s):**
+  - `tests/dxf-loops-1043-node.test.js`: no SPLINE in any file (D-1, D-4). A bezier is one chain of segments, every vertex on the curve, the curve within `CURVE_TOLERANCE_MM`. `dxf/part-mm.dxf`'s SPLINE, imported as a bezier, is exported as a POLYLINE.
+  - `tests/bezier-loops-761-node.test.js`, `tests/text-845-node.test.js`, `tests/bezier-loops-761-sketchstudio-live.test.js`.
+- **Status:** fixed (Fusion import of the regenerated `bezier-loop.dxf` to be measured by the advisor)
+- **Family:** `export-svg`
+- **Related:** BUG-402, BUG-420
+- **History:** the SPLINE was written since task `761`; Fusion refused it, measured by the advisor 2026-11-27 -> fixed in task `1043`.
 
 ### BUG-410
 - **Date / turn:** 2026-11-27 (found in task `1041`)
@@ -3771,6 +3833,57 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **History:** found by audit `1042` -> fixed in task `1044` (the ring step added on the advisor's ruling, after the first glyph-first version stole an exact press on a slot's tangency point: `tests/split-shared-point-1041-node.test.js` went red). Fail-first: `.evidence/1044/fail-first-2.out` `FAIL BUG-D Tangent (D-56): D-56: the hover on the glyph's ink lights the glyph (hover = click)` and `FAIL BUG-D Symmetric (D-60): ...`. The D-48 section already passed on the old code in this scene (it is a guard here, not a fail-first). After: `ok   BUG-D Tangent (D-56)`, `ok   BUG-D Symmetric (D-60)`, `ok   BUG-D the 2nd glued Coincident (D-48)`, `ok   the point ring wins over a glyph drawn on it`.
 
+### BUG-450
+- **Date / turn:** 2026-11-27 (found by the delete audit, task `1042`, row D-43; owner-approved fix the same day, task `1046`)
+- **Reported by:** task `1042` audit (`docs/DELETE-AUDIT-1042.md` on `agents/delete-audit-1042`, "Copies and relations"); Fusion measured by the advisor 2026-11-27
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** D-43: selecting ONE curve of a pattern COPY and pressing Delete removed the whole copy instance (4 lines of a square) and suppressed it. Fusion deletes that curve only, and the pattern stays.
+- **What was wrong:** the delete follow-up suppressed every instance that lost any copy curve or copy point, so the other copies of that instance went too.
+- **Cause:** `packages/core/pattern.js` `patternsAfterDelete` (622-628 on `6f321a9c`).
+- **Fix:** `patternsAfterDelete` stays the ONE rule for a pattern record, called from `delete-manager.js` `removeGeometry`. A deleted copy curve or copy point becomes `null` in its instance, the pattern keeps its other copies, and new arrays are assigned (the undo snapshot shares the old ones). An instance with no copy left is still suppressed, as before. The record's readers skip a null copy: `patternOperands` (no row; a deleted ARC copy's rim that another copy uses gets the full `pt` row), `patternRefs`, `remapPattern`, `patternCopyOperands` and `removeInstance`. A later quantity, spacing, angle or suppression edit keeps an instance it already has, so the deleted copy stays deleted, and new instances are whole. A re-pick of the objects, centre or direction (`editPattern`'s rebuild) remakes every instance whole. D-44 (a SOURCE curve: the pattern goes, the copies stay) and D-63 (the label: the pattern goes) are unchanged and now guarded.
+- **Task id(s):** `1042` (audit), `1046`
+- **Fix merge sha:** open (`agents/copy-delete-1046`, awaiting merge)
+- **Guarding test file(s):** `tests/copy-delete-1046-node.test.js` (sections D-43, D-44, D-63: real clicks + Delete; one undo step exact, redo, reopen; a quantity edit after the delete), `tests/pattern-658.test.js` (the copy-curve delete block, rewritten: null in its instance, solver rows = unknowns, quantity 4 -> 5, the last copy deleted -> suppressed, un-suppress -> whole), `tests/copy-delete-1046-live.test.js` (desktop 1280x800 mouse + Delete key + Ctrl+Z, phone 390x844 finger + footer red X)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found by audit `1042` -> owner-approved 2026-11-27 -> fixed in task `1046`. Audit probe before (`.evidence/1046/before-curves.out`): `ROW D-43 | ... | deleted shapes [line,line,line,line] points -4`. After (`.evidence/1046/after-curves.out`): `ROW D-43 | ... | deleted shapes [line] points -0 ... | LEFT none | residual ok dof 4 | undo exact (history +1) | redo exact | reload same`. Fail-first (`.evidence/1046/failfirst-node.out`): `FAIL D-43 ...: that copy line only goes (8 lines)`.
+
+### BUG-451
+- **Date / turn:** 2026-11-27 (found by the delete audit, task `1042`, rows D-38 / D-39; owner-approved fix the same day, task `1046`)
+- **Reported by:** task `1042` audit (`docs/DELETE-AUDIT-1042.md` on `agents/delete-audit-1042`, "Copies and relations"); Fusion measured by the advisor 2026-11-27
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** D-38: deleting ONE offset COPY curve removed the whole offset relation and its dimension, and the other copies became plain lines. D-39: deleting an offset SOURCE curve did the same. Fusion deletes that curve only, and the Offset stays in both cases.
+- **What was wrong:** the offset record names every source and copy in its generic `shapes` field, so the delete rule spliced the whole record when any of them went.
+- **Cause:** `packages/core/delete-manager.js` `removeGeometry`, the constraint splice (`namesAny(c, SHAPE_FIELDS, goneS)`, 143 in the audit, 170 on `6f321a9c`).
+- **Fix:** `removeGeometry` leaves offset records to their ONE rule, `packages/core/offset.js` `offsetsAfterDelete`, called next to `patternsAfterDelete`. A deleted COPY becomes `null` in its piece. A deleted SOURCE nulls its whole piece, so its copy stays as plain geometry, joined to the neighbouring copies. An offset with no whole piece left is deleted. `offsetOperands` gives the rows each piece still can: a piece whose copy was deleted keeps its source rows at the neighbouring copies' ends, so they stay exactly where they were and keep following the distance. A piece whose source was deleted gives no row, so a corner end there slides along its own offset line (D-39: dof 4 -> 7 in the audit scene). `storedPieces`, `offsetValueRefusal` and `offsetDimensionEnds` read null pieces. So do the generic readers of a constraint's `shapes`: `constraints.js` `getConstrainedGeometry`, `sketch-model.js` `constraintSketch` / `operandsOf`, `geometry-labels.js`, and the hidden-sketch test in `svg-renderer.js`.
+- **Task id(s):** `1042` (audit), `1046`
+- **Fix merge sha:** open (`agents/copy-delete-1046`, awaiting merge)
+- **Guarding test file(s):** `tests/copy-delete-1046-node.test.js` (sections D-38: the corners do not move; a distance edit 5 -> 8 moves the 3 copies to the sources' box +/- 8; D-39; each with one undo step exact, redo, reopen)
+- **Status:** fixed
+- **Family:** `solver`
+- **History:** found by audit `1042` -> owner-approved 2026-11-27 -> fixed in task `1046`. Before (`.evidence/1046/before-curves.out`): `ROW D-38 | ... | deleted shapes [line] points -0 cons [offset:d1] | after ... cons {"horizontal":2,"vertical":2,"coincident":4}`. After (`.evidence/1046/after-curves.out`): `ROW D-38 | ... cons {"horizontal":2,"vertical":2,"coincident":4,"offset":1} | LEFT none | residual ok dof 4 | undo exact | redo exact | reload same`. Fail-first: `FAIL D-38 ...: the offset STAYS, that copy null in it (null)`, `FAIL D-39 ...: the offset STAYS without that piece`.
+
+### BUG-452
+- **Date / turn:** 2026-11-27 (found by the delete audit, task `1042`, row D-65; owner ruling "offset should be visible" the same day, task `1046`)
+- **Reported by:** task `1042` audit (D-65); the advisor during task `1046`; Fusion's Offset glyph measured by the advisor in task `1048` (`f-offset-glyph-states.png`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (shared Design tab)
+- **Report:** an offset relation had no handle of its own. Fusion shows an Offset constraint glyph that Delete removes (D-65). Here the dimension label was the relation's only handle, and its Delete keeps the relation with a free distance (task 667, owner-approved). With its dimension deleted, the relation could not be removed at all (OPEN owner question, answered by the ruling: build the glyph).
+- **What was wrong:** the relation was never drawn. Only its dimension was.
+- **Cause:** no relation glyph existed (`packages/ui/svg-renderer.js` drew an offset record only as a dimension label; `assets/constraint-glyphs.svg` had no offset glyph).
+- **Fix:** a DERIVED glyph entity, `packages/core/offset.js` `offsetRelations` (`OFFSET_RELATION`, one per stored record and never stored, so old files show it too), on the model of task 1041's SharedPointCoincident.
+  - Drawn: TWO glyphs, beside the first whole piece's source curve and its copy (`offsetRelationCurves`), half the icon + 4 px off each curve, on the side away from the other curve and, on a line, 1.25 icons along from the middle (the line's own H / V glyph sits at the middle). Drawn by the ONE glyph helper `drawUnifiedGlyph`. DECLARED DIFFERENCE from Fusion, for legibility (advisor-accepted): Fusion puts both glyphs on the same side, about 7 px off, at the middle; at small offset distances that put the two glyphs on each other and on the line's own H glyph. Screenshots: `.evidence/1046/live-offset-glyphs-desktop.png`, `live-offset-glyphs-phone.png`.
+  - Always shown. Hovering or selecting either glyph lights both glyphs and every source and copy curve; the dimension label is not lit.
+  - The icon is `glyph-offset`, declared in the owner's sheet in the style of the others: an inverted T with a parallel outline round it, after Fusion's. Its table entry is `fusion-glyphs.js` `CONSTRAINT_GLYPH.offsetRelation`.
+  - Picked by `hover-manager.js` `glyphAt`. It opens the constraint menu (`context-menu.js` `CONSTRAINT_MENU_TYPES`).
+  - Delete removes the relation: `delete-manager.js` `deleteConstraints` (record + dimension, one undo step). The copies stay as plain geometry. Fusion puts 4 per-line Offset dimensions in its place: DECLARED DIFFERENCE, since this app has no per-line offset dimension.
+  - Delete on the LABEL keeps 667's free distance.
+- **Task id(s):** `1042` (audit), `1046`
+- **Fix merge sha:** open (`agents/copy-delete-1046`, awaiting merge)
+- **Guarding test file(s):** `tests/copy-delete-1046-node.test.js` (section D-65: the label keeps 667; the glyph is drawn twice with nothing selected; the hover lights both glyphs and the 8 curves but not the label; the Delete key, the right-click menu, the footer red X and the touch-and-hold menu each remove the relation with one exact undo step, redo and reopen; a reopened design draws the glyph, which is never stored), `tests/copy-delete-1046-live.test.js` (desktop and phone: two glyphs, the hover / selected look, Delete / the red X removes the relation), `tests/offset-fusion-match-667.test.js` (unchanged)
+- **Status:** fixed
+- **Family:** `ui-input`
+- **History:** found by audit `1042` -> owner ruling 2026-11-27 ("offset should be visible") -> fixed in task `1046`. Fail-first (`.evidence/1046/failfirst-node.out`): `FAIL D-65 ...: key: the relation shows two glyphs with nothing selected`. Screenshots: `.evidence/1046/live-offset-glyphs-desktop.png`, `live-offset-glyph-hover-desktop.png`, `live-offset-glyph-selected-phone.png`.
+
 ### BUG-440
 - **Date / turn:** 2026-11-27 (found in task `1045`)
 - **Reported by:** task `1045` (the Fusion oracle, `tests/fusion-oracle.test.js` graded which-moves)
@@ -3810,13 +3923,13 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | Family | Timeline (oldest first) |
 |---|---|
 | `build-deploy` | BUG-062 (11-21) |
-| `export-svg` | BUG-300 (11-27), BUG-301 (11-27), BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19), BUG-371 (11-27), BUG-376 (11-27), BUG-401 (11-27), BUG-402 (11-27, open) |
+| `export-svg` | BUG-300 (11-27), BUG-301 (11-27), BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19), BUG-371 (11-27), BUG-376 (11-27), BUG-401 (11-27), BUG-402 (11-27), BUG-420 (11-27, open), BUG-421 (11-27) |
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27), BUG-350 (11-27), BUG-352 (11-27), BUG-360 (11-27) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27), BUG-411 (11-27), BUG-431 (11-27), BUG-433 (11-27), BUG-440 (11-27, open) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27), BUG-411 (11-27), BUG-431 (11-27), BUG-433 (11-27), BUG-450 (11-27), BUG-451 (11-27), BUG-440 (11-27, open) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |
@@ -3824,7 +3937,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22), BUG-374 (11-27, open), BUG-400 (11-27) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27), BUG-410 (11-27), BUG-430 (11-27), BUG-432 (11-27), BUG-434 (11-27), BUG-441 (11-27) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27), BUG-410 (11-27), BUG-430 (11-27), BUG-432 (11-27), BUG-434 (11-27), BUG-452 (11-27), BUG-441 (11-27) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 

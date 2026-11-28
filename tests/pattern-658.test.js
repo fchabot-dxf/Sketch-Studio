@@ -37,15 +37,16 @@ function solverHolds(S, c, label, alone = true) { // alone: nothing else in the 
   for (const id of c.sources.shapes) { const s = shape(S, id); if (s.type === 'circle') S.state.constraints.push({ type: 'distance', shape: s.id, isRadius: true, value: s.radius, __tmp: true }); }
   for (const id of (c.directions || [])) if (id && shape(S, id)) for (const j of shape(S, id).joints) { const J = S.state.joints.get(j); if (!fixed.has(j)) { fixed.set(j, J.fixed); J.fixed = true; } }
   const f = S.engine.jointFreedom();
-  const copies = c.instances.flatMap(i => i.joints);
+  const copies = c.instances.flatMap(i => i.joints).filter(j => j != null); // TASK 1046: null = a deleted copy point
+  const copyShapes = c.instances.flatMap(i => i.shapes).filter(id => id != null);
   const free = copies.filter(j => (f.freedom.get(j) || 0) > 0);
   ok(free.length === 0 && (!alone || f.nullity === 0), `${label}: sources held -> the copies are fully defined (free ${free.length}, nullity ${f.nullity})`);
   const fd = L.fdJacobian(S);
   ok(fd.worst.length === 0, `${label}: analytic Jacobian = finite differences (${JSON.stringify(fd.worst)})`);
   ok(fd.nullity === f.nullity, `${label}: finite-difference nullity ${fd.nullity} = engine ${f.nullity}`);
   // no redundant row: the pattern's rows + the copies' arc equals = the copies' unknowns
-  const unknowns = copies.length * 2 + c.instances.flatMap(i => i.shapes).filter(id => shape(S, id).type === 'circle').length;
-  const equals = c.instances.flatMap(i => i.shapes).filter(id => shape(S, id).type === 'arc').length;
+  const unknowns = copies.length * 2 + copyShapes.filter(id => shape(S, id).type === 'circle').length;
+  const equals = copyShapes.filter(id => shape(S, id).type === 'arc').length;
   ok(patternRowCount(c, S.state.shapes) + equals === unknowns, `${label}: rows ${patternRowCount(c, S.state.shapes)} + arc equals ${equals} = the copies' unknowns ${unknowns}`);
   for (let i = S.state.constraints.length - 1; i >= 0; i--) if (S.state.constraints[i].__tmp) S.state.constraints.splice(i, 1);
   for (const [j, was] of fixed) S.state.joints.get(j).fixed = was;
@@ -250,20 +251,33 @@ const centresOf = (S, c, si = 0) => c.instances.map(i => P(S, shape(S, i.shapes[
   ok(part.ok && patterns(S3).length === 2, 'a copy pasted alone is plain geometry (no new pattern)');
 }
 
-// ---------------------------------------------------------------- delete: a copy suppresses its instance; the source / the constraint
+// ---------------------------------------------------------------- delete: a copy curve goes alone (TASK 1046, Fusion D-43); the source / the constraint
 {
   const S = L.newSketch();
   const segs = L.polyline(S, [[10, 0], [20, 0], [20, -5]], false);
   const r = make(S, RECT, { shapes: segs.map(x => x.id) }, { quantity: [4, 1], distance: [30, 5] }, 'rectangular chain');
   const c = r.constraint;
   const victim = c.instances[1];
-  S.state.selectedShapes.add(victim.shapes[0]);
+  const [gone, kept] = victim.shapes, [endA, mid, endB] = victim.joints;
+  S.state.selectedShapes.add(gone);
   deleteSelection(S.state);
-  ok(c.suppressed.includes('2,0') && !c.instances.some(i => i.at.join() === '2,0'), `deleting one copy line suppresses its instance (${c.suppressed})`);
-  ok(!victim.shapes.some(id => shape(S, id)) && !victim.joints.some(j => S.state.joints.has(j)), 'the instance\'s other copies go too');
-  ok(patternSlots(c).filter(x => !x.suppressed).length === 2 && c.instances.length === 2, 'two instances left');
+  ok(c.suppressed.length === 0 && c.instances.length === 3, `deleting one copy line keeps the pattern and every instance (suppressed ${c.suppressed}, instances ${c.instances.length})`);
+  const inst = c.instances.find(i => i.at.join() === '2,0');
+  ok(!shape(S, gone) && inst.shapes[0] === null && inst.shapes[1] === kept && shape(S, kept), 'that copy line only goes: null in its instance, the other copy stays');
+  ok(inst.joints[0] === null && !S.state.joints.has(endA) && inst.joints[1] === mid && inst.joints[2] === endB, 'its own end point goes (null), the shared middle point and the other end stay');
+  solverHolds(S, c, 'after a copy-curve delete');
+  // a later QUANTITY edit keeps that instance as it is (the deleted copy stays deleted) and makes the new instance whole
+  ok(editPattern(S.state, c, { quantity: [5, 1] }).ok && c.instances.length === 4, 'quantity 4 -> 5: four instances');
+  ok(c.instances.find(i => i.at.join() === '2,0').shapes[0] === null && !shape(S, gone), 'the quantity edit keeps the deleted copy deleted');
+  ok(c.instances.find(i => i.at.join() === '4,0').shapes.every(id => shape(S, id)), 'the new instance is whole');
+  solverHolds(S, c, 'after a quantity edit');
+  // the instance's last copy deleted too: nothing of it is left, so it is suppressed (as before TASK 1046)
+  S.state.selectedShapes.add(kept);
+  deleteSelection(S.state);
+  ok(c.suppressed.includes('2,0') && !c.instances.some(i => i.at.join() === '2,0') && !shape(S, kept), `an instance with no copy left is suppressed (${c.suppressed})`);
+  ok(patternSlots(c).filter(x => !x.suppressed).length === 3 && c.instances.length === 3, 'three instances left');
   solverHolds(S, c, 'after a suppression');
-  ok(editPattern(S.state, c, { suppressed: [] }).ok && c.instances.length === 3, 'un-suppressing brings the instance back (the regenerate)');
+  ok(editPattern(S.state, c, { suppressed: [] }).ok && c.instances.length === 4 && c.instances.find(i => i.at.join() === '2,0').shapes.every(id => shape(S, id)), 'un-suppressing brings the instance back whole (the regenerate)');
   solverHolds(S, c, 'after un-suppressing');
   // delete the constraint: the copies stay, plain
   const copies = c.instances.flatMap(i => i.shapes);

@@ -1,7 +1,7 @@
 import { CONSTRAINT_TYPES, ORIGIN_JOINT_ID } from './constants.js';
 import { removeOrphanJoints } from './joints.js';
 import { patternsAfterDelete } from './pattern.js';
-import { undimensionOffset } from './offset.js';
+import { undimensionOffset, offsetsAfterDelete, isOffsetRelation } from './offset.js';
 import { SolverConfig } from './solver-config.js';
 import { dimensionValuesOf, reconcileKeptDimensions } from './parameters.js';
 import { docUnit } from './settings-manager.js';
@@ -39,6 +39,14 @@ export function deleteConstraints(state, constraintsOrIds) {
   for (const c of toDelete) {
     if (seen.has(c)) continue;
     seen.add(c);
+    // TASK 1046: an offset RELATION glyph (#core/offset.js, derived from its record): the relation goes, record and dimension (the copies stay as
+    // plain geometry); its label, if also picked, is the same record (skipped)
+    if (isOffsetRelation(c)) {
+      const at = state.constraints.indexOf(c.offset);
+      seen.add(c.offset);
+      if (at !== -1) { state.constraints.splice(at, 1); removed++; }
+      continue;
+    }
     // Remove by reference or by index/id
     const idx = state.constraints.indexOf(c);
     if (idx !== -1) {
@@ -109,8 +117,8 @@ const pairKey = (a, b) => (a < b ? `${a}\0${b}` : `${b}\0${a}`);
  * parameter with it). The shapes `shapeIds` and the points `jointIds` go, with every shape that uses one of those points, and every constraint
  * or dimension that names a shape that goes, a point that goes, or a line's endpoint pair that no surviving line keeps (point-to-line distance
  * [p,a,b], midpoint [a,b,m], H/V, and edge distance [a,b] on a deleted/trimmed rectangle edge). A fillet's virtual sharp that a dimension holds
- * stays (virtualSharpProtectedJoints). A constraint naming only surviving geometry stays. Unused points are then cleaned and sketch patterns follow
- * (patternsAfterDelete). A dimension that goes while a formula reads its name keeps that name as a value (#core/parameters.js
+ * stays (virtualSharpProtectedJoints). A constraint naming only surviving geometry stays. Unused points are then cleaned and sketch patterns and offsets follow
+ * (patternsAfterDelete / offsetsAfterDelete, TASK 1046: a deleted copy curve goes alone, the relation keeps the rest). A dimension that goes while a formula reads its name keeps that name as a value (#core/parameters.js
  * reconcileKeptDimensions, decision O10: Fusion's). The ONE place geometry is removed: deleteShapes / deleteJoints (Delete, Cut, Clear sketch, Delete
  * sketch) and the Trim tool (#core/trim.js) call it. No history, no solve: the callers own those.
  * -> { shapes: the shapes removed, joints: the points of `jointIds` removed }
@@ -167,12 +175,17 @@ export function removeGeometry(state, shapeIds = [], jointIds = [], opts = {}) {
   const goneJ = new Set([...deleteJ, ...sharps, ...[...shapeJoints].filter((j) => !usedBySurvivors.has(j) && !kept.has(j))].filter((j) => j !== ORIGIN_JOINT_ID));
   for (let i = state.constraints.length - 1; i >= 0; i--) {
     const c = state.constraints[i];
-    if (c && (namesAny(c, SHAPE_FIELDS, goneS) || namesAny(c, JOINT_FIELDS, goneJ) || namesDeletedLinePair(c))) state.constraints.splice(i, 1);
+    if (!c || c.type === CONSTRAINT_TYPES.OFFSET) continue; // TASK 1046: an offset record follows its own rule (offsetsAfterDelete, below)
+    if (namesAny(c, SHAPE_FIELDS, goneS) || namesAny(c, JOINT_FIELDS, goneJ) || namesDeletedLinePair(c)) state.constraints.splice(i, 1);
   }
   let joints = 0;
   for (const j of deleteJ) if (state.joints.delete(j)) joints++;
   removeOrphanJoints(state);
-  patternsAfterDelete(state); // TASK 658: a deleted copy suppresses its pattern instance; a deleted source / centre / direction line ends the pattern
+  // TASK 1046 (Fusion D-38 / D-39 / D-43 / D-44): the relation records follow, each by its module's ONE rule: a deleted COPY curve goes alone
+  // (the pattern / offset keeps the rest); a deleted pattern source / centre / direction line ends the pattern; a deleted offset source leaves
+  // its copy as plain geometry and the offset keeps the rest
+  patternsAfterDelete(state);
+  offsetsAfterDelete(state);
   dropEmptyGroups(state); // TASK 756: a user group left with no shape (every member deleted, here or by a pattern above) is removed, in this ONE place
   reconcileKeptDimensions(state, dimsBefore, { unit: docUnit() }); // a deleted dimension (or pattern value) a formula reads keeps its name as a value (O10)
   return { shapes, joints };

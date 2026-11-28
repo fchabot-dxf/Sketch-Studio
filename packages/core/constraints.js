@@ -126,8 +126,8 @@ export function getConstrainedGeometry(constraint, shapes) {
             break;
 
         case CONSTRAINT_TYPES.OFFSET:
-            // task 650: the source pieces and their offset pieces
-            if (constraint.shapes) for (const sid of constraint.shapes) constraintShapes.add(sid);
+            // task 650: the source pieces and their offset pieces (TASK 1046: a deleted piece is null)
+            if (constraint.shapes) for (const sid of constraint.shapes) if (sid != null) constraintShapes.add(sid);
             break;
 
         case CONSTRAINT_TYPES.CIRCULAR_PATTERN:

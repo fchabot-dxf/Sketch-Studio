@@ -58,8 +58,9 @@ const canon = (st) => {
 };
 {
   const dxf = buildDXF(state, { precision: 6 });
-  const ent = {}; const t = dxf.split('\r\n'); for (let i = 0; i < t.length - 1; i++) if (t[i] === '0' && /^(LINE|CIRCLE|ARC)$/.test(t[i + 1])) ent[t[i + 1]] = (ent[t[i + 1]] || 0) + 1;
-  eq(ent, { LINE: 3, CIRCLE: 1, ARC: 2 }, 'F-81 / F-81b: 3 LINE + 1 CIRCLE + 2 ARC (no construction entity)');
+  const ent = {}; const t = dxf.split('\r\n'); for (let i = 0; i < t.length - 1; i++) if (t[i] === '0' && /^(LINE|POLYLINE|LWPOLYLINE|CIRCLE|ARC|SPLINE)$/.test(t[i + 1])) ent[t[i + 1]] = (ent[t[i + 1]] || 0) + 1;
+  // TASK 1043 (BUG-402): the 3-line chain is ONE open R12 POLYLINE now (tests/dxf-loops-1043-node.test.js); a lone arc stays an ARC
+  eq(ent, { POLYLINE: 1, CIRCLE: 1, ARC: 2 }, 'F-81 / F-81b: the line chain (1 POLYLINE) + 1 CIRCLE + 2 ARC (no construction entity)');
   const i = t.indexOf('CIRCLE');
   eq([t[t.indexOf('20', i) + 1], t[t.indexOf('40', i) + 1]], ['-90.000000', '12.000000'], 'F-84: a DXF is Y-up: the circle centre y 90 is written -90');
   const re = importDxf(dxf, { genJ });

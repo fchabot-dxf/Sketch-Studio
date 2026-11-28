@@ -443,7 +443,7 @@ export function offsetValueRefusal(c, v, joints, shapes, length = fmt) {
   const ps = storedPieces(c, shapes);
   if (!ps) return null;
   for (const p of ps) {
-    if (p.src.type === 'line') continue;
+    if (!isWhole(p) || p.src.type === 'line') continue; // TASK 1046: a deleted piece has no offset radius
     let R = p.src.radius;
     if (p.src.type === 'arc') {
       const C = joints.get(p.src.joints[0]), A = joints.get(p.src.joints[1]);
@@ -471,16 +471,74 @@ export function restoreOffsetDimension(state, c) {
 
 // ---------------------------------------------------------------------------------------------------------- the stored constraint
 // The pieces of a stored offset constraint: [{ src, off, rev, side }] with the shapes resolved, or null when it cannot be resolved (a missing
-// shape, a kind that does not match its source).
+// shape, a kind that does not match its source). TASK 1046: a DELETED piece is null in the record (offsetsAfterDelete) and null here: off null =
+// its offset copy was deleted (its source still places the neighbouring copies' ends); src and off both null = its source was deleted.
 function storedPieces(c, shapes) {
   if (!c || !Array.isArray(c.shapes) || c.shapes.length < 2 || c.shapes.length % 2) return null;
   const out = [];
   for (let k = 0; k < c.shapes.length / 2; k++) {
-    const src = findShape(shapes, c.shapes[2 * k]), off = findShape(shapes, c.shapes[2 * k + 1]);
-    if (!isOffsetShape(src) || !off || off.type !== src.type || !isOffsetShape(off)) return null;
+    const sid = c.shapes[2 * k], oid = c.shapes[2 * k + 1];
+    const src = sid == null ? null : findShape(shapes, sid), off = oid == null ? null : findShape(shapes, oid);
+    if ((sid != null && !isOffsetShape(src)) || (oid != null && !isOffsetShape(off)) || (src && off && off.type !== src.type)) return null;
     out.push({ src, off, rev: !!(c.rev && c.rev[k]), side: (c.sides && c.sides[k]) < 0 ? -1 : 1 });
   }
   return out;
+}
+const isWhole = (p) => !!(p.src && p.off);
+
+/**
+ * TASK 1046 - the delete path's follow-up (#core/delete-manager.js removeGeometry, after shapes went), THE rule for an offset record (Fusion,
+ * measured 2026-11-27: D-38 an offset COPY curve deleted -> that curve only, the Offset stays; D-39 a SOURCE curve deleted -> that curve only, the
+ * Offset stays). A deleted copy becomes null in its piece (its source still places the neighbouring copies' ends, offsetOperands); a deleted
+ * source nulls its piece whole: its copy stays as plain geometry, joined to the neighbouring copies, and follows nothing of its own. New arrays
+ * (the undo snapshot shares the old ones). An offset with no whole piece left (source and copy both there) relates nothing and is deleted.
+ */
+export function offsetsAfterDelete(state) {
+  const live = new Set(state.shapes.map((s) => s && s.id));
+  for (const c of state.constraints.filter((x) => x && x.type === CONSTRAINT_TYPES.OFFSET && Array.isArray(x.shapes))) {
+    if (c.shapes.every((id) => id == null || live.has(id))) continue;
+    const shapes = c.shapes.slice();
+    for (let k = 0; k + 1 < shapes.length; k += 2) {
+      if (shapes[k] != null && !live.has(shapes[k])) { shapes[k] = null; shapes[k + 1] = null; }
+      else if (shapes[k + 1] != null && !live.has(shapes[k + 1])) shapes[k + 1] = null;
+    }
+    c.shapes = shapes;
+    const ps = storedPieces(c, state.shapes);
+    if (!ps || !ps.some(isWhole)) state.constraints.splice(state.constraints.indexOf(c), 1);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------- the relation glyph
+// TASK 1046 (owner 2026-11-27 "offset should be visible"; Fusion's Offset constraint glyph, measured by the advisor, task 1048): the offset
+// RELATION has a glyph of its own, apart from its dimension label: TWO glyphs, one beside a source curve and one beside its copy (the first
+// piece whose source and copy are both still there, the dimension's piece), always shown like every committed constraint glyph. Hovering or
+// selecting either one lights both and every source and copy curve (the dimension label is not lit: it is the record's other handle). Delete on
+// it (#core/delete-manager.js deleteConstraints) removes the RELATION: the copies stay as plain geometry and stop following (Fusion puts 4 per-line
+// Offset dimensions in its place: DECLARED DIFFERENCE, this app has no per-line offset dimension); Delete on the LABEL keeps task 667's free
+// distance. The glyph is NOT stored: it is DERIVED from the stored offset record (old files show it too), { type: OFFSET_RELATION, offset: the
+// record, shapes: the record's sources and copies still there }.
+export const OFFSET_RELATION = 'offsetRelation';
+export const isOffsetRelation = (c) => !!c && c.type === OFFSET_RELATION;
+// One entity per record object, kept while the record lives, so a hover / a selection (which hold the entity) still match it on the next frame;
+// an undo restores new record objects (and clears the selection).
+const relationEntities = new WeakMap();
+/** The offset relation glyph entities of `constraints` (every stored offset record). */
+export function offsetRelations(constraints) {
+  const out = [];
+  for (const c of constraints || []) {
+    if (!c || c.type !== CONSTRAINT_TYPES.OFFSET || !Array.isArray(c.shapes)) continue;
+    let e = relationEntities.get(c);
+    if (!e) { e = { type: OFFSET_RELATION, offset: c, shapes: [] }; relationEntities.set(c, e); }
+    e.shapes = c.shapes.filter((id) => id != null);
+    out.push(e);
+  }
+  return out;
+}
+/** The two curves a relation glyph sits beside: [the source, its copy] of the first whole piece, or null. */
+export function offsetRelationCurves(c, shapes) {
+  const ps = storedPieces(c, shapes);
+  const first = ps && ps.find(isWhole);
+  return first ? [first.src, first.off] : null;
 }
 
 /**
@@ -493,41 +551,55 @@ function storedPieces(c, shapes) {
  *   { k: 'na', q, c, src, sign }          |q - c| - R(src) - sign * d
  *   { k: 'ta', q, p, c }                  |q - c| * atan2((p - c) x (q - c), (p - c) . (q - c))   (q on the ray c -> p)
  *   { k: 'rl', q, p, a, b }               |q - p| * atan2((b - a) x (q - p), (b - a) . (q - p))   (q on the ray from p along a -> b, task 656)
+ * TASK 1046: a DELETED piece (storedPieces) gives the rows it still can. A piece whose COPY was deleted keeps its SOURCE rows at the
+ * neighbouring copies' ends (its N row in place of its end row: no copy line keeps a direction, no copy arc's structural equal holds a radius),
+ * so those ends stay exactly where they were. A piece whose SOURCE was deleted gives no row: a vertex it shared keeps only the other piece's
+ * rows (a corner end then slides along its own offset curve; a tangent end takes the other piece's normal). A vertex whose both pieces lost
+ * their copies has no point and no row.
  */
 export function offsetOperands(c, shapes) {
   const ps = storedPieces(c, shapes);
-  if (!ps) return null;
+  if (!ps || !ps.some(isWhole)) return null;
   const rows = [];
-  const n = ps.length, closed = !!c.closed || (n === 1 && ps[0].src.type === 'circle');
+  const kind = (p) => (p.src || p.off || {}).type || null;
+  const n = ps.length, closed = !!c.closed || (n === 1 && kind(ps[0]) === 'circle');
   for (const p of ps) {
+    if (!isWhole(p)) continue;
     if (p.src.type === 'circle') { rows.push({ k: 'cen', a: p.off.joints[0], b: p.src.joints[0] }, { k: 'rad', off: p.off.id, src: p.src.id, sign: p.side }); }
     else if (p.src.type === 'arc') rows.push({ k: 'cen', a: p.off.joints[0], b: p.src.joints[0] });
   }
-  if (ps[0].src.type === 'circle') return rows;
+  if (kind(ps[0]) === 'circle') return rows;
   // the source point at the start (t = 0) / end (t = 1) of piece p in the chain direction
   const srcPoint = (p, t) => { const e = p.src.type === 'arc' ? [p.src.joints[1], p.src.joints[2]] : [p.src.joints[0], p.src.joints[1]]; return (t === 0) !== p.rev ? e[0] : e[1]; };
   const offStart = (p) => (p.off.type === 'arc' ? p.off.joints[1] : p.off.joints[0]);
   const offEnd = (p) => (p.off.type === 'arc' ? p.off.joints[2] : p.off.joints[1]);
-  const N = (p, q) => (p.src.type === 'line' ? { k: 'nl', q, a: p.src.joints[0], b: p.src.joints[1], sign: p.side } : { k: 'na', q, c: p.src.joints[0], src: p.src.id, sign: p.side });
-  const T = (p, q, P) => (p.src.type === 'line' ? { k: 'tl', q, p: P, a: p.src.joints[0], b: p.src.joints[1] } : { k: 'ta', q, p: P, c: p.src.joints[0] });
+  // N / T / Nend give a LIST of rows: TASK 1046, none from a piece whose source was deleted
+  const N = (p, q) => (!p.src ? [] : p.src.type === 'line' ? [{ k: 'nl', q, a: p.src.joints[0], b: p.src.joints[1], sign: p.side }] : [{ k: 'na', q, c: p.src.joints[0], src: p.src.id, sign: p.side }]);
+  const T = (p, q, P) => (!p.src ? [] : p.src.type === 'line' ? [{ k: 'tl', q, p: P, a: p.src.joints[0], b: p.src.joints[1] }] : [{ k: 'ta', q, p: P, c: p.src.joints[0] }]);
   // the row N(before, Q) where Q is the END of piece `before`: an arc's is its structural equal (not repeated here); a line's is the RAY row from
-  // its offset start along its source direction (task 656: the offset line keeps its direction, a reversed one is no solution)
-  const Nend = (p, q) => (p.off.type === 'arc' ? [] : [{ k: 'rl', q, p: offStart(p), a: srcPoint(p, 0), b: srcPoint(p, 1) }]);
+  // its offset start along its source direction (task 656: the offset line keeps its direction, a reversed one is no solution). TASK 1046: a
+  // piece whose copy was deleted gives its plain N row.
+  const Nend = (p, q) => (!p.src ? [] : !p.off ? N(p, q) : p.off.type === 'arc' ? [] : [{ k: 'rl', q, p: offStart(p), a: srcPoint(p, 0), b: srcPoint(p, 1) }]);
+  // TASK 1046: the offset point at the vertex between `before` and `after` (null at an open end): a copy that is still there names it
+  const vertexAt = (before, after) => (after && after.off ? offStart(after) : before && before.off ? offEnd(before) : null);
   const nv = closed ? n : n + 1;
   const tangentAt = (k) => (c.joins && c.joins[closed ? k : k - 1]) === 'tangent';
   // TASK 781: the ANCHOR vertex of a closed chain whose every join is tangent (the module header), -1 for any other chain
   let anchor = -1;
   if (closed && Array.from({ length: n }, (_, k) => tangentAt(k)).every(Boolean)) {
-    anchor = Array.from({ length: n }, (_, k) => k).find((k) => ps[(k - 1 + n) % n].off.type === 'line') ?? 0;
+    anchor = Array.from({ length: n }, (_, k) => k).find((k) => kind(ps[(k - 1 + n) % n]) === 'line') ?? 0;
   }
   for (let k = 0; k < nv; k++) {
-    if (!closed && k === 0) { const p = ps[0], q = offStart(p); rows.push(N(p, q), T(p, q, srcPoint(p, 0))); continue; }
-    if (!closed && k === n) { const p = ps[n - 1], q = offEnd(p); rows.push(...Nend(p, q), T(p, q, srcPoint(p, 1))); continue; }
-    const before = ps[(k - 1 + n) % n], after = ps[k], q = offStart(after);
+    if (!closed && k === 0) { const p = ps[0], q = vertexAt(null, p); if (q) rows.push(...N(p, q), ...T(p, q, srcPoint(p, 0))); continue; }
+    if (!closed && k === n) { const p = ps[n - 1], q = vertexAt(p, null); if (q) rows.push(...Nend(p, q), ...T(p, q, srcPoint(p, 1))); continue; }
+    const before = ps[(k - 1 + n) % n], after = ps[k], q = vertexAt(before, after);
+    if (!q) continue;
     const tangent = tangentAt(k);
-    // a tangent join: Q on the source normal through the joint, read from the ARC after it when there is one (its own side of its centre)
-    const t = tangent && (after.src.type === 'arc' ? T(after, q, srcPoint(after, 0)) : T(before, q, srcPoint(before, 1)));
-    rows.push(...(k === anchor ? [N(before, q)] : Nend(before, q)), tangent ? t : N(after, q));
+    // a tangent join: Q on the source normal through the joint, read from the ARC after it when there is one (its own side of its centre);
+    // TASK 1046: from the other piece when that one's source was deleted
+    const fromAfter = (after.src && after.src.type === 'arc') || !before.src;
+    const t = tangent && (fromAfter ? T(after, q, after.src && srcPoint(after, 0)) : T(before, q, srcPoint(before, 1)));
+    rows.push(...(k === anchor ? N(before, q) : Nend(before, q)), ...(tangent ? t : N(after, q)));
   }
   return rows;
 }
@@ -580,9 +652,9 @@ export function offsetResidual(c, joints, shapes, radiusOf) {
 
 /** The offset constraint's dimension ends (#core/dim-label.js): a point on the first SOURCE piece and the matching point on its offset. */
 export function offsetDimensionEnds(c, joints, shapes) {
-  const ps = storedPieces(c, shapes);
-  if (!ps) return { j1: null, j2: null };
-  const { src, off } = ps[0], J = (id) => joints.get(id);
+  const pair = offsetRelationCurves(c, shapes); // TASK 1046: the first piece whose source and copy are both still there
+  if (!pair) return { j1: null, j2: null };
+  const [src, off] = pair, J = (id) => joints.get(id);
   if (src.type === 'line') {
     const a = J(src.joints[0]), b = J(src.joints[1]), oa = J(off.joints[0]), ob = J(off.joints[1]);
     if (!a || !b || !oa || !ob) return { j1: null, j2: null };

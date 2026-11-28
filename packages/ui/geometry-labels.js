@@ -36,7 +36,7 @@ export function constraintTargets(c, shapes = []) {
   if (!c) return { joints, shapes: shapeIds };
   if (Array.isArray(c.joints)) c.joints.forEach((j) => joints.add(j));
   if (c.joint) joints.add(c.joint);
-  if (Array.isArray(c.shapes)) c.shapes.forEach((s) => shapeIds.add(s));
+  if (Array.isArray(c.shapes)) c.shapes.forEach((s) => s != null && shapeIds.add(s)); // TASK 1046: a deleted offset piece is null
   for (const k of ['shape', 'line', 'circle']) if (c[k]) shapeIds.add(c[k]);
   if (!shapeIds.size) {
     // a joints-only constraint (vertical / horizontal ...) binds the shape holding ALL its joints (task 820: the line a-b, not an arc that

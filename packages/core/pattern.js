@@ -23,17 +23,22 @@
 //   SYMMETRIC (advisor, Fusion API, task 658 review): the quantity is still the TOTAL count (the source included) and the step is the same as
 //              without it; the instances are placed AROUND the source: i = -ceil((N-1)/2) .. floor((N-1)/2), an even count's extra one on the
 //              negative side (Fusion: circular 4 at 90 deg -> -60, -30, 0, 30; rectangular 3 at 20 mm -> -20, 0, +20).
-//   A suppressed instance (Fusion's suppression; deleting a copy suppresses its instance) has no copy. suppressed = ['i' | 'i,j' keys].
+//   A suppressed instance (Fusion's suppression) has no copy. suppressed = ['i' | 'i,j' keys].
 // THE RECORD (patternConstraintRecord): ONE constraint per pattern
 //   { type: 'circularPattern', sources, centre, quantity, angle (degrees), symmetric, suppressed, instances }
 //   { type: 'rectangularPattern', sources, directions: [lineId | null, lineId | null], quantity: [n1, n2], distance: [d1, d2],
 //     distanceType: 'spacing' | 'total', symmetric: [b1, b2], suppressed, instances }
 //   instances: [{ at, shapes: [copy shape ids, aligned with sources.shapes], joints: [copy joint ids, aligned with sources.points] }].
+//   TASK 1046 (Fusion D-43, measured 2026-11-27: deleting a pattern COPY curve deletes that curve only, the pattern stays): a copy curve or copy
+//   point the user deleted is null in its instance (patternsAfterDelete); the instance's other copies stay and keep following. An instance with no
+//   copy left is suppressed. A later quantity / spacing / angle / suppression edit keeps an instance it already has as it is (its deleted copies
+//   stay deleted) and makes the new instances whole; a re-pick of the objects, the centre or a direction line (editPattern's rebuild) makes every
+//   instance afresh, whole.
 //   TASK 694 (Fusion: the values are model parameters d<n>): names: { slot: name } (every value of #core/pattern-values.js PATTERN_VALUES, given by
 //   #core/parameters.js namePatternValues) and expressions: { slot: formula } (only the values a formula drives), last, after instances.
 //   The values are changed by the parameter model (#core/dimension-seams.js applyParameterChange / editPatternValues), which calls editPattern(s).
-//   The record names no joint / shape in the generic `joints` / `shapes` fields: a delete of one copy SUPPRESSES that instance (patternsAfterDelete)
-//   instead of dropping the whole pattern, and a partial copy / paste leaves it behind (patternRefs: the paste carries it only when every operand
+//   The record names no joint / shape in the generic `joints` / `shapes` fields: a delete of one copy curve nulls it in its instance
+//   (patternsAfterDelete) instead of dropping the whole pattern, and a partial copy / paste leaves it behind (patternRefs: the paste carries it only when every operand
 //   is copied). NESTED ARRAYS ARE NEVER MUTATED IN PLACE (the undo snapshot copies a constraint shallowly): every change assigns new arrays.
 // THE COPIES (makeInstance, the ONE place a copy is made): each source shape copied (its kind's own data: a circle's radius, an arc's sweep;
 //   construction stays construction), in the ACTIVE sketch, each arc with makeArc's structural equal (its own shape constraint). No other
@@ -122,7 +127,8 @@ export function patternSources(state, objects) {
 }
 
 // Each source ARC's reduced rim: the point (index) whose copy gets the 1-row 'ray' row (the copy arc's structural equal holds its radius) ->
-// { map: Map(point index -> the arc's centre index) } or { reason }. The arc's end rim, or its start when another arc already reduced the end.
+// { map: Map(point index -> { kc: the arc's centre index, si: the arc's shape index }) } or { reason }. The arc's end rim, or its start when
+// another arc already reduced the end.
 function reducedRims(sources, shapes) {
   const map = new Map();
   for (let si = 0; si < sources.shapes.length; si++) {
@@ -131,7 +137,7 @@ function reducedRims(sources, shapes) {
     const [kc, k1, k2] = sources.shapeJoints[si];
     const pick = !map.has(k2) && k2 !== kc ? k2 : (!map.has(k1) && k1 !== kc ? k1 : null);
     if (pick == null) return { reason: 'three arcs share the same two end points' };
-    map.set(pick, kc);
+    map.set(pick, { kc, si });
   }
   return { map };
 }
@@ -283,7 +289,7 @@ export function patternConstraintRecord(params) {
 /** Every joint / shape a pattern names (the clipboard's "inside the copy" test, the sketch of the constraint). */
 export function patternRefs(c) {
   const joints = new Set(c.sources.points), shapes = new Set(c.sources.shapes);
-  for (const i of c.instances) { i.joints.forEach((j) => joints.add(j)); i.shapes.forEach((s) => shapes.add(s)); }
+  for (const i of c.instances) { i.joints.forEach((j) => j != null && joints.add(j)); i.shapes.forEach((s) => s != null && shapes.add(s)); } // TASK 1046: null = a deleted copy
   if (c.type === T.CIRCULAR_PATTERN) joints.add(c.centre);
   else for (const d of c.directions) if (d && !AXIS_DIRECTIONS[d]) shapes.add(d);
   return { joints: [...joints], shapes: [...shapes] };
@@ -297,14 +303,16 @@ export function remapPattern(c, jointOf, shapeOf) {
     sources: { shapes: c.sources.shapes.map(shapeOf), points: c.sources.points.map(jointOf), shapeJoints: c.sources.shapeJoints },
     centre: c.centre != null ? jointOf(c.centre) : c.centre,
     directions: c.directions ? c.directions.map((d) => (d ? shapeOf(d) : null)) : c.directions,
-    instances: c.instances.map((i) => ({ at: i.at, shapes: i.shapes.map(shapeOf), joints: i.joints.map(jointOf) })),
+    instances: c.instances.map((i) => ({ at: i.at, shapes: i.shapes.map((id) => (id == null ? null : shapeOf(id))), joints: i.joints.map((id) => (id == null ? null : jointOf(id))) })), // TASK 1046: a deleted copy stays null
   });
 }
 
 // ---------------------------------------------------------------------------------------------------------- the solver rows
 /**
  * THE rows of a stored pattern (the module header) -> { kind, centre?, dirs?, rows: [...] } with joint ids and, for a radius, shape ids, or null
- * when it cannot be resolved (a missing shape / joint operand, a copy whose kind does not match its source). dirs[k]: { a, b } (a line's joints)
+ * when it cannot be resolved (a missing shape / joint operand, a copy whose kind does not match its source). TASK 1046: a deleted copy (null in
+ * its instance) has no row: a deleted copy point none, a deleted circle copy no 'rad' row, and the rim of a deleted ARC copy that another copy
+ * still uses gets the full 'pt' row (no copy arc's structural equal holds its radius any more). dirs[k]: { a, b } (a line's joints)
  * or { x, y } (a constant direction). Row kinds, each carrying its instance's transform ({ th } or { t }):
  *   { k: 'pt', q, p }            q - T(p)                                   (2 rows)
  *   { k: 'ray', q, cq, p, cs }   |w| atan2(v x w, v . w), v = V(p - cs), w = q - cq   (1 row)
@@ -329,14 +337,17 @@ export function patternOperands(c, shapes) {
   for (const s of (shapes || [])) if (s && !byId.has(s.id)) byId.set(s.id, s);
   for (const inst of c.instances) {
     if (inst.joints.length !== points.length || inst.shapes.length !== src.length) return null;
-    const copies = inst.shapes.map((id) => byId.get(id) || null);
-    if (copies.some((s, si) => !s || s.type !== src[si].type)) return null;
+    const copies = inst.shapes.map((id) => (id == null ? null : byId.get(id) || null));
+    if (copies.some((s, si) => inst.shapes[si] != null && (!s || s.type !== src[si].type))) return null;
     const tr = patternTransform(c, inst.at);
     points.forEach((p, k) => {
-      if (red.map.has(k)) { const kc = red.map.get(k); ops.rows.push({ k: 'ray', q: inst.joints[k], cq: inst.joints[kc], p, cs: points[kc], ...tr }); }
-      else ops.rows.push({ k: 'pt', q: inst.joints[k], p, ...tr });
+      const q = inst.joints[k];
+      if (q == null) return;
+      const rim = red.map.get(k);
+      if (rim && copies[rim.si] && inst.joints[rim.kc] != null) ops.rows.push({ k: 'ray', q, cq: inst.joints[rim.kc], p, cs: points[rim.kc], ...tr });
+      else ops.rows.push({ k: 'pt', q, p, ...tr });
     });
-    src.forEach((s, si) => { if (s.type === 'circle') ops.rows.push({ k: 'rad', off: inst.shapes[si], src: s.id, ...tr }); });
+    src.forEach((s, si) => { if (s.type === 'circle' && copies[si]) ops.rows.push({ k: 'rad', off: inst.shapes[si], src: s.id, ...tr }); });
   }
   return ops;
 }
@@ -378,8 +389,8 @@ export function patternResidual(c, joints, shapes, radiusOf) {
 export function patternCopyOperands(c, shapes) {
   const joints = new Set(), circles = new Set();
   for (const i of (c.instances || [])) {
-    i.joints.forEach((j) => joints.add(j));
-    for (const id of i.shapes) { const s = findShape(shapes, id); if (s && s.type === 'circle') circles.add(id); }
+    i.joints.forEach((j) => j != null && joints.add(j)); // TASK 1046: null = a deleted copy point
+    for (const id of i.shapes) { const s = id == null ? null : findShape(shapes, id); if (s && s.type === 'circle') circles.add(id); }
   }
   return { joints, circles };
 }
@@ -475,11 +486,11 @@ const names = (k, fields, ids) => fields.some((f) => asList(k[f]).some((x) => id
 // shared corner, #core/shared-point.js, ends at a point the instance does not list; it stayed behind as a lone point) -- a point another shape
 // still uses stays, as a plain point -- and every constraint on them.
 function removeInstance(state, inst) {
-  const shapes = new Set(inst.shapes);
+  const shapes = new Set(inst.shapes.filter((id) => id != null)); // TASK 1046: null = a copy already deleted
   const copyJoints = [];
   for (let i = state.shapes.length - 1; i >= 0; i--) if (state.shapes[i] && shapes.has(state.shapes[i].id)) copyJoints.push(...asList(state.shapes.splice(i, 1)[0].joints));
   const used = new Set(state.shapes.flatMap((s) => asList(s.joints)));
-  const joints = new Set([...inst.joints, ...copyJoints].filter((j) => !used.has(j)));
+  const joints = new Set([...inst.joints, ...copyJoints].filter((j) => j != null && !used.has(j)));
   for (let i = state.constraints.length - 1; i >= 0; i--) {
     const k = state.constraints[i];
     if (k && !isPatternConstraint(k) && (names(k, SHAPE_FIELDS, shapes) || names(k, JOINT_FIELDS, joints))) state.constraints.splice(i, 1);
@@ -613,9 +624,11 @@ function restoreState(state, b) {
 }
 
 /**
- * The delete path's follow-up (delete-manager.js, after shapes / joints went): a pattern that lost a COPY suppresses that instance (its other
- * copies go too: Fusion suppresses an instance, not one curve of it); a pattern that lost a SOURCE shape or point, its centre or a direction line
- * is deleted (its copies stay as plain geometry, as Fusion's "delete pattern constraint").
+ * The delete path's follow-up (delete-manager.js removeGeometry, after shapes / joints went), THE rule for a pattern record. TASK 1046 (Fusion
+ * D-43 / D-44 / D-63, measured 2026-11-27): a pattern that lost a COPY curve or copy point keeps it as null in its instance (that curve only goes;
+ * the pattern and the instance's other copies stay; new arrays: the undo snapshot shares the old ones); an instance with no copy left is
+ * suppressed. A pattern that lost a SOURCE shape or point, its centre or a direction line is deleted (its copies stay as plain geometry, as
+ * Fusion's "delete pattern constraint").
  */
 export function patternsAfterDelete(state) {
   const shapeIds = new Set(state.shapes.map((s) => s.id));
@@ -623,9 +636,12 @@ export function patternsAfterDelete(state) {
     const lost = c.sources.shapes.some((id) => !shapeIds.has(id)) || c.sources.points.some((j) => !state.joints.has(j))
       || (c.type === T.CIRCULAR_PATTERN ? !state.joints.has(c.centre) : c.directions.some((d) => d && !AXIS_DIRECTIONS[d] && !shapeIds.has(d)));
     if (lost) { state.constraints.splice(state.constraints.indexOf(c), 1); continue; }
-    const gone = c.instances.filter((i) => i.shapes.some((id) => !shapeIds.has(id)) || i.joints.some((j) => !state.joints.has(j)));
-    if (!gone.length) continue;
-    c.suppressed = [...new Set([...c.suppressed, ...gone.map((i) => slotKey(i.at))])];
+    const goneS = (id) => id != null && !shapeIds.has(id), goneJ = (j) => j != null && !state.joints.has(j);
+    const hit = (i) => i.shapes.some(goneS) || i.joints.some(goneJ);
+    if (!c.instances.some(hit)) continue;
+    c.instances = c.instances.map((i) => (hit(i) ? { at: i.at, shapes: i.shapes.map((id) => (goneS(id) ? null : id)), joints: i.joints.map((j) => (goneJ(j) ? null : j)) } : i));
+    const empty = c.instances.filter((i) => i.shapes.every((id) => id == null) && i.joints.every((j) => j == null));
+    if (empty.length) c.suppressed = [...new Set([...c.suppressed, ...empty.map((i) => slotKey(i.at))])];
     syncPattern(state, c);
   }
 }

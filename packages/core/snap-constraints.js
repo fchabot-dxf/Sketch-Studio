@@ -21,6 +21,8 @@ import { inActiveSketch } from './sketch-model.js';
  *         Coincident constraint (the Coincident tool's kind of join: Fusion's Coincident tool never merges).
  */
 export const SNAP_JOIN = Object.freeze({ DRAW: 'draw', GLUE: 'glue' });
+// a new point this close (mm) to the end point it shares is AT it (a snap places it there exactly); farther, the Coincident's placement brings them together first
+const SHARE_AT_EPS = 1e-9;
 
 /**
  * TASK 1045: may the new point `jointId` (a drawing tool's, SNAP_JOIN.DRAW) be SHARED with the existing point `targetId`? Yes when the target is an END
@@ -127,14 +129,21 @@ export function applySnapConstraint(state, jointId, snapTarget, options = {}) {
         const created = ConstraintManager.createConstraint(state, type, params, { source: 'snap' });
         return !!created;
     };
-    // a snap ON an existing point: shared (a drawing tool's new point on a curve end point, TASK 1045) or glued by a Coincident
+    // a snap ON an existing point: shared (a drawing tool's new point on a curve end point, TASK 1045) or glued by a Coincident.
+    // A new point that is not AT the point yet (a Center Point Arc's end lies on its own circle, beside the point it was clicked on; a typed end
+    // within the join tolerance) is first brought onto it the way the Coincident does it (its creation placement: who gives way, the table of
+    // task 525, then the solve), so sharing moves exactly what gluing moved; the two points are then one and the coincident is not kept.
     const joinPoint = (targetId) => {
-        if (sharedEndTarget(state, jointId, snapTarget, opts) === targetId) {
-            mergeJoints(state, jointId, targetId);
-            dbg.debug('app', '[snap-constraints] new point shared with the end point it was placed on', { jointId, targetId });
-            return true;
+        if (sharedEndTarget(state, jointId, snapTarget, opts) !== targetId) return addViaManager(CONSTRAINT_TYPES.COINCIDENT, { joints: [jointId, targetId] });
+        const p = state.joints.get(jointId), q = state.joints.get(targetId);
+        if (Math.hypot(p.x - q.x, p.y - q.y) > SHARE_AT_EPS) {
+            if (!addViaManager(CONSTRAINT_TYPES.COINCIDENT, { joints: [jointId, targetId] })) return false;
+            const glue = (c) => c && c.type === CONSTRAINT_TYPES.COINCIDENT && Array.isArray(c.joints) && c.joints.includes(jointId) && c.joints.includes(targetId);
+            for (let i = state.constraints.length - 1; i >= 0; i--) if (glue(state.constraints[i])) state.constraints.splice(i, 1);
         }
-        return addViaManager(CONSTRAINT_TYPES.COINCIDENT, { joints: [jointId, targetId] });
+        mergeJoints(state, jointId, targetId);
+        dbg.debug('app', '[snap-constraints] new point shared with the end point it was placed on', { jointId, targetId });
+        return true;
     };
 
     switch (snapTarget.type) {

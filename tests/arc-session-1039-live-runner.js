@@ -4,7 +4,7 @@
 // device and variant(s): the same cases, the same checks. Each case draws a line (its end b is the joint the last point lands on), then one arc,
 // and reads the saved document back. Inside each group the documents are identical (shapes + constraints, ids normalised):
 //   Center Point Arc, typed radius 12 + sweep 90:   desktop: Enter / Enter, click / click;     phone: tap the box + Enter twice, tap the box + tap the canvas
-//   Center Point Arc, nothing typed, end on b:      desktop: click x3, click x2 + hover + Enter, drag-release + click;    phone: tap x3, finger drag + tap
+//   Center Point Arc, nothing typed, end on b (TASK 1045: shared with the line's end):      desktop: click x3, click x2 + hover + Enter, drag-release + click;    phone: tap x3, finger drag + tap
 //   3-Point Arc, typed chord 30 + radius 20:         desktop: Enter + click on the side, click + click;    phone: tap the box + Enter + tap the side, tap the box + tap x2
 //   3-Point Arc, nothing typed, third point on b:    desktop: click x3, click x2 + hover + Enter, drag-release + click;    phone: tap x3, finger drag + tap
 // Desktop: the dashed preview drawn just before the last step is the arc the build makes (its SVG arc: start, radius, flags, end).
@@ -156,7 +156,9 @@ export async function runArcSession({ width, height, tag, variants }) {
     if (centre) {
       const A = cTyped[0].doc, B = cClicks[0].doc;
       check(A.constraints.some((c) => c.type === 'distance' && c.isRadius && c.value === 12 && c.shape === arcOf(A).id) && arcOf(A).sweep === true, `[${tag}] centre typed: the radius dimension 12, the positive winding ${JSON.stringify(A.constraints)}`);
-      check(B.constraints.some((c) => c.type === 'coincident') && arcOf(B).sweep === true, `[${tag}] centre untyped: the end on b (coincident), the short way round ${JSON.stringify(B.constraints)}`);
+      // TASK 1045 (Fusion measured 2026-11-27: a drawing tool's new point on an existing curve END point is that point): the arc's end IS the line's end b
+      const lineOf = (d) => d.shapes.find((s) => s.type === 'line');
+      check(lineOf(B).joints.includes(arcOf(B).joints[2]) && !B.constraints.some((c) => c.type === 'coincident') && arcOf(B).sweep === true, `[${tag}] centre untyped: the end on b (shared: the line's end point), the short way round ${JSON.stringify(B.shapes)} ${JSON.stringify(B.constraints)}`);
     }
     if (three) {
       const C3 = tTyped[0].doc, D3 = tClicks[0].doc;

@@ -9,7 +9,8 @@
 //   - the COINCIDENT TOOL never merges (it glues separate points with n-1 coincidents); a DRAG of a point onto another is that kind of join here.
 // Parts:
 //   A  the three rectangles: corner joints shared (2-point 4 joints, centre 4 corners + its centre, 3-point 4), NO coincident, the structural
-//      constraints unchanged (2-point / centre: H, V, H, V; centre + 2 pointOnLine; 3-point: 4 perpendicular); DOF as before (2-point / centre 4)
+//      constraints Fusion's (2-point: H, V, H, V; centre, task 1049: H + perpendicular + 2 parallel + 2 pointOnLine; 3-point, task 1049: perpendicular
+//      + 2 parallel); DOF as before (2-point / centre 4)
 //   B  a new rectangle corner splits through 1041's glyph (Delete) and through the point's "Delete Coincident"; one undo step restores it
 //   C  the Line tool: a chain's segments share their point (click and Enter), a closed chain ends on its first point, no coincident
 //   D  the Line tool's ends on existing points: on a line END shared (end and start), on a line MIDDLE a pointOnLine, on a circle CENTRE / a lone
@@ -80,8 +81,8 @@ async function openWith(extra = {}) {
 // ------------------------------------------------------------------------------------------------ A the three rectangles
 for (const [variant, clicks, want] of [
   ['rect-2pt', [[10, 10], [50, 35]], { joints: 4, kinds: 'horizontal,horizontal,vertical,vertical', dof: 4, users: [2, 2, 2, 2] }],
-  ['rect-center', [[30, 20], [50, 35]], { joints: 5, kinds: 'horizontal,horizontal,pointOnLine,pointOnLine,vertical,vertical', dof: 4, users: [3, 3, 3, 3] }],
-  ['rect-3pt', [[10, 10], [50, 15], [45, 40]], { joints: 4, kinds: 'perpendicular,perpendicular,perpendicular,perpendicular', users: [2, 2, 2, 2] }],
+  ['rect-center', [[30, 20], [50, 35]], { joints: 5, kinds: 'horizontal,parallel,parallel,perpendicular,pointOnLine,pointOnLine', dof: 4, users: [3, 3, 3, 3] }],   // task 1049: Fusion's recipe
+  ['rect-3pt', [[10, 10], [50, 15], [45, 40]], { joints: 4, kinds: 'parallel,parallel,perpendicular', users: [2, 2, 2, 2] }],   // task 1049: Fusion's recipe
 ]) {
   const app = await openApp();
   const S = app.state;
@@ -95,7 +96,7 @@ for (const [variant, clicks, want] of [
   check(corners.length === 4, `A ${variant}: 4 corner joints, each SHARED by its two sides (${corners.length} distinct; was 8)`);
   check(real.length === want.joints, `A ${variant}: ${want.joints} joints in the sketch (${real.length}; was ${variant === 'rect-center' ? 13 : 8})`);
   check(coincidents(S).length === 0, `A ${variant}: NO coincident constraint (${coincidents(S).length}; was ${variant === 'rect-center' ? 8 : 4})`);
-  check(types(S) === want.kinds, `A ${variant}: the structural constraints unchanged: ${types(S)}`);
+  check(types(S) === want.kinds, `A ${variant}: the structural constraints (Fusion's recipe): ${types(S)}`);
   check(JSON.stringify(corners.map((j) => usersOf(S, j))) === JSON.stringify(want.users), `A ${variant}: curves at each corner ${JSON.stringify(corners.map((j) => usersOf(S, j)))} (the centre rectangle's diagonals end on them too)`);
   check(sides.every((l, i) => l.joints[1] === sides[(i + 1) % 4].joints[0] || l.joints.some((j) => sides[(i + 1) % 4].joints.includes(j))), `A ${variant}: neighbouring sides share their corner`);
   if (want.dof !== undefined) check(dof(S) === want.dof, `A ${variant}: DOF ${dof(S)} (as before: ${want.dof})`);

@@ -3914,6 +3914,54 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Family:** `ui-input`
 - **History:** found in task `1045` (`.evidence/1045/live-glyph-selected-phone.png`: the corner still selected after the tap on its glyph) -> fixed by task `1044`'s pick rule, re-checked in task `1045` after merging origin/main.
 
+### BUG-460
+- **Date / turn:** 2026-11-27 (audit `1037` divergence `D-2`; fixed in task `1049`, owner-approved 2026-11-27)
+- **Reported by:** audit `1037` (probe `P-02`; Fusion recorded by the advisor: `Horizontal(Line0) Perpendicular(Line1,Line0) Parallel(Line2,Line0) Parallel(Line3,Line1)`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Rectangle tool: Center Rectangle)
+- **Report:** `D-2`: `P-02 then drag that side's end up 6: angles L0/L1 81.842 L1/L2 90 L2/L3 90 L3/L0 81.842 (Fusion: Perpendicular(Line1,Line0) + Parallel x2 keep every angle 90)`.
+- **What was wrong:** a Center Rectangle was held by H, V, H, V. Deleting the Horizontal of its first side (to rotate it) let that side tilt: a trapezoid. In Fusion the rectangle rotates and stays a rectangle.
+- **Cause:** `packages/core/shapes.js` `makeRectFromCenter` built H, V, H, V (the 2-point rectangle's recipe), not Fusion's.
+- **Fix:** Fusion's recipe: Horizontal on the first side, Perpendicular(side 2, side 1), Parallel(side 3, side 1), Parallel(side 4, side 2). The construction diagonals and the centre on both are kept (Fusion has them: `Line4` / `Line5` construction, `Coincident(centre, Line4 / Line5)`). Same DOF as built (4). Saved files keep their H, V, H, V.
+- **Task id(s):** `1049`
+- **Fix merge sha:** open (`agents/recipes-1049`, awaiting merge)
+- **Guarding test file(s):** `tests/recipes-1049-node.test.js` (A: the recipe, DOF 4, glyphs; delete the H: DOF 5, a corner drag rotates it, every angle 90; E: an old H, V, H, V file loads unchanged), `tests/recipes-1049-live.test.js`, `tests/shared-corners-1045-node.test.js` (A)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-461, BUG-462
+- **History:** found in audit `1037` (`D-2`) -> fixed in task `1049`. Probe after: `P-02 then drag that side's end up 6: angles L0/L1 90 L1/L2 90 L2/L3 90 L3/L0 90`.
+
+### BUG-461
+- **Date / turn:** 2026-11-27 (audit `1037` divergence `D-3`; fixed in task `1049`, owner-approved 2026-11-27)
+- **Reported by:** audit `1037` (Fusion recorded by the advisor: `Perpendicular(Line1,Line0) Parallel(Line2,Line0) Parallel(Line3,Line1)`)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Rectangle tool: 3-Point Rectangle)
+- **Report:** `D-3`: `OURS constraints (8): perpendicular(L0,L1)[-1] perpendicular(L1,L2)[1] perpendicular(L2,L3)[-1] perpendicular(L3,L0)[1] ...`; `model: unknowns 18 equations 14 rank 13 DOF 5` (one redundant row).
+- **What was wrong:** a 3-Point Rectangle had 4 perpendiculars: 8 perpendicular glyphs, one redundant row fed to the solver, and deleting one of them changed nothing (the other three still made a rectangle). In Fusion deleting its one Perpendicular leaves a parallelogram.
+- **Cause:** `packages/core/shapes.js` `makeRectFrom3Points` built 4 perpendiculars.
+- **Fix:** Fusion's recipe: Perpendicular(side 2, side 1), Parallel(side 3, side 1), Parallel(side 4, side 2). DOF 5 = 8 unknowns - 3 rows (no redundant row); 1 perpendicular + 2 parallel glyphs. Saved files keep their 4 perpendiculars.
+- **Task id(s):** `1049`
+- **Fix merge sha:** open (`agents/recipes-1049`, awaiting merge)
+- **Guarding test file(s):** `tests/recipes-1049-node.test.js` (B: the recipe, DOF 5 with no redundant row, glyphs; delete the Perpendicular: DOF 6, a corner drag leaves a parallelogram; E: an old 4-perpendicular file loads unchanged), `tests/recipes-1049-live.test.js`, `tests/shared-corners-1045-node.test.js` (A)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-460, BUG-380 (the branch-locked perpendicular's row, fixed in task `1038`)
+- **History:** found in audit `1037` (`D-3`) -> fixed in task `1049`. Probe after: `OURS constraints (3): perpendicular(L1,L0)[1] parallel(L2,L0) parallel(L3,L1)`, `model: unknowns 10 equations 5 rank 5 DOF 5`.
+
+### BUG-462
+- **Date / turn:** 2026-11-27 (audit `1037` divergence `D-6`; fixed in task `1049`, owner-approved 2026-11-27)
+- **Reported by:** audit `1037` (probes `P-05`, `P-06`; Fusion recorded by the advisor: `dims 0` for all five slots)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Slot tool: all five slot types)
+- **Report:** `D-6`: `P-05 ShapeSlotCenterToCenter: width dimension DRIVING 16.028; DOF with it: solver 3 model 3; deleted: solver 4 model 4 | Fusion model 4`.
+- **What was wrong:** every slot got a driving width (diameter) dimension, also when the width was only clicked. Fusion places none; the slot had one DOF less than Fusion's.
+- **Cause:** `packages/core/slot.js` `buildStraightSlotCore` and `buildArcSlotCore` called `makeWidthDimension` always.
+- **Fix:** the slot makers place it only when asked (`{ widthDimension }`); the Slot tool asks when the width was TYPED (`slot-tool.js` `widthTyped`), the way every tool's typed size becomes its dimension; the template op `ops.slot` (its width is typed) asks too. An untyped slot: no dimension, Fusion's DOF (straight 4 with the inferred H, arc 6). Saved slots keep their width dimension.
+- **Task id(s):** `1049`
+- **Fix merge sha:** open (`agents/recipes-1049`, awaiting merge)
+- **Guarding test file(s):** `tests/recipes-1049-node.test.js` (C: the 5 slots untyped / typed; E: an old slot keeps its width dimension and edits), `tests/recipes-1049-live.test.js`, `tests/slot-tool-node.test.js` (1b, the pointer flow), `tests/drawbox-fix-1028-node.test.js` (B-01 slot), `tests/dof-fix-1038-node.test.js` (D-7, typed width)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-460, BUG-383 (the arc slot's 4th tangent, task `1038`)
+- **History:** found in audit `1037` (`D-6`) -> fixed in task `1049`. Probe after: `P-05 ShapeSlotCenterToCenter: width dimension none; DOF with it: solver 4 model 4; ... | Fusion model 4`, `P-06 ShapeArcSlotThreePoint: width dimension none; DOF with it: solver 6 model 6; ... | Fusion model 6`.
+
 ---
 
 ## Family index
@@ -3929,7 +3977,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27), BUG-350 (11-27), BUG-352 (11-27), BUG-360 (11-27) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27), BUG-411 (11-27), BUG-431 (11-27), BUG-433 (11-27), BUG-450 (11-27), BUG-451 (11-27), BUG-440 (11-27, open) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27), BUG-411 (11-27), BUG-431 (11-27), BUG-433 (11-27), BUG-450 (11-27), BUG-451 (11-27), BUG-440 (11-27, open), BUG-460 (11-27), BUG-461 (11-27), BUG-462 (11-27) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |

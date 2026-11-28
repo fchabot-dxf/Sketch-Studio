@@ -9,7 +9,7 @@ import { newShapeId } from './shape-id.js';
 // TASK 1045: a rectangle's corners are ONE SHARED joint each, used by the two sides that meet there (and, in the centre rectangle, by the
 // construction diagonal that ends there): Fusion, MEASURED by the advisor 2026-11-27, "every DRAWING tool joins meeting ends with ONE shared
 // point (rectangles: all 3)"; the recording has no point-to-point coincident (docs/RECIPE-PARITY-1037.md D-1). The structural constraints of
-// each maker are unchanged (H / V, the centre's two pointOnLine, the 3-point's perpendiculars). A corner is split like any shared point
+// each maker are Fusion's recorded recipe (TASK 1049: the centre and 3-point ones; the 2-point's H, V, H, V already were). A corner is split like any shared point
 // (#core/shared-point.js detachFromSharedPoint: its glyph's Delete, Delete Coincident). Files saved before keep their two joints + coincident.
 // The sides are [c1, c2], [c2, c3], [c4, c3], [c1, c4] (c1 = the first click, c3 its opposite), the order and direction they always had.
 function rectSides(base, groupId, [c1, c2, c3, c4], isConstruction) {
@@ -87,11 +87,14 @@ export function makeRectFromCenter(joints, centerId, cornerId, genJ, isConstruct
         c.orphanAllowed = true;
     }
 
+    // TASK 1049 (audit 1037 D-2): Fusion's recipe, as recorded: Horizontal(Line0) Perpendicular(Line1,Line0) Parallel(Line2,Line0) Parallel(Line3,Line1),
+    // so deleting the one Horizontal lets the rectangle rotate and it stays a rectangle (H, V, H, V tilted one side: a trapezoid). Same DOF as built (4).
+    const [s1, s2, s3, s4] = shapes.map((s) => s.id);
     const constraints = [
         { type: CONSTRAINT_TYPES.HORIZONTAL, joints: [c1, c2] },
-        { type: CONSTRAINT_TYPES.VERTICAL, joints: [c2, c3] },
-        { type: CONSTRAINT_TYPES.HORIZONTAL, joints: [c4, c3] },
-        { type: CONSTRAINT_TYPES.VERTICAL, joints: [c1, c4] },
+        { type: CONSTRAINT_TYPES.PERPENDICULAR, shapes: [s2, s1] },
+        { type: CONSTRAINT_TYPES.PARALLEL, shapes: [s3, s1] },
+        { type: CONSTRAINT_TYPES.PARALLEL, shapes: [s4, s2] },
 
         // Constrain center to intersection of diagonals
         { type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: centerId, shape: diag1Id },
@@ -104,7 +107,7 @@ export function makeRectFromCenter(joints, centerId, cornerId, genJ, isConstruct
 /**
  * Create rectangle from 3 points
  * Reuses j1Id, j2Id, and j3Id as the corners c1, c2 and c3 (j3Id is moved onto the corner: the third click only gives the height); c4 is new.
- * Uses perpendicular constraints to allow rotation.
+ * No H / V: it may be drawn at any angle (perpendicular + parallel keep it a rectangle).
  */
 export function makeRectFrom3Points(joints, j1Id, j2Id, j3Id, genJ, isConstruction=false) {
     const j1 = joints.get(j1Id);
@@ -131,12 +134,13 @@ export function makeRectFrom3Points(joints, j1Id, j2Id, j3Id, genJ, isConstructi
     const groupId = 'rect_' + base;
     const shapes = rectSides(base, groupId, [j1Id, j2Id, j3Id, c4], isConstruction);
 
-    const s1 = shapes[0].id, s2 = shapes[1].id, s3 = shapes[2].id, s4 = shapes[3].id;
+    // TASK 1049 (audit 1037 D-3): Fusion's recipe, as recorded: Perpendicular(Line1,Line0) Parallel(Line2,Line0) Parallel(Line3,Line1). Four perpendiculars
+    // held one redundant row; deleting the one Perpendicular now leaves a parallelogram, as in Fusion. Same DOF (5).
+    const [s1, s2, s3, s4] = shapes.map((s) => s.id);
     const constraints = [
-        { type: CONSTRAINT_TYPES.PERPENDICULAR, shapes: [s1, s2] },
-        { type: CONSTRAINT_TYPES.PERPENDICULAR, shapes: [s2, s3] },
-        { type: CONSTRAINT_TYPES.PERPENDICULAR, shapes: [s3, s4] },
-        { type: CONSTRAINT_TYPES.PERPENDICULAR, shapes: [s4, s1] }
+        { type: CONSTRAINT_TYPES.PERPENDICULAR, shapes: [s2, s1] },
+        { type: CONSTRAINT_TYPES.PARALLEL, shapes: [s3, s1] },
+        { type: CONSTRAINT_TYPES.PARALLEL, shapes: [s4, s2] }
     ];
 
     return { shapes, constraints };

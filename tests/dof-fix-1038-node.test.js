@@ -93,10 +93,14 @@ async function openApp(opts = {}) {
   app.frames(2);
   return app;
 }
-function draw(app, tool, variant, clicks) {
+/** `typed`: a value typed in the last step's box and Enter, at the last click's place (task 1049: a slot's TYPED width is its width dimension) */
+function draw(app, tool, variant, clicks, typed = null) {
   app.tool(tool);
   if (variant) { app.document.querySelector(`.sk-ribbon-menu-item[data-mode="${variant}"]`).click(); app.frames(2); }
-  for (const w of clicks.map(toWorld)) { const p = app.toScreen(w.x, w.y); app.move(p.x, p.y); app.click(p.x, p.y); }
+  clicks.map(toWorld).forEach((w, i) => {
+    const p = app.toScreen(w.x, w.y); app.move(p.x, p.y);
+    if (typed !== null && i === clicks.length - 1) { app.type(String(typed)); app.enter(); } else app.click(p.x, p.y);
+  });
   app.esc(); app.frames(2);
 }
 const panelDof = (app) => analyzeConstraintStatus({ joints: app.state.joints, shapes: app.state.shapes, constraints: app.state.constraints }).dof;
@@ -179,11 +183,12 @@ const len = (app, s) => { const a = app.state.joints.get(s.joints[0]), b = app.s
 }
 
 // D-7 + N-B + N-C on both arc slots (as drawn by the Slot tool): centre (2) + radius + 2 end angles + width = 6, the width dimension 1: true DOF 5
+// (task 1049: the width TYPED, 8, so the slot has its width dimension; a clicked width has none, as Fusion: tests/recipes-1049-node.test.js)
 const ARC_SLOTS = [['slot-arc-3pt', [[0, 0], [4, 0], [2, 1.5], [2, 1.9]]], ['slot-arc-center', [[2, 0], [4, 0], [2, 2], [2, 2.4]]]];
 for (const [variant, clicks] of ARC_SLOTS) {
   const app = await openApp();
   try {
-    draw(app, 'slot', variant, clicks);
+    draw(app, 'slot', variant, clicks, 8);
     const tangents = app.state.constraints.filter((c) => c.type === CONSTRAINT_TYPES.TANGENT);
     check(tangents.length === 4, `D-7 ${variant}: tangents ${tangents.length} (Fusion 4)`);
     check(panelDof(app) === 5 && nullity(app) === 5, `D-7/N-B ${variant}: Design panel DOF ${panelDof(app)}, solver ${nullity(app)} (true 5)`);

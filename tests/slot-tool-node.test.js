@@ -79,7 +79,7 @@ function verifyLineArcTangency(joints, line, arc, sharedJointId, label) {
   const { engine, state } = makeFreshState();
   state.joints.set('jc1', { x: 0, y: 0, fixed: false });
   state.joints.set('jc2', { x: 100, y: 0, fixed: false });
-  const res = makeSlotCenterToCenter(state.joints, 'jc1', 'jc2', 20, () => engine.genJ());
+  const res = makeSlotCenterToCenter(state.joints, 'jc1', 'jc2', 20, () => engine.genJ(), false, { widthDimension: true });   // task 1049: a TYPED width (its dimension)
   state.shapes.push(...res.shapes);
   state.constraints.push(...res.constraints);
 
@@ -137,12 +137,26 @@ function verifyLineArcTangency(joints, line, arc, sharedJointId, label) {
   ), 30, 1e-2, 'width preserved across drag');
 }
 
+// ── 1b. TASK 1049 (audit 1037 D-6): a width NOT typed places no width dimension, as Fusion (one DOF more: the width) ──
+{
+  const { engine, state } = makeFreshState();
+  state.joints.set('jc1', { x: 0, y: 0, fixed: false });
+  state.joints.set('jc2', { x: 100, y: 0, fixed: false });
+  const res = makeSlotCenterToCenter(state.joints, 'jc1', 'jc2', 20, () => engine.genJ());
+  state.shapes.push(...res.shapes);
+  state.constraints.push(...res.constraints);
+  assert.strictEqual(res.constraints.filter(c => c.type === CONSTRAINT_TYPES.DISTANCE).length, 0, 'untyped width: no width dimension');
+  assert.strictEqual(res.meta.widthDim, null, 'untyped width: meta.widthDim null');
+  assert.strictEqual(state.engine.solve().converged, true, 'untyped C2C converges');
+  assert.strictEqual(state.engine.jointFreedom().nullity, 5, 'untyped C2C free DOF === 5 (Fusion, no inferred H)');
+}
+
 // ── 2. Overall Slot ──────────────────────────────────────────────────────────
 {
   const { engine, state } = makeFreshState();
   state.joints.set('jt1', { x: 0, y: 0, fixed: false });
   state.joints.set('jt2', { x: 120, y: 0, fixed: false });
-  const res = makeSlotOverall(state.joints, 'jt1', 'jt2', 20, () => engine.genJ());
+  const res = makeSlotOverall(state.joints, 'jt1', 'jt2', 20, () => engine.genJ(), false, { widthDimension: true });
   state.shapes.push(...res.shapes);
   state.constraints.push(...res.constraints);
 
@@ -171,7 +185,7 @@ function verifyLineArcTangency(joints, line, arc, sharedJointId, label) {
   const { engine, state } = makeFreshState();
   state.joints.set('jm', { x: 50, y: 10, fixed: false });
   state.joints.set('jc2', { x: 100, y: 10, fixed: false });
-  const res = makeSlotCenterPoint(state.joints, 'jm', 'jc2', 20, () => engine.genJ());
+  const res = makeSlotCenterPoint(state.joints, 'jm', 'jc2', 20, () => engine.genJ(), false, { widthDimension: true });
   state.shapes.push(...res.shapes);
   state.constraints.push(...res.constraints);
 
@@ -209,7 +223,7 @@ for (const [tag, p3, expectSweep] of [
   const { engine, state } = makeFreshState();
   state.joints.set('ja', { x: 60, y: 0, fixed: false });
   state.joints.set('jb', { x: 0, y: 60, fixed: false });
-  const res = makeSlotThreePointArc(state.joints, 'ja', 'jb', p3, 16, () => engine.genJ());
+  const res = makeSlotThreePointArc(state.joints, 'ja', 'jb', p3, 16, () => engine.genJ(), false, { widthDimension: true });
   state.shapes.push(...res.shapes);
   state.constraints.push(...res.constraints);
 
@@ -251,7 +265,7 @@ for (const [tag, p3, expectSweep] of [
   state.joints.set('jcm', { x: 0, y: 0, fixed: false });
   state.joints.set('ja', { x: 80, y: 0, fixed: false });
   state.joints.set('jb', { x: 0, y: 80, fixed: false });
-  const res = makeSlotCenterPointArc(state.joints, 'jcm', 'ja', 'jb', false, 20, () => engine.genJ());
+  const res = makeSlotCenterPointArc(state.joints, 'jcm', 'ja', 'jb', false, 20, () => engine.genJ(), false, { widthDimension: true });
   state.shapes.push(...res.shapes);
   state.constraints.push(...res.constraints);
 
@@ -293,7 +307,7 @@ for (const [tag, p3, expectSweep] of [
   const { engine, state } = makeFreshState();
   state.joints.set('ja', { x: 10, y: 20, fixed: false });
   state.joints.set('jb', { x: 90, y: 20, fixed: false });
-  const res = makeSlotCenterToCenter(state.joints, 'ja', 'jb', 18, () => engine.genJ(), true);
+  const res = makeSlotCenterToCenter(state.joints, 'ja', 'jb', 18, () => engine.genJ(), true, { widthDimension: true });
   state.shapes.push(...res.shapes);
   state.constraints.push(...res.constraints);
   assert.strictEqual(state.shapes.every(s => s.isConstruction === true), true, 'construction mode makes all 5 shapes construction');
@@ -339,6 +353,7 @@ for (const [tag, p3, expectSweep] of [
   handleSlotPointerUp(ev(50, 12), mockSvg, state, null, { x: 50, y: 12 });
 
   assert.strictEqual(state.shapes.length, 5, 'pointer flow created 5 shapes');
+  assert.strictEqual(state.constraints.some(c => c.type === CONSTRAINT_TYPES.DISTANCE), false, 'a clicked width places no width dimension (task 1049)');
   assert.strictEqual(state.history.length, hist0 + 1, 'exactly 1 undo step added');
   assert.strictEqual(state.joints.has('j_origin'), true);
   state.undo();

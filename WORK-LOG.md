@@ -18723,3 +18723,37 @@ Task 1044: fix what the delete audit found (`docs/DELETE-AUDIT-1042.md`, branch 
   - phone-live probe: L-03 and L-04 (phone and desktop) are now `after {"shapes":1,...} | undo "n/a (nothing deleted)"`.
 - Updated (live): `tests/delete-dims-709-live.test.js` case A (a line's END + Delete) now asserts the point rule: nothing deleted, no undo step, the 3 labels and rows stay, the hint shows (mouse + Delete key, finger + red X).
 - **Gate:** `npm run gate:quick` on the commit (origin/main had not moved: `Already up to date.`): `GATE tier=quick jobs=quick=22 files=687 pass=687 fail=0 elapsed=167s`, `PROFILES-LEFT 0` (an earlier run under load timed out `split-files-888-node` and `gate-shared-lock`; both green in this run). Merge plan: `MERGE changed=11 files vs origin/main...HEAD; 375 of 376 live tests affected` (svg-renderer / input-manager). Live tests run one at a time, all exit 0: delete-point-rule-1044-live, delete-dims-709-live, footer-delete-clear-live, footer-undo-live, glyph-pick-hover-live, constraint-glyph-menu-live, context-menu-live, split-shared-point-1041-live, tangent-glyph-1038-live, chain-select-move-live, hover-stroke-live, picks-1020-live, toast-footer-695-live, close-path-760-sketchstudio-live, drawing-stage-725-live, offset-fusion-match-667-live, overlay-keys-783-live, parameters-window-live, shortcuts-727-live, shortcuts-740-live.
+
+## TURN 1046
+Deleting part of a PATTERN or OFFSET copy behaves like Fusion (owner-approved 2026-11-27; Fusion rows D-38 / D-39 / D-43 / D-44 / D-63 / D-65 of the delete audit 1042), and the offset RELATION gets its own glyph (owner ruling "offset should be visible"; Fusion's Offset glyph measured in task 1048). Claude Opus subagent, worktree `copy-delete-1046`, branch `agents/copy-delete-1046` from `6f321a9c`. BUG-450, BUG-451, BUG-452.
+- **ONE rule per record, called once from `delete-manager.js` `removeGeometry`:** `pattern.js` `patternsAfterDelete` and `offset.js` `offsetsAfterDelete` (new). `removeGeometry`'s generic splice now skips offset records.
+  - Pattern (D-43): a deleted copy curve or copy point becomes `null` in its instance; the pattern and the instance's other copies stay. An instance with nothing left is suppressed, as before.
+  - Offset (D-38): a deleted copy is `null` in its piece. D-39: a deleted source nulls its piece (its copy stays as plain geometry). An offset with no whole piece left goes.
+  - D-44 and D-63 were already Fusion's (SAME) and are now guarded.
+- **Readers of the nullable records:** `patternOperands` (no row for a null copy; a deleted arc copy's rim that another copy uses gets the full `pt` row), `patternRefs`, `remapPattern`, `patternCopyOperands`, `removeInstance`. `offset.js` `storedPieces`, `offsetOperands`, `offsetValueRefusal`, `offsetDimensionEnds` (through `offsetRelationCurves`). In `offsetOperands`, a copy-deleted piece keeps its source rows at the neighbours' ends, so they do not move and keep following the distance; a source-deleted piece gives no row. Generic readers of a constraint's `shapes` skip null: `constraints.js` `getConstrainedGeometry`, `sketch-model.js` `constraintSketch` / `operandsOf`, `geometry-labels.js`, `svg-renderer.js` (the hidden-sketch test).
+- **Quantity edit after a copy-curve delete:** `syncPattern` keeps an existing instance as it is, so the deleted copy stays deleted, and new instances are whole. A re-pick of the objects, centre or direction (`editPattern`'s rebuild) remakes every instance whole.
+- **Offset relation glyph (D-65):**
+  - `offset.js` `offsetRelations` gives a DERIVED entity `{ type: 'offsetRelation', offset, shapes }`, one per record, never stored (old files show it), on the model of 1041's SharedPointCoincident.
+  - `svg-renderer.js` draws it TWICE through `drawUnifiedGlyph`: beside the first whole piece's source curve and its copy, half the icon + 4 px off each curve, away from the other curve, and 1.25 icons along a line from its middle (clear of the line's H / V).
+  - Always shown. Either glyph's hover or selection lights both glyphs and every source and copy curve, not the label.
+  - The icon is `glyph-offset`, declared in `assets/constraint-glyphs.svg` (an inverted T with a parallel outline). Its table entry is `fusion-glyphs.js` `CONSTRAINT_GLYPH.offsetRelation`.
+  - Picked by `hover-manager.js` `glyphAt`. It opens the constraint menu (`context-menu.js` `CONSTRAINT_MENU_TYPES`).
+  - Delete (`delete-manager.js` `deleteConstraints`) removes the record and its dimension in one undo step; the copies stay as plain geometry.
+  - The placement is a DECLARED DIFFERENCE from Fusion, for legibility (advisor-accepted). Fusion puts both glyphs on the same side, about 7 px off, at the middle; at small offsets that overlapped. See live-offset-glyphs-*.png.
+  - Delete on the dimension LABEL keeps task 667's free distance (advisor ruling (b)).
+- **Behaviour changes for existing users:**
+  1. A pattern copy curve + Delete deletes that curve only. Before, the whole instance was suppressed.
+  2. An offset copy or source curve + Delete keeps the offset. Before, it was dissolved.
+  3. Trim goes through the same rule. A WHOLE-curve trim of a copy equals its delete. A partial trim of a lone-line pattern copy that removes its end point keeps the trimmed copy (before: its instance was suppressed).
+  4. After a source side is deleted (D-39), the 2 copy corners on that side slide along their own offset lines (audit scene: dof 4 -> 7; Fusion unmeasured). Both accepted by the advisor.
+  5. Every offset now shows 2 relation glyphs, in all four hosts (the shared Design tab). Delete on them removes the relation.
+  6. Copy / paste of an offset with a deleted piece pastes the curves without the relation (the clipboard's "every operand copied" test: a null is never copied).
+- **Tests:**
+  - NEW `tests/copy-delete-1046-node.test.js`: the real Design tab in Node. D-38 / D-39 / D-43 / D-44 / D-63 / D-65 by real clicks; the relation glyph by the key, right-click menu, footer red X and touch hold; each with one undo step exact, redo and reopen; a distance edit after D-38; a quantity edit after D-43; the glyph drawn on reopen and never stored.
+  - NEW `tests/copy-delete-1046-live.test.js`: desktop 1280x800 and phone 390x844. A pattern copy side + Delete key / red X, then Ctrl+Z; the offset relation glyphs, hover and selected, + Delete.
+  - `tests/pattern-658.test.js`: its "a copy suppresses its instance" block rewritten to the new rule. Its `solverHolds` skips null copies.
+- **Evidence (`.evidence/1046/`, local):**
+  - The 1042 probes copied: `delete-audit-1042-*.{js,mjs}`. The kit's import path is fixed and its leftover check skips a null instance copy.
+  - `before-curves.out` / `before-constraints.out` vs `after-curves.out` / `after-constraints.out`. D-43 before: `deleted shapes [line,line,line,line] points -4`; after: `deleted shapes [line] points -0 ... LEFT none | residual ok dof 4 | undo exact | redo exact | reload same`. D-38 after: `cons {...,"offset":1} | LEFT none | residual ok dof 4`.
+  - Fail-first `failfirst-node.out` (the new node test on the pre-fix code, the derived-glyph import stubbed): FAIL D-38, D-39, D-43, D-65; ok D-44, D-63 (already SAME).
+  - Screenshots `live-*.png` (md5 in the REPORT).

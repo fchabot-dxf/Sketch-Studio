@@ -113,4 +113,10 @@
         <path d="M539.5,376L539.5,404L524,390L539.5,376Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
         <path d="M552.5,376L552.5,404L568,390L552.5,376Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
     </g>
+    <!-- task 1046: no offset glyph existed in the set; a declared one after Fusion's Offset constraint glyph (measured, task 1048): an inverted T (the curve)
+         with a parallel outline round it (its offset copy), the style of the others -->
+    <g id="glyph-offset">
+        <path d="M692.25,368.25L709,368.25L709,394.25L723.75,394.25L723.75,411L680.25,411L680.25,394.25L692.25,394.25ZM695.5,397.5L683.5,397.5L683.5,407.75L720.5,407.75L720.5,397.5L705.75,397.5L705.75,371.5L695.5,371.5Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+        <path d="M699,375L702.25,375L702.25,401L717,401L717,404.25L687,404.25L687,401L699,401Z" style="fill:white;stroke:black;stroke-width:0.46px;stroke-linejoin:round;"/>
+    </g>
 </svg>

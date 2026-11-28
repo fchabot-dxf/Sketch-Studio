@@ -298,7 +298,8 @@ await (async () => {
       await sleep(200);
       const st = await shapeStats();
       assert.strictEqual(st.total, 5, 'Center Point: committed via green DONE check with 5 shapes');
-      assert(st.dims.some((d) => d.startsWith('Ø ')), `Center Point: Ø width label shown, got ${JSON.stringify(st.dims)}`);
+      // task 1049 (audit 1037 D-6): the width was not typed (DONE at the cursor's width): no width dimension, as Fusion
+      assert(!st.dims.some((d) => d.startsWith('Ø ')), `Center Point: a width not typed has no Ø width label, got ${JSON.stringify(st.dims)}`);
       await shot('slot-center.png', await slotClip());
       await clearCanvas();
     }
@@ -420,7 +421,7 @@ await (async () => {
       await sleep(250);
       const st = await shapeStats();
       assert.strictEqual(st.total, 5, 'Phone touch: 3 taps place 5-shape slot');
-      assert(st.dims.some((d) => d.startsWith('Ø ')), 'Phone touch: Ø dimension rendered');
+      assert(!st.dims.some((d) => d.startsWith('Ø ')), `Phone touch: the width tapped, not typed: no Ø dimension (task 1049, as Fusion), got ${JSON.stringify(st.dims)}`);
       await shot('slot-phone.png', { x: 0, y: 0, width: 390, height: 620, scale: 2 });
     }
     console.log('4. Phone portrait touch OK');

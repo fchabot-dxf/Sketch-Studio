@@ -5,7 +5,8 @@
 // dimension driven by a user parameter) and the constraints that name a shape (point on line, tangent, symmetric, parallel, equal), the drawing is
 // built with the tools' own operations (#core/tool-ops.js), then deleted, one way at a time:
 //   shape  the dimensioned shape selected + the Delete key (#core/delete-manager.js deleteSelection, the path every delete takes)
-//   joint  one of its points selected + Delete
+//   joint  one of its points selected + Delete: TASK 1044 THE POINT RULE (owner 2026-11-27, Fusion): a curve's point is never deleted, so
+//          NOTHING goes (no undo step); the row checks exactly that
 //   all    the whole drawing selected + Delete
 //   trim   the Trim tool clicked on the line (a whole line with no crossing goes; an end past a crossing goes)
 // After each, what is LEFT is listed: constraints naming geometry that is gone (a missing shape / point, or a point only deleted geometry used),
@@ -171,9 +172,10 @@ function run(c, mode) {
   const survivorKept = b.survivor && mode !== 'all' ? st.constraints.includes(b.survivor) : null; // 'all' deletes the survivor's geometry too
   const parameterKept = b.keepParameter ? st.parameters.some((p) => p.name === b.keepParameter) : null;
   const steps = st.history.length - histBefore;
-  app.undo(); app.frames(2);
+  const unchanged = docOf() === pre;
+  if (steps > 0) { app.undo(); app.frames(2); }
   const undone = docOf() === pre;
-  const row = { kind: c.kind + (b.note ? ` [${b.note}]` : ''), mode, left: lo.left.map(named), labels: lo.labels, table: lo.table, survivorKept, parameterKept, steps, undone };
+  const row = { kind: c.kind + (b.note ? ` [${b.note}]` : ''), mode, left: lo.left.map(named), labels: lo.labels, table: lo.table, survivorKept, parameterKept, steps, undone, unchanged };
   rows.push(row);
   return row;
 }
@@ -225,8 +227,10 @@ try {
     check(errorsNow().length === 0 && valueOf('d2') === 15, 'Undo: d2 reads the real d1');
   }
   {
-    // 2. a point of the line deleted; 3. the Trim tool; 4. the dimension itself deleted
-    let b = build(); st.selectedJoints.add(b.A.a); app.key('Delete'); app.frames(2); keptLooks('point + Delete');
+    // 2. a point of the line + Delete: TASK 1044 THE POINT RULE: nothing goes (d1 stays a real dimension, no kept value); 3. the Trim tool;
+    // 4. the dimension itself deleted
+    let b = build(); const h2 = st.history.length; st.selectedJoints.add(b.A.a); app.key('Delete'); app.frames(2);
+    check(dim('d1') && !param('d1') && st.shapes.some((s) => s.id === b.A.id) && st.history.length === h2, 'point + Delete: the point rule: the line and d1 stay, no kept value, no undo step');
     b = build(); app.tool('trim'); const p = app.toScreen(15, 0); app.click(p.x, p.y); app.tool('select'); app.frames(2);
     check(!st.shapes.some((s) => s.id === b.A.id), 'Trim: the line is gone'); keptLooks('Trim');
     b = build(); st.selectedConstraints.add(b.d1); st.selectedConstraints.add(b.d3); app.key('Delete'); app.frames(2);
@@ -271,6 +275,7 @@ try {
     if (r.survivorKept === false) bad.push('the dimension on SURVIVING geometry was deleted');
     if (r.parameterKept === false) bad.push('the user parameter was deleted');
     if (!r.undone) bad.push('one Ctrl+Z does not restore the drawing');
+    if (r.mode === 'joint' && !(r.unchanged && r.steps === 0)) bad.push("the point rule: a curve's point + Delete must delete nothing (TASK 1044)");
     if (bad.length) { failures++; console.error(`FAIL ${where}: ${bad.join('; ')}`); }
   }
 } finally { await app.close(); }

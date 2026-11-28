@@ -1,4 +1,4 @@
-import { CONSTRAINT_TYPES } from './constants.js';
+import { CONSTRAINT_TYPES, ORIGIN_JOINT_ID } from './constants.js';
 import { removeOrphanJoints } from './joints.js';
 import { patternsAfterDelete } from './pattern.js';
 import { undimensionOffset } from './offset.js';
@@ -120,7 +120,7 @@ export function removeGeometry(state, shapeIds = [], jointIds = [], opts = {}) {
   const deleteJ = new Set(jointIds);
   const goneS = new Set(shapeIds);
   for (const s of state.shapes) if (s && asList(s.joints).some((j) => deleteJ.has(j))) goneS.add(s.id);
-  const shapeJoints = new Set();
+  const shapeJoints = new Set(), goneSharps = new Set();
   const removedLinePairs = new Set();
   for (const p of (opts.trimmedPairs || [])) {
     if (Array.isArray(p) && p.length === 2 && p[0] && p[1]) removedLinePairs.add(pairKey(p[0], p[1]));
@@ -130,6 +130,7 @@ export function removeGeometry(state, shapeIds = [], jointIds = [], opts = {}) {
     const s = state.shapes[i];
     if (!s || !goneS.has(s.id)) continue;
     asList(s.joints).forEach((j) => shapeJoints.add(j));
+    if (s.filletSharp) goneSharps.add(s.filletSharp);
     if (s.type === 'line' && Array.isArray(s.joints) && s.joints.length === 2) removedLinePairs.add(pairKey(s.joints[0], s.joints[1]));
     state.shapes.splice(i, 1);
     shapes++;
@@ -153,10 +154,17 @@ export function removeGeometry(state, shapeIds = [], jointIds = [], opts = {}) {
     return false;
   };
   // A point goes only when NO surviving shape uses it: shapes that merely SHARE a point with a deleted shape (a fillet's rim points, chained
-  // lines) survive with it.
+  // lines) survive with it. TASK 1044 (BUG-A, audit O-09b / O-09c): the ORIGIN is never gone: a deleted line drawn from it uses j_origin itself, and
+  // the other curves' dimensions / coincidents to the origin are not that line's (the origin point itself was always kept, removeOrphanJoints).
   const usedBySurvivors = new Set(state.shapes.flatMap((s) => asList(s && s.joints)));
   const kept = virtualSharpProtectedJoints(state);
-  const goneJ = new Set([...deleteJ, ...[...shapeJoints].filter((j) => !usedBySurvivors.has(j) && !kept.has(j))]);
+  // TASK 1044 (BUG-C, audit D-33, Fusion: the fillet arc goes with its points, no point stays): a deleted fillet arc's virtual sharp V
+  // (arc.filletSharp, a point on no curve) is the arc's own dependant: it goes with the arc, and with it the constraints that exist only to hold it
+  // (its point-on-line on the trimmed sides: they name V). It stays while a surviving curve still claims it (a construction radial re-linked to V,
+  // the other piece of a broken fillet arc) or a measurement dimension holds it (virtualSharpProtectedJoints, the documented exception).
+  const claimed = new Set(state.shapes.map((s) => s && s.filletSharp).filter(Boolean));
+  const sharps = [...goneSharps].filter((j) => { const v = state.joints.get(j); return v && v.virtualSharp && !claimed.has(j) && !usedBySurvivors.has(j) && !kept.has(j); });
+  const goneJ = new Set([...deleteJ, ...sharps, ...[...shapeJoints].filter((j) => !usedBySurvivors.has(j) && !kept.has(j))].filter((j) => j !== ORIGIN_JOINT_ID));
   for (let i = state.constraints.length - 1; i >= 0; i--) {
     const c = state.constraints[i];
     if (c && (namesAny(c, SHAPE_FIELDS, goneS) || namesAny(c, JOINT_FIELDS, goneJ) || namesDeletedLinePair(c))) state.constraints.splice(i, 1);
@@ -206,75 +214,61 @@ export function deleteJoints(state, jointIds) {
   return removed;
 }
 
-/**
- * Smart delete function that handles cascading deletions based on current selection.
- * Identifies implicit deletions (e.g., deleting a joint deletes connected lines) and
- * cleans up resulting orphans.
- * @param {object} state - Application state
- */
-export function deleteSelection(state) {
-  if (!state) return;
+// TASK 1044 THE POINT RULE (owner ruling 2026-11-27, Fusion measured: no curve end, centre or the origin is ever deletable; right-click Delete on
+// one opens Fusion's Delete with an empty selection): a selected point that is a CURVE's point (an end, a centre, a shared or glued corner, a bezier
+// anchor) or the ORIGIN is never deleted, and no curve goes because of it. A FREE point (no curve uses it: a centre rectangle's centre, a fillet's
+// virtual sharp) still deletes, with its constraints and dimensions (Fusion D-25). Every Delete path asks THIS plan (deleteSelection: the Delete key,
+// Backspace, the right-click / touch-and-hold menu, the footer red X, Cut; hasSelection: the red X's enabled state).
 
-  // 1. Identify explicit selections
+// What Delete does with the current selection: { pointSplits, constraints, shapes, joints (the free points and the selected shapes' orphaned points),
+// curvePoints (the selected curve points it refuses) }.
+function deletePlan(state) {
   // TASK 577: nothing of a LOCKED sketch is deleted (a pick cannot select it; this is the same rule for a selection made some other way)
   const inert = inertEntities(state);
   const pickedConstraints = state.selectedConstraints ? Array.from(state.selectedConstraints).filter((c) => !isConstraintInert(inert, c)) : [];
   // TASK 1041: a selected SharedPointCoincident glyph (#core/shared-point.js, derived, never stored) is a curve's membership of a shared point:
   // its Delete detaches that curve (deleteSharedPointCoincidents); every other selected constraint is deleted as before
   const pointSplits = pickedConstraints.filter(isSharedPointCoincident);
-  const constraintsToDelete = pickedConstraints.filter((c) => !isSharedPointCoincident(c));
-  const explicitShapes = state.selectedShapes ? Array.from(state.selectedShapes).filter((id) => !isShapeInert(inert, id)) : [];
-  const explicitJoints = state.selectedJoints ? Array.from(state.selectedJoints).filter((id) => !isJointInert(inert, id)) : [];
-
-  // 2. Cascade Logic: Identify orphaned joints (joints that would be left without any shapes)
-  // A joint is orphaned if ALL shapes connected to it are being deleted.
-  
-  // Shapes are deleted if:
-  // a) They are explicitly selected
-  // b) Any of their joints are explicitly selected (standard CAD behavior)
-  const allShapesToDelete = new Set(explicitShapes);
-  const jointsToDeleteSet = new Set(explicitJoints);
-
-  if (state.shapes) {
-      for (const s of state.shapes) {
-          if (s.joints && s.joints.some(jid => jointsToDeleteSet.has(jid))) {
-              allShapesToDelete.add(s.id);
-          }
-      }
-  }
-
-  // Find all joints involved in the deleted shapes
-  const candidateJoints = new Set();
-  if (state.shapes) {
-      for (const s of state.shapes) {
-          if (allShapesToDelete.has(s.id) && s.joints) {
-              s.joints.forEach(jid => candidateJoints.add(jid));
-          }
-      }
-  }
-
-  // Identify joints used by surviving shapes
-  const usedBySurvivors = new Set();
-  if (state.shapes) {
-      for (const s of state.shapes) {
-          if (!allShapesToDelete.has(s.id) && s.joints) {
-              s.joints.forEach(jid => usedBySurvivors.add(jid));
-          }
-      }
-  }
-
-  // Any candidate not used by survivors is an orphan -> delete it
-  const finalJointsToDelete = [...explicitJoints];
+  const constraints = pickedConstraints.filter((c) => !isSharedPointCoincident(c));
+  const shapes = state.selectedShapes ? Array.from(state.selectedShapes).filter((id) => !isShapeInert(inert, id)) : [];
+  const selectedJoints = state.selectedJoints ? Array.from(state.selectedJoints).filter((id) => !isJointInert(inert, id)) : [];
+  const onCurves = new Set((state.shapes || []).flatMap((s) => asList(s && s.joints)));
+  const isCurvePoint = (id) => id === ORIGIN_JOINT_ID || onCurves.has(id);
+  const curvePoints = selectedJoints.filter(isCurvePoint);
+  const joints = selectedJoints.filter((id) => !isCurvePoint(id));
+  // the selected shapes' points that no surviving shape uses go with them (a centre a constraint no longer names, an orphanAllowed slot centre)
+  const goneShapes = new Set(shapes);
+  const usedBySurvivors = new Set((state.shapes || []).filter((s) => s && !goneShapes.has(s.id)).flatMap((s) => asList(s.joints)));
   const vsProtected = virtualSharpProtectedJoints(state);
-  for (const jid of candidateJoints) {
-      if (!usedBySurvivors.has(jid) && !jointsToDeleteSet.has(jid) && !vsProtected.has(jid)) {
-          finalJointsToDelete.push(jid);
-          jointsToDeleteSet.add(jid);
-      }
+  const listed = new Set(joints);
+  for (const s of (state.shapes || [])) {
+    if (!s || !goneShapes.has(s.id)) continue;
+    for (const jid of asList(s.joints)) {
+      if (jid !== ORIGIN_JOINT_ID && !usedBySurvivors.has(jid) && !listed.has(jid) && !vsProtected.has(jid)) { joints.push(jid); listed.add(jid); }
+    }
   }
+  return { pointSplits, constraints, shapes, joints, curvePoints };
+}
+const planDeletes = (p) => p.pointSplits.length > 0 || p.constraints.length > 0 || p.shapes.length > 0 || p.joints.length > 0;
 
-  const safeToDelete = finalJointsToDelete.filter(id => id !== 'j_origin');
-  if (pointSplits.length === 0 && constraintsToDelete.length === 0 && explicitShapes.length === 0 && safeToDelete.length === 0) return;
+/** TASK 1044: the hint a Delete that the point rule refused answers with (null: nothing refused). The origin alone has its own sentence. */
+export function deleteRefusedHint(curvePoints) {
+  if (!curvePoints || curvePoints.length === 0) return null;
+  if (curvePoints.every((id) => id === ORIGIN_JOINT_ID)) return "The origin can't be deleted.";
+  return 'Select the line to delete it, or the corner mark to separate.';
+}
+
+/**
+ * Delete the current selection in ONE undo step (THE point rule above decides what goes): the selected constraints / dimensions, the selected
+ * SharedPointCoincident glyphs (a split), the selected shapes (with their points no surviving shape uses), the selected FREE points. Selected curve
+ * points are ignored. -> { deleted: whether anything was deleted, hint: deleteRefusedHint when nothing was and curve points were refused, else null }
+ * @param {object} state - Application state
+ */
+export function deleteSelection(state) {
+  if (!state) return { deleted: false, hint: null };
+  const plan = deletePlan(state);
+  const { pointSplits, constraints: constraintsToDelete, shapes: explicitShapes, joints: safeToDelete } = plan;
+  if (!planDeletes(plan)) return { deleted: false, hint: deleteRefusedHint(plan.curvePoints) };
 
   try { if (typeof state.beginUndoGroup === 'function') state.beginUndoGroup('delete selection'); } catch (_) {}
 
@@ -285,6 +279,7 @@ export function deleteSelection(state) {
   if (safeToDelete.length > 0) deleteJoints(state, safeToDelete);
 
   try { if (typeof state.endUndoGroup === 'function') state.endUndoGroup(); } catch (_) {}
+  return { deleted: true, hint: null };
 }
 
 /**
@@ -312,17 +307,14 @@ export function deleteSketch(state, id) {
   return { ok: true };
 }
 
-/** True when any deletable shape, non-origin joint, or constraint is currently selected for Delete. */
+/** True when Delete acts on the current selection: it deletes something, or (TASK 1044, the point rule) it answers a refused curve-point
+ *  selection with its hint, so the footer red X agrees with the Delete key. The same plan as deleteSelection. */
 export function hasSelection(state) {
   if (!state) return false;
-  const ss = state.selectedShapes, sj = state.selectedJoints, sc = state.selectedConstraints;
-  const rawS = ss ? ss.size : 0, rawJ = sj ? sj.size : 0, rawC = sc ? sc.size : 0;
-  if (rawS === 0 && rawC === 0 && (rawJ === 0 || (rawJ === 1 && sj.has('j_origin')))) return false;
-  const inert = inertEntities(state);
-  if (ss) { for (const id of ss) if (!isShapeInert(inert, id)) return true; }
-  if (sc) { for (const c of sc) if (!isConstraintInert(inert, c)) return true; }
-  if (sj) { for (const id of sj) if (id !== 'j_origin' && !isJointInert(inert, id)) return true; }
-  return false;
+  const size = (set) => (set ? set.size : 0);
+  if (size(state.selectedShapes) + size(state.selectedJoints) + size(state.selectedConstraints) === 0) return false;
+  const plan = deletePlan(state);
+  return planDeletes(plan) || plan.curvePoints.length > 0;
 }
 
 /** Display name of the active sketch (falls back to 'Sketch 1'). */

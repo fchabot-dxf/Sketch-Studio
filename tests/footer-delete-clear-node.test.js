@@ -1,6 +1,7 @@
 // tests/footer-delete-clear-node.test.js — TASK 619: footer Delete (#btn-delete-selection) and Clear sketch (#btn-clear-sketch):
 //   1. Both buttons exist with exact aria-labels and icon symbols (#icon-circle-x, #icon-trash) across node-app hosts (sketchstudio, shaper, penplotter).
-//   2. Disabled states: Delete disabled when nothing is selected, enables on shape / joint / constraint selection and disables again on Esc / delete;
+//   2. Disabled states: Delete disabled when nothing is selected, enables on shape / joint / constraint selection and disables again on Esc / delete
+//      (TASK 1044: the origin alone enables it too: Delete answers it with the point rule's hint);
 //      Clear sketch disabled when active sketch is empty or locked, enabled when active sketch owns shapes / non-origin joints / constraints.
 //   3. Delete button executes the exact same handleDelete path as the Delete key (identical resulting shapes / joints / constraints, ONE undo step, Redo restores).
 //   4. Clear sketch opens an in-app alertdialog ("Clear sketch '<name>'? This can be undone."), Cancel preserves state, OK clears ONLY the active sketch
@@ -203,13 +204,21 @@ for (const host of ['sketchstudio', 'shaper', 'penplotter']) {
     assert.strictEqual(lockedAttempt.reason, 'it is locked: unlock it first');
     assert.strictEqual(app.state.shapes.filter((s) => s.sketchId === sk2.id).length, 2, 'locked active sketch geometry preserved');
 
-    // Origin joint alone cannot be deleted -> hasSelection is false and Delete stays disabled
+    // Origin joint alone cannot be deleted; TASK 1044 (the point rule, advisor-approved): Delete answers it with the hint "The origin can't be
+    // deleted.", so the red X is ENABLED (it agrees with the Delete key) and its press deletes nothing
     app.state.selectedShapes.clear();
     app.state.selectedConstraints.clear();
     app.state.selectedJoints = new Set(['j_origin']);
     app.frames();
-    assert.strictEqual(hasSelection(app.state), false, 'j_origin alone is not deletable');
-    assert.strictEqual(app.document.getElementById('btn-delete-selection').disabled, true, 'Delete stays disabled when only j_origin is selected');
+    assert.strictEqual(hasSelection(app.state), true, 'j_origin alone: Delete answers it (with the hint)');
+    await tickMicro(); app.frames();
+    const delBtnO = app.document.getElementById('btn-delete-selection');
+    assert.strictEqual(delBtnO.disabled, false, 'Delete is enabled when only j_origin is selected (its press shows the hint)');
+    const jointsO = app.state.joints.size, histO = app.state.history.length;
+    app.press(delBtnO);
+    assert.strictEqual(app.state.joints.size, jointsO, 'the red X on the origin deletes nothing');
+    assert.strictEqual(app.state.history.length, histO, 'and makes no undo step');
+    assert(app.state.joints.has('j_origin'), 'the origin stays');
   } finally { await app.close(); }
 }
 

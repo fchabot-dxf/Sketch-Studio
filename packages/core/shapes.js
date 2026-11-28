@@ -2,7 +2,7 @@
 // SHAPES - Shape creation functions
 // 
 
-import { CONSTRAINT_TYPES, POLYGON_SIDES } from './constants.js';
+import { CONSTRAINT_TYPES, POLYGON_SIDES, ORIGIN_JOINT_ID } from './constants.js';
 import { getDist, angleBetween } from './geometry.js';
 import { newShapeId } from './shape-id.js';
 
@@ -154,15 +154,15 @@ export function clampPolygonSides(n) {
 }
 
 /**
- * Create a REGULAR polygon from a centre joint and a first corner joint (TASK 483). Plain geometry, no parametric shape kind:
+ * Create a REGULAR polygon from a centre joint and a first corner joint (TASK 483). Plain geometry, no parametric shape kind. TASK 1050: Fusion's
+ * recipe, as recorded (docs/RECIPE-PARITY-1037.md D-5):
  *   - N `line` shapes between N corner joints that are SHARED by neighbouring sides (the first corner is `vertexId`);
- *   - N construction `line` shapes centre -> corner (the radii);
- *   - constraints that keep it regular when edited: all SIDES equal and all RADII equal, each as a chain of N-1 `equal`
- *     constraints (a cyclic N would repeat one: a redundant constraint, which the solver must not be fed).
- * Unknowns: the centre (2) + N corners (2N); constraints: 2(N-1); so exactly 4 degrees of freedom are left: position (2),
- * size (1) and rotation (1), which is what "a regular polygon" has. Equal radii put the corners on one circle around the
- * centre and equal sides make the steps between them equal, so the shape cannot drift into a rhombus or a star.
- * The edge shapes carry a shared `groupId` like a rect's (the renderer's closed-shape key); the radii do not.
+ *   - the centre a LONE point (no construction radii);
+ *   - ONE POLYGON constraint (#core/polygon.js): the corners lie on one circle about the centre and are evenly spaced. 2(N-1) independent rows
+ *     over the centre (2) + N corners (2N): exactly 4 degrees of freedom are left, position (2), size (1) and rotation (1), Fusion's 4.
+ * The corners go round in order of increasing world angle, side i from corner i to corner i+1 (the record's order). The centre is kept as a lone
+ * point when the constraint goes (orphanAllowed, like the centre rectangle's and the slot's centre). The edge shapes carry a shared `groupId`
+ * like a rect's (the renderer's closed-shape key). A file saved before task 1050 keeps its construction radii and its 2(N-1) EQUAL constraints.
  */
 export function makePolygon(joints, centerId, vertexId, numSides, genJ, isConstruction = false) {
     const center = joints.get(centerId);
@@ -182,19 +182,13 @@ export function makePolygon(joints, centerId, vertexId, numSides, genJ, isConstr
         joints.set(id, { x: center.x + radius * Math.cos(angle), y: center.y + radius * Math.sin(angle), fixed: false });
         corners.push(id);
     }
+    if (!center.orphanAllowed && centerId !== ORIGIN_JOINT_ID) center.orphanAllowed = true;
 
-    const shapes = [], constraints = [];
-    const sideIds = [], radiusIds = [];
+    const shapes = [];
     for (let i = 0; i < n; i++) {
-        const sideId = `s_poly_${seq}_${i}`, radId = `s_poly_radial_${seq}_${i}`;
-        shapes.push({ id: sideId, type: 'line', joints: [corners[i], corners[(i + 1) % n]], groupId, isConstruction: !!isConstruction });
-        shapes.push({ id: radId, type: 'line', joints: [centerId, corners[i]], isConstruction: true });
-        sideIds.push(sideId); radiusIds.push(radId);
+        shapes.push({ id: `s_poly_${seq}_${i}`, type: 'line', joints: [corners[i], corners[(i + 1) % n]], groupId, isConstruction: !!isConstruction });
     }
-    for (let i = 0; i + 1 < n; i++) {
-        constraints.push({ type: CONSTRAINT_TYPES.EQUAL, shapes: [sideIds[i], sideIds[i + 1]] });
-        constraints.push({ type: CONSTRAINT_TYPES.EQUAL, shapes: [radiusIds[i], radiusIds[i + 1]] });
-    }
+    const constraints = [{ type: CONSTRAINT_TYPES.POLYGON, joints: [centerId, ...corners], shapes: shapes.map((sh) => sh.id) }];
     return { shapes, constraints };
 }
 

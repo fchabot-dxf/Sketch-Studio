@@ -560,10 +560,13 @@ export function applyFillet(state, cornerInfo, radius = 5, options = {}) {
 
       // MEASUREMENT constraints (a joint-pair DISTANCE, a joint-form EQUAL) keep meaning the SHARP corner: any
       // joint of the corner cluster is re-linked to the virtual-sharp joint V and the ORIGINAL value is kept,
-      // so editing the fillet radius never changes an overall dimension (Fusion's behaviour).
+      // so editing the fillet radius never changes an overall dimension (Fusion's behaviour). TASK 1050: so does a POLYGON constraint
+      // (#core/polygon.js): its corners are POINTS of the regular N-gon, and the filleted corner stays one of them as the sharp corner V
+      // (as the construction radial of a polygon saved before task 1050 is re-linked to V above).
       const isMeasure = !c.isRadius && (
         (c.type === CONSTRAINT_TYPES.DISTANCE && Array.isArray(c.joints) && c.joints.length >= 2) ||
-        (c.type === CONSTRAINT_TYPES.EQUAL && Array.isArray(c.joints) && c.joints.length >= 4));
+        (c.type === CONSTRAINT_TYPES.EQUAL && Array.isArray(c.joints) && c.joints.length >= 4) ||
+        c.type === CONSTRAINT_TYPES.POLYGON);
       if (isMeasure) {
         for (let k = 0; k < c.joints.length; k++) if (cluster.has(c.joints[k])) c.joints[k] = jV;
         continue;

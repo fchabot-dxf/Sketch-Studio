@@ -9,7 +9,7 @@
 //     LAST (measured twice with the roles reversed); the earlier curve gets a fresh point;
 //   - never refused: an Offset copy's corner split removes the Offset relationship; a circular pattern SOURCE corner split removes the pattern.
 // Parts:
-//   A  polygon corner (3 curves: 2 edges + the construction radius): 2 glyphs, shown only while the point is selected; a click on a glyph selects
+//   A  polygon corner (3 curves: 2 edges + a line drawn from it; TASK 1050: a polygon has no construction radius any more): 2 glyphs, shown only while the point is selected; a click on a glyph selects
 //      it; Delete detaches that curve: +1 joint, the owner keeps the id and the point's pointOnLine, DOF +2, converges, ONE undo step restoring
 //      the shared joint exactly (ids), the other two curves keep sharing; a drag of the detached end pulls the corner apart; save + reload
 //   B  the kept-attachment rule on two lines with a point dimension, a pointOnLine and a lock on the point and H + length on each line, both
@@ -111,9 +111,12 @@ function splitVia(app, jid, curveId, how = 'key') {
   app.tool('polygon'); clk(app, 0, 0); clk(app, 30, 0); app.esc(); app.esc();
   app.tool('select'); app.esc();
   const edges = S.shapes.filter((s) => !s.isConstruction);
-  const corner = edges[0].joints[1]; // edge 0's end = edge 1's start, and one construction radius
+  const corner = edges[0].joints[1]; // edge 0's end = edge 1's start
+  // TASK 1050: the polygon's corner joins its two sides only (no construction radius): a Line drawn from it makes the third curve (it SHARES the end point)
+  app.tool('line'); clickJoint(app, corner); clk(app, 35, 45); app.esc(); app.esc();
+  app.tool('select'); app.esc();
   const curves = curvesAtJoint(S.shapes, corner);
-  check(curves.length === 3, `A: the polygon corner is shared by 3 curves (2 sides + the construction radius): ${curves.length}`);
+  check(curves.length === 3, `A: the polygon corner is shared by 3 curves (2 sides + the line drawn from it): ${curves.length}`);
   check(glyphsAt(app, corner).length === 2, 'A: n - 1 = 2 SharedPointCoincident glyphs there (Fusion: 3 lines -> 2)');
   const owner = curves[2];
   check(!glyphsAt(app, corner).some((g) => g.shape === owner.id), 'A: the latest curve owns the point: no glyph of its own');
@@ -541,6 +544,7 @@ for (const how of ['menu', 'footer']) {
   const S = app.state;
   app.tool('polygon'); clk(app, 0, 0); clk(app, 30, 0); app.esc(); app.esc();
   const corner = S.shapes[0].joints[1];
+  app.tool('line'); clickJoint(app, corner); clk(app, 35, 45); app.esc(); app.esc(); // TASK 1050: a third curve at the corner (the polygon has no radius)
   const victim = curvesAtJoint(S.shapes, corner)[0];
   const { before, newJoint } = splitVia(app, corner, victim.id, how);
   check(S.joints.size === before.joints + 1 && !!newJoint && S.history.length === before.history + 1, `K ${how}: Delete splits the point (+1 joint, ONE step)`);

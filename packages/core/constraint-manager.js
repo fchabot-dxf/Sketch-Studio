@@ -663,6 +663,7 @@ export class ConstraintManager {
             [CONSTRAINT_TYPES.ANGLE]: 'Angle',
             [CONSTRAINT_TYPES.MIDPOINT]: 'Midpoint',
             [CONSTRAINT_TYPES.SYMMETRIC]: 'Symmetric',
+            [CONSTRAINT_TYPES.POLYGON]: 'Polygon',
         };
         return names[type] || type;
     }

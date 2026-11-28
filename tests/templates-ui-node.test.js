@@ -59,13 +59,13 @@ try {
   await openSb();
   assert.strictEqual(q('.sk-sidebar-doc').textContent, 'Hexagon', 'the new design is named after the template');
   app.undo(); await settle();
-  assert.strictEqual(st.shapes.length, 12, 'Undo on a fresh template design leaves it (the drawing is its starting document)');
+  assert.strictEqual(st.shapes.length, 6, 'Undo on a fresh template design leaves it (the drawing is its starting document)'); // TASK 1050: the hexagon's 6 sides (no radii)
 
   // New design: same modal (Blank first); the X = no new design; Blank = the empty design
   pressEl('[data-action="new-design"]'); await settle();
   assert.deepStrictEqual(qa('.sk-tp-card').map((c) => c.dataset.template), expectedOrder, 'New design: Blank first, then the templates');
   pressEl('.sk-tp-x'); await settle();
-  assert.strictEqual(st.shapes.length, 12, 'the X: no new design');
+  assert.strictEqual(st.shapes.length, 6, 'the X: no new design');
   await openSb(); pressEl('[data-action="new-design"]'); await settle();
   pressEl('.sk-tp-card[data-template="blank"]'); await settle(400);
   // the template design is an unsaved design with content: replacing it asks THE question (Save... / Don't save / Cancel) like any unsaved Untitled

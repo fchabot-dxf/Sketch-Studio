@@ -1,8 +1,8 @@
 // Regular POLYGON tool (TASK 483) — click = centre; drag, or a second click = a corner (sets the radius AND the rotation).
 // N sides come from state.polygonSides (default 6, 3..64, remembered in localStorage). TASK 596: after the centre click the on-canvas
 // two-field box (numeric-input-manager's dual box: size, sides) is the one place to type them: Tab switches fields, Enter or a click
-// places it, Esc cancels. The result is N plain LINE shapes with shared joints + construction radii + equal-side / equal-radius
-// constraints (core/shapes.js makePolygon), made in ONE undo group so a single Undo removes the whole polygon. Modelled on the
+// places it, Esc cancels. The result is N plain LINE shapes with shared joints, a lone centre and ONE polygon constraint (TASK 1050, Fusion's
+// recipe: core/shapes.js makePolygon, #core/polygon.js), made in ONE undo group so a single Undo removes the whole polygon. Modelled on the
 // circle tool (same click-or-drag flow).
 import { TOOL_MODES, POLYGON_SIDES, CONSTRAINT_TYPES } from '#core/constants.js';
 import { addConstraint } from '#core/constraints.js';
@@ -159,7 +159,7 @@ export function createPolygon(state, endPt, vertexSnap = null) {
     rememberSides(state, sides);
     for (const s of built.shapes) state.shapes.push(s);
     for (const c of built.constraints) addConstraint(state, c.type, c);
-    // TASK 1013 (B-19b): a typed radius (or formula `d1 / 2`) becomes a driving radius dimension on the polygon's radial
+    // TASK 1013 (B-19b): a typed radius (or formula `d1 / 2`) becomes a driving dimension from the centre to the first corner (TASK 1050: no radial line)
     if (typedRadius != null) {
         if (radiusAssign) applyLiveAssign(state, radiusAssign);
         ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {

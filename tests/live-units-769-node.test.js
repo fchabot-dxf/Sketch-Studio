@@ -102,8 +102,9 @@ try {
     eq(boxes(), [want(prad), '6'], `${tag} polygon: the box R x N`);
     n0 = st.shapes.length;
     app.type('1 1/2'); app.enter();
-    made = newShapes(n0).filter((s) => s.type === 'line' && s.isConstruction);
-    near(lenOf(made[0]), L(1.5), `${tag} polygon typed 1 1/2: the radius`);
+    // TASK 1050: the polygon has no construction radius: its radius is centre -> first corner of its polygon constraint ([centre, v0, ...])
+    const pg = st.constraints.filter((c) => c.type === 'polygon').pop();
+    near(lenOf({ joints: pg.joints }), L(1.5), `${tag} polygon typed 1 1/2: the radius`);
     reset();
 
     // Arc: the radius box (typed bare 2), then the sweep box (an angle: 90)

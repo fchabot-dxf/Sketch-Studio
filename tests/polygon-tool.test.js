@@ -1,5 +1,7 @@
 // tests/polygon-tool.test.js — TASK 483: the regular POLYGON tool, on the REAL engine and the REAL tool handlers.
 // N = 3, 6, 64: N lines, closed, equal sides within 1e-6; it stays regular when a corner is dragged; the DOF left is exactly 4
+// TASK 1050: Fusion's recipe: no construction radii, ONE polygon constraint (its centre = the lone centre point, the radii below are measured
+// from it to the corners)
 // (position, size, rotation: measured by perturb-and-solve, not assumed); the whole polygon is ONE undo step; the preview draws
 // no NaN/undefined and an invalid one is not a preview; the click-click flow, a zero-radius second click, and the side clamp.
 import assert from 'node:assert';
@@ -16,6 +18,8 @@ const ev = (x, y) => ({ clientX: x, clientY: y });
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const edgesOf = (shapes) => shapes.filter((s) => s.type === 'line' && !s.isConstruction);
 const radiiOf = (shapes) => shapes.filter((s) => s.type === 'line' && s.isConstruction);
+// the centre -> corner distances of the polygon constraint [centre, v0, ..., vN-1] (TASK 1050: there is no radius line)
+const radiusLengths = (state) => { const pc = state.constraints.find((c) => c.type === CONSTRAINT_TYPES.POLYGON); return pc.joints.slice(1).map((j) => dist(state.joints.get(pc.joints[0]), state.joints.get(j))); };
 const spread = (vals) => Math.max(...vals) - Math.min(...vals);
 
 // A tool-ready state on the REAL engine + the real sketch state (undo groups included).
@@ -47,9 +51,9 @@ for (const n of [3, 6, 64]) {
   const t0 = Date.now();
   assert.strictEqual(drawPolygon(state, 10, 0), true, 'the tool handled the gesture');
   engine.solve(500);
-  const sides = edgesOf(state.shapes), radii = radiiOf(state.shapes);
+  const sides = edgesOf(state.shapes);
   assert.strictEqual(sides.length, n, `N=${n}: N plain line shapes`);
-  assert.strictEqual(radii.length, n, 'and N construction radii');
+  assert.strictEqual(radiiOf(state.shapes).length, 0, 'and no construction radius (TASK 1050, Fusion: none)');
   assert(state.shapes.every((s) => s.type === 'line'), 'plain lines only: no parametric shape kind');
   // a closed ring: every corner joint is used by exactly two sides, the sides chain end to start
   const uses = new Map();
@@ -58,12 +62,12 @@ for (const n of [3, 6, 64]) {
   for (let i = 0; i < n; i++) assert.strictEqual(sides[i].joints[1], sides[(i + 1) % n].joints[0], 'side ' + i + ' ends where side ' + (i + 1) % n + ' starts');
   const len = sides.map((s) => dist(state.joints.get(s.joints[0]), state.joints.get(s.joints[1])));
   assert(spread(len) < 1e-6, `N=${n}: sides equal within 1e-6 (spread ${spread(len)})`);
-  const rad = radii.map((s) => dist(state.joints.get(s.joints[0]), state.joints.get(s.joints[1])));
+  const rad = radiusLengths(state);
   assert(spread(rad) < 1e-6, 'radii equal within 1e-6');
   assert(Math.abs(len[0] - 2 * rad[0] * Math.sin(Math.PI / n)) < 1e-6, 'and the side length is that of a REGULAR N-gon: 2R sin(pi/N)');
   assert(Math.abs(rad[0] - 10) < 1e-6, 'the corner is where the user put it (radius 10)');
-  assert.strictEqual(state.constraints.length, 2 * (n - 1), 'exactly 2(N-1) equal constraints: no redundant one');
-  assert(state.constraints.every((c) => c.type === CONSTRAINT_TYPES.EQUAL));
+  assert.strictEqual(state.constraints.length, 1, 'exactly ONE constraint (TASK 1050, Fusion: Polygon())');
+  assert.strictEqual(state.constraints[0].type, CONSTRAINT_TYPES.POLYGON);
   assert(state.activeCount === undefined && state.active === null, 'the tool is finished');
   console.log(`N=${n}: ${sides.length} sides, spread ${spread(len).toExponential(1)}, ${state.constraints.length} constraints, ${Date.now() - t0} ms`);
 }
@@ -91,7 +95,7 @@ for (const n of [3, 5, 6, 12]) {
     s.drag(target, dx, dy);
     s.solve();
     const len = edgesOf(state.shapes).map((sh) => dist(state.joints.get(sh.joints[0]), state.joints.get(sh.joints[1])));
-    const rad = radiiOf(state.shapes).map((sh) => dist(state.joints.get(sh.joints[0]), state.joints.get(sh.joints[1])));
+    const rad = radiusLengths(state);
     assert(spread(len) < 1e-4 && spread(rad) < 1e-4, `N=${n}: still regular after dragging a corner by (${dx},${dy}): sides ${spread(len)}, radii ${spread(rad)}`);
     assert(Math.abs(len[0] - 2 * rad[0] * Math.sin(Math.PI / n)) < 1e-4, 'and still a regular N-gon (not a rhombus / star)');
   }
@@ -130,11 +134,11 @@ for (const n of [3, 4, 5, 6, 8]) {
   const { engine, state } = realState(6);
   const before = { joints: state.joints.size, shapes: state.shapes.length, constraints: state.constraints.length };
   drawPolygon(state, 10, 0);
-  assert.strictEqual(state.shapes.length, 12); assert(state.constraints.length > 0);
+  assert.strictEqual(state.shapes.length, 6); assert(state.constraints.length > 0); // TASK 1050: 6 sides, no radii
   state.undo();
   assert.deepStrictEqual({ joints: state.joints.size, shapes: state.shapes.length, constraints: state.constraints.length }, before, 'ONE Undo removes every line, joint and constraint of the polygon');
   state.redo();
-  assert.strictEqual(state.shapes.length, 12, 'and Redo restores it');
+  assert.strictEqual(state.shapes.length, 6, 'and Redo restores it');
 }
 
 // 7. click-click flow, and a second click on the centre makes nothing (no leftover joint). Task 596: the first click opens the on-canvas

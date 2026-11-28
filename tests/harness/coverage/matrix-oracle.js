@@ -58,9 +58,10 @@ export async function oracleState(S) {
     // a 'solution' that collapses a line to a point is not a drawing (PlaneGCS accepts it, the app must not)
     let collapsed = false;
     for (const sh of S.state.shapes) if (sh.type === 'line' && sh.joints.length === 2) { const a = solved.get(sh.joints[0]), b = solved.get(sh.joints[1]); if (a && b && Math.hypot(a.x - b.x, a.y - b.y) < 1e-3) collapsed = true; }
-    // TASK 550: likewise an arc whose two ends meet (the app's own rule, constraint-verifier.js findCollapsedShape, EA-1)
+    // TASK 550: likewise an arc whose two ends meet (the app's own rule, constraint-verifier.js findCollapsedShape, EA-1); TASK 1050: or whose radius
+    // shrinks to a point (the same rule's radius test: PlaneGCS made a polygon side tangent to an arc centred on that side's own end, tangent SA shared)
     { const sizes = (P) => measureShapeSizes({ joints: P, shapes: S.state.shapes }), was = sizes(S.state.joints), now = sizes(solved);
-      for (const sh of S.state.shapes) { const w = was.get(sh.id), n = now.get(sh.id); if (sh.type === 'arc' && w && n && w.length === 3 && n.length === 3 && w[1] > 1e-6 && n[1] < w[1] * COLLAPSE_RATIO && n[2] < w[2] * COLLAPSE_RATIO) collapsed = true; } }
+      for (const sh of S.state.shapes) { const w = was.get(sh.id), n = now.get(sh.id); if (sh.type === 'arc' && w && n && w.length === 3 && n.length === 3 && ((w[1] > 1e-6 && n[1] < w[1] * COLLAPSE_RATIO && n[2] < w[2] * COLLAPSE_RATIO) || (w[0] > 1e-6 && n[0] < w[0] * COLLAPSE_RATIO))) collapsed = true; } }
     return { collapsed, residual, status, dof: w.gcs.dof(), conflicting: w.get_gcs_conflicting_constraints().length, redundant: w.get_gcs_redundant_constraints().length, mapped: left.length === 0 };
   } finally { w.destroy_gcs_module(); }
 }

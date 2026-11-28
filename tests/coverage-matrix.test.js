@@ -20,8 +20,8 @@ const diff = (a, b) => `got ${JSON.stringify([...a].sort())} expected ${JSON.str
 const EXPECTED = {
   tools: ['select', 'line', 'rect', 'slot', 'circle', 'polygon', 'arc', 'bezier', 'text', 'trim', 'break', 'closePath', 'fillet', 'offset', 'dim', 'coincident', 'hv', 'parallel', 'perp', 'collinear', 'tangent', 'equal', 'midpoint', 'symmetric', 'mirror', 'circularPattern', 'rectangularPattern'],
   notInRibbon: ['pan'],
-  constraintTypes: ['coincident', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'pointOnLine', 'distance', 'equal', 'angle', 'midpoint', 'symmetric', 'offset', 'circularPattern', 'rectangularPattern'],
-  definitions: ['distance', 'point_on_line', 'coincident', 'horizontal', 'vertical', 'midpoint', 'collinear', 'parallel', 'perpendicular', 'tangent', 'equal', 'angle', 'symmetric', 'offset', 'circularPattern', 'rectangularPattern', 'mouse_spring'],
+  constraintTypes: ['coincident', 'horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'pointOnLine', 'distance', 'equal', 'angle', 'midpoint', 'symmetric', 'offset', 'circularPattern', 'rectangularPattern', 'polygon'],
+  definitions: ['distance', 'point_on_line', 'coincident', 'horizontal', 'vertical', 'midpoint', 'collinear', 'parallel', 'perpendicular', 'tangent', 'equal', 'angle', 'symmetric', 'offset', 'circularPattern', 'rectangularPattern', 'polygon', 'mouse_spring'],
   shapeKinds: ['line', 'construction line', 'circle', 'arc (centre, start, end)', 'fillet arc', 'polygon side', 'rect side', 'bezier', 'point / joint'],
   shapeTypeLiterals: ['arc', 'bezier', 'circle', 'line'],
   dimensionModes: ['aligned', 'horizontal', 'vertical', 'line length', 'point-line', 'line-line', 'angle', 'radius'],
@@ -70,7 +70,8 @@ const COVER = {
   // a constraint type no matrix row can make (made by a tool from one pick, not between two existing operands): deferred with its own tests
   constraintTypesDeferred: { offset: 'made only by the Offset tool with its own new geometry (task 650): tests/offset-650.test.js (rows, Jacobian = finite differences, 0 DOF, edit, save / load)',
     circularPattern: 'made only by the Circular Pattern tool with its own copies (task 658): tests/pattern-658.test.js (rows, Jacobian = finite differences, 0 DOF, regenerate, save / load, undo, paste, delete)',
-    rectangularPattern: 'made only by the Rectangular Pattern tool with its own copies (task 658): tests/pattern-658.test.js (rows, Jacobian = finite differences, 0 DOF, regenerate, save / load, undo, paste, delete)' },
+    rectangularPattern: 'made only by the Rectangular Pattern tool with its own copies (task 658): tests/pattern-658.test.js (rows, Jacobian = finite differences, 0 DOF, regenerate, save / load, undo, paste, delete)',
+    polygon: 'made only by the Polygon tool with its own sides (task 1050): tests/polygon-1050-node.test.js (the recipe, DOF 4, no redundant row, delete, drag, typed size, save / load, undo, old files) and tests/jacobian-fd-guard.test.js' },
   definitionsDeferred: { mouse_spring: 'drag spring, not a user constraint' },
   dimensionModes: { aligned: 'dim-aligned', horizontal: 'dim-horizontal', vertical: 'dim-vertical', 'line length': 'dim-length', 'point-line': 'dim-point-line', 'line-line': 'dim-line-line', angle: 'dim-angle-xy', radius: 'dim-radius' },
   shapeKinds: { line: 'L', 'construction line': 'C', circle: 'O', 'arc (centre, start, end)': 'A', 'fillet arc': 'F', 'polygon side': 'S', 'rect side': 'R', bezier: 'B', 'point / joint': 'P' },
@@ -95,8 +96,9 @@ ok('a diameter dimension is covered through Slot width (not a separate matrix ro
 // NEW findings (docs/COVERAGE-AUDIT.md). Each is required to have failing cells; its repro (matrix-findings.js) is expected to FAIL.
 const KNOWN = {
   'NEW-6': 'feasible tangent refused in the shared variant: equal concentric circles (lockTangentBranch locks external) and an arc centred on another arc rim (the nearest solve collapses it); the radius-must-change cells were fixed by tasks 515 and 523',
-  'NEW-10': 'coincident onto a fillet arc whose centre is shared with the other operand (LF / CF / SF shared): feasible (PlaneGCS keeps the fillet arc at 83 degrees) but our solve collapses it (its two ends meet, 79 -> 0 degrees): refused (task 550: a zero-sweep arc is never accepted; before task 550 the collapse was accepted and the cell read PASS); solving to the non-collapsed pose is follow-up work, the same family as the feasible cells refused by task 521',
+  'NEW-10': 'coincident onto a fillet arc whose centre is shared with the other operand (LF / CF shared; SF shared passes since task 1050): feasible (PlaneGCS keeps the fillet arc at 83 degrees) but our solve collapses it (its two ends meet, 79 -> 0 degrees): refused (task 550: a zero-sweep arc is never accepted; before task 550 the collapse was accepted and the cell read PASS); solving to the non-collapsed pose is follow-up work, the same family as the feasible cells refused by task 521',
   // NEW-11 (fillet arc stored sweep=undefined) deleted in task 1009: applyFillet sets arcShape.sweep from creation orientation.
+  'NEW-12': 'parallel between a polygon side and a rectangle top that a dimension ties to it (SR dimmed): feasible (the polygon turns) but refused: neither operand can satisfy it alone without worsening a driving constraint, the forced start turns the rectangle top and that solve collapses a rectangle side (task 521). origin/main refused it too; its PlaneGCS verdict was infeasible with the old polygon recipe and is feasible with the Polygon constraint (task 1050)',
   // NEW-9 (coincident of a line end onto a rect corner that shares the line's other end, refused by a collapsing solve) was deleted by task 525:
   // the who-moves placement moves one operand and no matrix cell fails it any more.
 };

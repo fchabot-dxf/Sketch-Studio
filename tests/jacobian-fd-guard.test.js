@@ -51,6 +51,8 @@ const CASES = {
   // task 658: L2 as the copy of L1 moved 5 along X (constant directions)
   rectangularPattern: { type: 'rectangularPattern', sources: { shapes: ['L1'], points: ['a', 'b'], shapeJoints: [[0, 1]] }, directions: [null, null],
     quantity: [2, 1], distance: [5, 5], distanceType: 'spacing', symmetric: [false, false], suppressed: [], instances: [{ at: [1, 0], shapes: ['L2'], joints: ['c', 'd'] }] },
+  // task 1050: a 4-corner polygon about m (corners a, b, c, d; the sides are names only, the rows read the joints): the centre, v0 and every corner column
+  polygon: { type: 'polygon', joints: ['m', 'a', 'b', 'c', 'd'], shapes: ['L1', 'L2', 'L3', 'L1'] },
 };
 
 // One case: analytic J vs central finite differences on EVERY column of x (joint x/y and circle radius). Returns the largest |J| on

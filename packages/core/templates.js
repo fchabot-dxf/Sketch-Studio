@@ -802,9 +802,10 @@ function buildBrace(d, p) {
 // regularPolygonVertices: P_0 on top, centred on the origin), the boards come from THE per-vertex frame engine (calculatePolygonFrameGeometry,
 // frame-calc's calculateQuadFrameGeometry: the one engine every polygon frame uses) with ONE joint at every corner (Miter | CW-Through |
 // CCW-Through). TASK 680: the INNER polygon is the Polygon tool's (construction, centred on the origin, its first corner straight above the
-// centre: its sides equal, its radii equal), the boards are drawn on its corners through the one board path; every edge lies on the outer or
-// the inner face of a board (2 N slanted carriers, carrierRules). Each outer corner on its corner's radius, the outer faces parallel to the
-// inner ones (N - 1 of them: the last one follows), the outer side length and the thickness (the first board's two faces).
+// centre: a regular N-gon, TASK 1050: its one polygon constraint), the boards are drawn on its corners through the one board path; every edge
+// lies on the outer or the inner face of a board (2 N slanted carriers, carrierRules). Each outer corner on its corner's radius (a construction
+// line from the centre to that inner corner, drawn here with the Line tool: the Polygon tool draws no radius since task 1050), the outer faces
+// parallel to the inner ones (N - 1 of them: the last one follows), the outer side length and the thickness (the first board's two faces).
 function buildPolygonFrame(d, p) {
   const N = Math.round(num(p.sides, 6)), side = num(p.sideLength, 300), t = num(p.thickness, 38);
   const g = calculatePolygonFrameGeometry({ P: regularPolygonVertices(N, side), thick: t, joints: cornerList(p.joint, N) }); // TASK 674: a joint per corner
@@ -812,7 +813,6 @@ function buildPolygonFrame(d, p) {
   const C = d.pt(0, 0), V = d.pt(...user(g.Q[0]));
   const poly = ops.polygon(d.state, C, V, n, true); // the inner polygon (construction), its first corner Q_0
   d.anchor(C);
-  const radial = (j) => poly.shapes.find((s) => s.isConstruction && s.joints[0] === C && s.joints[1] === j && !s.groupId);
   const nearest = (q) => [...new Set(poly.shapes.flatMap((s) => s.joints))].filter((j) => j !== C)
     .reduce((best, j) => { const a = d.pos(j), e = Math.hypot(a.x - q.x, a.y - q.y); return !best || e < best.e ? { j, e } : best; }, null).j;
   const Qj = g.Q.map(nearest);
@@ -822,7 +822,8 @@ function buildPolygonFrame(d, p) {
   const cr = carrierRules(d, board, carriers), outer = cr.slice(0, n), inner = cr.slice(n);
   const Pj = g.P.map((q) => board.J(q));
   d.v(C, Qj[0]);
-  Pj.forEach((j, k) => d.on(j, radial(Qj[k]).id));
+  const radials = Qj.map((j) => d.line(C, j, true)); // the radius of each inner corner (construction, from the centre)
+  Pj.forEach((j, k) => d.on(j, radials[k].id));
   for (let k = 0; k + 1 < n; k++) d.parallel(outer[k].ref, inner[k].ref);
   d.dim(Pj[0], Pj[1], 'aligned', 1, 'side_length');
   d.gap(outer[0].ref, inner[0].ref, 1, 'thickness');

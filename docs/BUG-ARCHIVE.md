@@ -3962,6 +3962,37 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Related:** BUG-460, BUG-383 (the arc slot's 4th tangent, task `1038`)
 - **History:** found in audit `1037` (`D-6`) -> fixed in task `1049`. Probe after: `P-05 ShapeSlotCenterToCenter: width dimension none; DOF with it: solver 4 model 4; ... | Fusion model 4`, `P-06 ShapeArcSlotThreePoint: width dimension none; DOF with it: solver 6 model 6; ... | Fusion model 6`.
 
+### BUG-470
+- **Date / turn:** 2026-11-28 (audit `1037` divergence `D-5`; fixed in task `1050`, owner-approved 2026-11-27: "one rule instead of ~20 marks")
+- **Reported by:** audit `1037` (probe `P-04`; Fusion recorded by the advisor: `ShapePolygonInscribed` / `Circumscribed` / `Edge`, 6 sides: 6 lines, points 7 with the centre a lone point, constraints `["Polygon()"]`, no dimension, no construction line, DOF 4)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (Polygon tool; the Hexagon and Polygon Frame templates)
+- **Report:** `D-5`: `P-04 polygon: construction lines 6 (Fusion 0); constraints 10 (Fusion 1: Polygon); glyphs {"equal":20}`; `P-04 delete ONE equal (the user's Delete on one glyph): DOF 5 (was 4): the polygon is no longer regular. Fusion: the one Polygon constraint goes as a whole (model without it: 14)`.
+- **What was wrong:** a polygon was built from N dashed construction radii + 2(N-1) Equal constraints: 20 equal glyphs on a hexagon, radii a user could snap to, select and dimension, and deleting one equal left a partly irregular polygon. Fusion draws no radius, shows ONE Polygon constraint and deletes it as a whole.
+- **Cause:** `packages/core/shapes.js` `makePolygon` built the regular N-gon from equals (there was no polygon constraint type).
+- **Fix:** a declared POLYGON constraint type (`packages/core/polygon.js`: `{ type: 'polygon', joints: [centre, v0 .. vN-1], shapes: [sides] }`; the rule v(i) - c - R(2 pi i / N)(v0 - c) = 0, 2(N-1) LINEAR rows, independent everywhere: DOF 4, no redundant row), through the declared paths: `CONSTRAINT_TYPES.POLYGON`, `createConstraint` / `hasConstraint` / `getConstrainedGeometry` (save, load, undo, paste), the solver Definition, the verifier, the glyph (the owner's sheet `glyph-polygon`, ONE beside the centre: the centre's glyph bucket; Fusion's icon and placement unverified), the Design panel row, the transform table; `makePolygon` builds the sides, the shared corners, the lone centre (kept as a point when the constraint goes, `orphanAllowed`) and the one constraint. A fillet on a corner keeps the corner as its virtual sharp in the constraint (`fillet.js`), and deleting that fillet arc keeps the virtual sharp and the polygon (`delete-manager.js` `virtualSharpProtectedJoints`, as the old radial did: DOF 6 before and after); the creation placement carries the lone centre with its polygon (`creation-placement.js` `bodyOf`); the Polygon Frame template draws its own construction radii (`templates.js`). Files saved before keep their radii and equals (no conversion).
+- **Task id(s):** `1050`
+- **Fix merge sha:** open (`agents/polygon-1050`, awaiting merge)
+- **Guarding test file(s):** `tests/polygon-1050-node.test.js` (the recipe N = 3 / 6 / 64, DOF 4, rows = rank; one glyph, its Delete, the side Delete; drags; typed sizes; save / reload; undo / redo; an old file; mirror / pattern / offset copies; break / trim), `tests/polygon-1050-live.test.js` (desktop + phone: one glyph, Delete), `tests/polygon-tool.test.js`, `tests/jacobian-fd-guard.test.js`, `tests/verifier-covers-definitions.test.js`, `tests/dimension-fields-and-fillet-517.test.js` (N-F2)
+- **Status:** fixed
+- **Family:** `solver`
+- **Related:** BUG-460, BUG-461, BUG-462 (the other recipes of audit `1037`), BUG-471
+- **History:** found in audit `1037` (`D-5`) -> fixed in task `1050`. Probe after: `P-04 verdict: SAME | construction 0 (Fusion 0) | constraints ["polygon"] (Fusion ["Polygon()"]) | points 7 lone 1 (Fusion 7 lone 1) | DOF 4 (Fusion model 4) | glyphs {"polygon":1}`; `P-04 delete the polygon constraint (the user's Delete on its glyph): DOF 14 (was 4) | ... (model without it: 14) | SAME`.
+
+### BUG-471
+- **Date / turn:** 2026-11-28 (found in task `1050` by the coverage matrix, `docs/COVERAGE-AUDIT.md` NEW-12)
+- **Reported by:** task `1050` (the coverage matrix's PlaneGCS oracle, once the polygon side is the Polygon constraint's)
+- **App(s) & host:** SketchStudio, Shaper, Pen Plotter, Trace (the Parallel tool)
+- **Report:** `parallel SR dimmed refused-feasible`: Parallel between a polygon side and a rectangle's top, with a driving dimension from a polygon corner to a rectangle corner, is refused (`Parallel rejected: creates a conflict`) although the polygon can turn to satisfy it (PlaneGCS solves it).
+- **What was wrong:** a feasible Parallel is refused. Not new behaviour: origin/main 025e9d63 refuses it too (its PlaneGCS verdict was "infeasible" with the old radii + equals recipe).
+- **Cause:** read, not fixed: neither operand can satisfy it alone without worsening a driving constraint, so the solve starts from the forced placement of the second pick (the rectangle top turned, `creation-placement.js` `placeForCreation`), and that solve collapses a rectangle side: refused (task 521).
+- **Task id(s):** unknown (follow-up)
+- **Fix merge sha:** open
+- **Guarding test file(s):** `tests/coverage-matrix.test.js` (pinned as KNOWN NEW-12)
+- **Status:** open
+- **Family:** `solver`
+- **Related:** BUG-470
+- **History:** found in task `1050`.
+
 ---
 
 ## Family index
@@ -3977,7 +4008,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |
 | `notice-wording` | BUG-079 (11-24), BUG-090 (11-25), BUG-114 (11-26), BUG-227 (11-26), BUG-317 (11-27) |
 | `snap-not-applied` | BUG-073 (11-23), BUG-075 (11-23), BUG-136 (11-26, open), BUG-137 (11-26), BUG-138 (11-26), BUG-183 (11-26), BUG-193 (11-26), BUG-210 (11-27), BUG-212 (11-27), BUG-213 (11-27), BUG-311 (11-27), BUG-350 (11-27), BUG-352 (11-27), BUG-360 (11-27) |
-| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27), BUG-411 (11-27), BUG-431 (11-27), BUG-433 (11-27), BUG-450 (11-27), BUG-451 (11-27), BUG-440 (11-27, open), BUG-460 (11-27), BUG-461 (11-27), BUG-462 (11-27) |
+| `solver` | BUG-005 (11-15), BUG-008 (11-15), BUG-018 (11-15), BUG-046 (11-18), BUG-059 (11-20), BUG-060 (11-20), BUG-076 (11-23), BUG-091 (11-26), BUG-092 (11-26), BUG-094 (11-26), BUG-095 (11-26), BUG-096 (11-26), BUG-098 (11-26), BUG-099 (11-26), BUG-120 (11-26), BUG-121 (11-26), BUG-122 (11-26), BUG-123 (11-26), BUG-126 (11-26), BUG-134 (11-26), BUG-146 (11-26), BUG-152 (11-26), BUG-154 (11-26), BUG-160 (11-26), BUG-170 (11-26), BUG-171 (11-26), BUG-191 (11-26), BUG-192 (11-26), BUG-195 (11-26), BUG-196 (11-26), BUG-197 (11-26), BUG-198 (11-26), BUG-201 (11-26), BUG-373 (11-27), BUG-375 (11-27), BUG-380 (11-27), BUG-381 (11-27), BUG-383 (11-27), BUG-411 (11-27), BUG-431 (11-27), BUG-433 (11-27), BUG-450 (11-27), BUG-451 (11-27), BUG-440 (11-27, open), BUG-460 (11-27), BUG-461 (11-27), BUG-462 (11-27), BUG-470 (11-28), BUG-471 (11-28, open) |
 | `dimension-display` | BUG-130 (11-26), BUG-131 (11-26), BUG-132 (11-26), BUG-133 (11-26), BUG-225 (11-26) |
 | `stl-relief` | BUG-050 (11-19), BUG-058 (11-20), BUG-063 (11-21) |
 | `stock` | BUG-072 (11-23), BUG-080 (11-24), BUG-088 (11-25) |

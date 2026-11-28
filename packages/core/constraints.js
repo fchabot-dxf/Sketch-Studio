@@ -11,6 +11,7 @@ import { angleSectorOf } from './angle-sector.js';
 import { offsetConstraintRecord } from './offset.js';
 import { defaultLabelPlacement } from './dim-label.js';
 import { patternConstraintRecord, patternRefs } from './pattern.js';
+import { polygonConstraintRecord } from './polygon.js';
 
 /**
  * Given a constraint and the list of shapes, returns the joints and shapes affected by the constraint.
@@ -144,6 +145,12 @@ export function getConstrainedGeometry(constraint, shapes) {
             if (constraint.joints) for (const jid of constraint.joints) constraintJoints.add(jid);
             if (constraint.shapes) for (const sid of constraint.shapes) constraintShapes.add(sid);
             if (constraint.line) constraintShapes.add(constraint.line);
+            break;
+
+        case CONSTRAINT_TYPES.POLYGON:
+            // TASK 1050 (#core/polygon.js): the centre and the corners, and the sides
+            for (const jid of constraint.joints || []) constraintJoints.add(jid);
+            for (const sid of constraint.shapes || []) constraintShapes.add(sid);
             break;
     }
     
@@ -349,6 +356,10 @@ export function createConstraint(type, params) {
             // task 658: the stored form is #core/pattern.js patternConstraintRecord's (load, undo, paste)
             return patternConstraintRecord({ ...params, type });
 
+        case CONSTRAINT_TYPES.POLYGON:
+            // TASK 1050: the stored form is #core/polygon.js polygonConstraintRecord's (load, undo, paste)
+            return polygonConstraintRecord(params);
+
         default:
             dbg.warn('app', 'Unknown constraint type:', type);
             return null;
@@ -508,6 +519,12 @@ export function hasConstraint(constraints, type, params) {
                 }
                 // task 875: the arc form, the same point on the same arc
                 if (c.joint && c.shape && c.joint === params.joint && c.shape === params.shape) return true;
+                break;
+
+            case CONSTRAINT_TYPES.POLYGON:
+                // TASK 1050: the same centre and the same corners in the same order
+                if (Array.isArray(c.joints) && Array.isArray(params.joints) && c.joints.length === params.joints.length
+                    && c.joints.every((j, i) => j === params.joints[i])) return true;
                 break;
         }
     }

@@ -18752,6 +18752,7 @@ Deleting part of a PATTERN or OFFSET copy behaves like Fusion (owner-approved 20
   - NEW `tests/copy-delete-1046-node.test.js`: the real Design tab in Node. D-38 / D-39 / D-43 / D-44 / D-63 / D-65 by real clicks; the relation glyph by the key, right-click menu, footer red X and touch hold; each with one undo step exact, redo and reopen; a distance edit after D-38; a quantity edit after D-43; the glyph drawn on reopen and never stored.
   - NEW `tests/copy-delete-1046-live.test.js`: desktop 1280x800 and phone 390x844. A pattern copy side + Delete key / red X, then Ctrl+Z; the offset relation glyphs, hover and selected, + Delete.
   - `tests/pattern-658.test.js`: its "a copy suppresses its instance" block rewritten to the new rule. Its `solverHolds` skips null copies.
+  - `tests/glyph-sheet.test.js`: the sheet now has 13 glyph-* groups (`glyph-offset` added).
 - **Evidence (`.evidence/1046/`, local):**
   - The 1042 probes copied: `delete-audit-1042-*.{js,mjs}`. The kit's import path is fixed and its leftover check skips a null instance copy.
   - `before-curves.out` / `before-constraints.out` vs `after-curves.out` / `after-constraints.out`. D-43 before: `deleted shapes [line,line,line,line] points -4`; after: `deleted shapes [line] points -0 ... LEFT none | residual ok dof 4 | undo exact | redo exact | reload same`. D-38 after: `cons {...,"offset":1} | LEFT none | residual ok dof 4`.

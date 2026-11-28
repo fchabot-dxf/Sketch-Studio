@@ -6,9 +6,30 @@ import { CONSTRAINT_TYPES, POLYGON_SIDES } from './constants.js';
 import { getDist, angleBetween } from './geometry.js';
 import { newShapeId } from './shape-id.js';
 
+// TASK 1045: a rectangle's corners are ONE SHARED joint each, used by the two sides that meet there (and, in the centre rectangle, by the
+// construction diagonal that ends there): Fusion, MEASURED by the advisor 2026-11-27, "every DRAWING tool joins meeting ends with ONE shared
+// point (rectangles: all 3)"; the recording has no point-to-point coincident (docs/RECIPE-PARITY-1037.md D-1). The structural constraints of
+// each maker are unchanged (H / V, the centre's two pointOnLine, the 3-point's perpendiculars). A corner is split like any shared point
+// (#core/shared-point.js detachFromSharedPoint: its glyph's Delete, Delete Coincident). Files saved before keep their two joints + coincident.
+// The sides are [c1, c2], [c2, c3], [c4, c3], [c1, c4] (c1 = the first click, c3 its opposite), the order and direction they always had.
+function rectSides(base, groupId, [c1, c2, c3, c4], isConstruction) {
+    return [
+        { id: 's' + base + '_1', type: 'line', joints: [c1, c2], groupId, isConstruction: !!isConstruction },
+        { id: 's' + base + '_2', type: 'line', joints: [c2, c3], groupId, isConstruction: !!isConstruction },
+        { id: 's' + base + '_3', type: 'line', joints: [c4, c3], groupId, isConstruction: !!isConstruction },
+        { id: 's' + base + '_4', type: 'line', joints: [c1, c4], groupId, isConstruction: !!isConstruction }
+    ];
+}
+// a new corner joint at p
+function newCorner(joints, genJ, p) {
+    const id = genJ();
+    joints.set(id, { x: p.x, y: p.y, fixed: false });
+    return id;
+}
+
 /**
  * Create rectangle from two opposite corners (2-point mode)
- * Reuses input joints j1Id and j3Id as the "A" (horizontal) joints for their respective corners.
+ * Reuses input joints j1Id and j3Id as the corners c1 and c3 (shared by their two sides); c2 and c4 are new.
  */
 export function makeRectFromTwoJoints(joints, j1Id, j3Id, genJ, isConstruction=false) {
     const j1 = joints.get(j1Id);
@@ -16,46 +37,17 @@ export function makeRectFromTwoJoints(joints, j1Id, j3Id, genJ, isConstruction=f
 
     if (!j1 || !j3) return { shapes: [], constraints: [] };
 
-    const c1 = { x: j1.x, y: j1.y };
-    const c2 = { x: j3.x, y: j1.y };
-    const c3 = { x: j3.x, y: j3.y };
-    const c4 = { x: j1.x, y: j3.y };
-
-    const j1A = j1Id;
-    const j1B = genJ();
-    joints.set(j1B, { x: c1.x, y: c1.y, fixed: false });
-
-    const j2A = genJ(), j2B = genJ();
-    joints.set(j2A, { x: c2.x, y: c2.y, fixed: false });
-    joints.set(j2B, { x: c2.x, y: c2.y, fixed: false });
-
-    const j3A = j3Id;
-    const j3B = genJ();
-    joints.set(j3B, { x: c3.x, y: c3.y, fixed: false });
-
-    const j4A = genJ(), j4B = genJ();
-    joints.set(j4A, { x: c4.x, y: c4.y, fixed: false });
-    joints.set(j4B, { x: c4.x, y: c4.y, fixed: false });
+    const c2 = newCorner(joints, genJ, { x: j3.x, y: j1.y });
+    const c4 = newCorner(joints, genJ, { x: j1.x, y: j3.y });
 
     const base = newShapeId('');   // THE shape-id generator: unique even for two rectangles in the same millisecond
     const groupId = 'rect_' + base;
-
-    const shapes = [
-        { id: 's' + base + '_1', type: 'line', joints: [j1A, j2A], groupId, isConstruction: !!isConstruction },
-        { id: 's' + base + '_2', type: 'line', joints: [j2B, j3B], groupId, isConstruction: !!isConstruction },
-        { id: 's' + base + '_3', type: 'line', joints: [j4A, j3A], groupId, isConstruction: !!isConstruction },
-        { id: 's' + base + '_4', type: 'line', joints: [j1B, j4B], groupId, isConstruction: !!isConstruction }
-    ];
+    const shapes = rectSides(base, groupId, [j1Id, c2, j3Id, c4], isConstruction);
     const constraints = [
-        { type: CONSTRAINT_TYPES.HORIZONTAL, joints: [j1A, j2A] },
-        { type: CONSTRAINT_TYPES.VERTICAL, joints: [j2B, j3B] },
-        { type: CONSTRAINT_TYPES.HORIZONTAL, joints: [j4A, j3A] },
-        { type: CONSTRAINT_TYPES.VERTICAL, joints: [j1B, j4B] },
-
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j1A, j1B] },
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j2A, j2B] },
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j3A, j3B] },
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j4A, j4B] }
+        { type: CONSTRAINT_TYPES.HORIZONTAL, joints: [j1Id, c2] },
+        { type: CONSTRAINT_TYPES.VERTICAL, joints: [c2, j3Id] },
+        { type: CONSTRAINT_TYPES.HORIZONTAL, joints: [c4, j3Id] },
+        { type: CONSTRAINT_TYPES.VERTICAL, joints: [j1Id, c4] }
     ];
 
     return { shapes, constraints };
@@ -63,7 +55,7 @@ export function makeRectFromTwoJoints(joints, j1Id, j3Id, genJ, isConstruction=f
 
 /**
  * Create rectangle from center point and corner (center mode)
- * Reuses cornerId as j3A.
+ * Reuses cornerId as the corner c3; the construction diagonals c1 -> c3 and c2 -> c4 end on the shared corners, the centre lies on both.
  */
 export function makeRectFromCenter(joints, centerId, cornerId, genJ, isConstruction=false) {
     const center = joints.get(centerId);
@@ -74,46 +66,20 @@ export function makeRectFromCenter(joints, centerId, cornerId, genJ, isConstruct
     const dx = corner.x - center.x;
     const dy = corner.y - center.y;
 
-    const c1 = { x: center.x - dx, y: center.y - dy };
-    const c2 = { x: center.x + dx, y: center.y - dy };
-    const c3 = { x: center.x + dx, y: center.y + dy };
-    const c4 = { x: center.x - dx, y: center.y + dy };
-
-    const j1A = genJ(), j1B = genJ(), j1C = genJ();
-    joints.set(j1A, { x: c1.x, y: c1.y, fixed: false });
-    joints.set(j1B, { x: c1.x, y: c1.y, fixed: false });
-    joints.set(j1C, { x: c1.x, y: c1.y, fixed: false });
-
-    const j2A = genJ(), j2B = genJ(), j2C = genJ();
-    joints.set(j2A, { x: c2.x, y: c2.y, fixed: false });
-    joints.set(j2B, { x: c2.x, y: c2.y, fixed: false });
-    joints.set(j2C, { x: c2.x, y: c2.y, fixed: false });
-
-    const j3A = cornerId;
-    const j3B = genJ(), j3C = genJ();
-    joints.set(j3B, { x: c3.x, y: c3.y, fixed: false });
-    joints.set(j3C, { x: c3.x, y: c3.y, fixed: false });
-
-    const j4A = genJ(), j4B = genJ(), j4C = genJ();
-    joints.set(j4A, { x: c4.x, y: c4.y, fixed: false });
-    joints.set(j4B, { x: c4.x, y: c4.y, fixed: false });
-    joints.set(j4C, { x: c4.x, y: c4.y, fixed: false });
+    const c1 = newCorner(joints, genJ, { x: center.x - dx, y: center.y - dy });
+    const c2 = newCorner(joints, genJ, { x: center.x + dx, y: center.y - dy });
+    const c3 = cornerId;
+    const c4 = newCorner(joints, genJ, { x: center.x - dx, y: center.y + dy });
 
     const base = newShapeId('');   // THE shape-id generator: unique even for two rectangles in the same millisecond
     const groupId = 'rect_' + base;
-
-    const shapes = [
-        { id: 's' + base + '_1', type: 'line', joints: [j1A, j2A], groupId, isConstruction: !!isConstruction },
-        { id: 's' + base + '_2', type: 'line', joints: [j2B, j3B], groupId, isConstruction: !!isConstruction },
-        { id: 's' + base + '_3', type: 'line', joints: [j4A, j3A], groupId, isConstruction: !!isConstruction },
-        { id: 's' + base + '_4', type: 'line', joints: [j1B, j4B], groupId, isConstruction: !!isConstruction }
-    ];
+    const shapes = rectSides(base, groupId, [c1, c2, c3, c4], isConstruction);
 
     // Add diagonals for center constraint (construction geometry)
     const diag1Id = 's' + base + '_d1';
     const diag2Id = 's' + base + '_d2';
-    shapes.push({ id: diag1Id, type: 'line', joints: [j1C, j3C], groupId, isConstruction: true });
-    shapes.push({ id: diag2Id, type: 'line', joints: [j2C, j4C], groupId, isConstruction: true });
+    shapes.push({ id: diag1Id, type: 'line', joints: [c1, c3], groupId, isConstruction: true });
+    shapes.push({ id: diag2Id, type: 'line', joints: [c2, c4], groupId, isConstruction: true });
 
     // Mark the center joint as orphanAllowed so it doesn't vanish if the user deletes the constraints
     if (joints.has(centerId)) {
@@ -122,19 +88,10 @@ export function makeRectFromCenter(joints, centerId, cornerId, genJ, isConstruct
     }
 
     const constraints = [
-        { type: CONSTRAINT_TYPES.HORIZONTAL, joints: [j1A, j2A] },
-        { type: CONSTRAINT_TYPES.VERTICAL, joints: [j2B, j3B] },
-        { type: CONSTRAINT_TYPES.HORIZONTAL, joints: [j4A, j3A] },
-        { type: CONSTRAINT_TYPES.VERTICAL, joints: [j1B, j4B] },
-
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j1A, j1B] }, // Top-Left Side-Side
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j1A, j1C] }, // Top-Left Side-Diag
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j2A, j2B] }, // Top-Right Side-Side
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j2A, j2C] }, // Top-Right Side-Diag
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j3A, j3B] }, // Bottom-Right Side-Side
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j3A, j3C] }, // Bottom-Right Side-Diag
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j4A, j4B] }, // Bottom-Left Side-Side
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j4A, j4C] }, // Bottom-Left Side-Diag
+        { type: CONSTRAINT_TYPES.HORIZONTAL, joints: [c1, c2] },
+        { type: CONSTRAINT_TYPES.VERTICAL, joints: [c2, c3] },
+        { type: CONSTRAINT_TYPES.HORIZONTAL, joints: [c4, c3] },
+        { type: CONSTRAINT_TYPES.VERTICAL, joints: [c1, c4] },
 
         // Constrain center to intersection of diagonals
         { type: CONSTRAINT_TYPES.POINT_ON_LINE, joint: centerId, shape: diag1Id },
@@ -146,7 +103,7 @@ export function makeRectFromCenter(joints, centerId, cornerId, genJ, isConstruct
 
 /**
  * Create rectangle from 3 points
- * Reuses j1Id, j2Id, and j3Id as the "A" joints for their respective corners.
+ * Reuses j1Id, j2Id, and j3Id as the corners c1, c2 and c3 (j3Id is moved onto the corner: the third click only gives the height); c4 is new.
  * Uses perpendicular constraints to allow rotation.
  */
 export function makeRectFrom3Points(joints, j1Id, j2Id, j3Id, genJ, isConstruction=false) {
@@ -167,49 +124,19 @@ export function makeRectFrom3Points(joints, j1Id, j2Id, j3Id, genJ, isConstructi
 
     const h = (j3.x - j1.x) * px + (j3.y - j1.y) * py;
 
-    const c1 = { x: j1.x, y: j1.y };
-    const c2 = { x: j2.x, y: j2.y };
-    const c3 = { x: j2.x + px * h, y: j2.y + py * h };
-    const c4 = { x: j1.x + px * h, y: j1.y + py * h };
-
-    const j1A = j1Id;
-    const j1B = genJ();
-    joints.set(j1B, { x: c1.x, y: c1.y, fixed: false });
-
-    const j2A = j2Id;
-    const j2B = genJ();
-    joints.set(j2B, { x: c2.x, y: c2.y, fixed: false });
-
-    const j3A = j3Id;
-    const j3B = genJ();
-    joints.set(j3A, { x: c3.x, y: c3.y, fixed: false });
-    joints.set(j3B, { x: c3.x, y: c3.y, fixed: false });
-
-    const j4A = genJ(), j4B = genJ();
-    joints.set(j4A, { x: c4.x, y: c4.y, fixed: false });
-    joints.set(j4B, { x: c4.x, y: c4.y, fixed: false });
+    joints.set(j3Id, { x: j2.x + px * h, y: j2.y + py * h, fixed: false });
+    const c4 = newCorner(joints, genJ, { x: j1.x + px * h, y: j1.y + py * h });
 
     const base = newShapeId('');   // THE shape-id generator: unique even for two rectangles in the same millisecond
     const groupId = 'rect_' + base;
-
-    const shapes = [
-        { id: 's' + base + '_1', type: 'line', joints: [j1A, j2A], groupId, isConstruction: !!isConstruction },
-        { id: 's' + base + '_2', type: 'line', joints: [j2B, j3B], groupId, isConstruction: !!isConstruction },
-        { id: 's' + base + '_3', type: 'line', joints: [j4A, j3A], groupId, isConstruction: !!isConstruction },
-        { id: 's' + base + '_4', type: 'line', joints: [j1B, j4B], groupId, isConstruction: !!isConstruction }
-    ];
+    const shapes = rectSides(base, groupId, [j1Id, j2Id, j3Id, c4], isConstruction);
 
     const s1 = shapes[0].id, s2 = shapes[1].id, s3 = shapes[2].id, s4 = shapes[3].id;
     const constraints = [
         { type: CONSTRAINT_TYPES.PERPENDICULAR, shapes: [s1, s2] },
         { type: CONSTRAINT_TYPES.PERPENDICULAR, shapes: [s2, s3] },
         { type: CONSTRAINT_TYPES.PERPENDICULAR, shapes: [s3, s4] },
-        { type: CONSTRAINT_TYPES.PERPENDICULAR, shapes: [s4, s1] },
-
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j1A, j1B] },
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j2A, j2B] },
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j3A, j3B] },
-        { type: CONSTRAINT_TYPES.COINCIDENT, joints: [j4A, j4B] }
+        { type: CONSTRAINT_TYPES.PERPENDICULAR, shapes: [s4, s1] }
     ];
 
     return { shapes, constraints };

@@ -1,9 +1,11 @@
 // tests/close-path-760-node.test.js — TASK 760 (node): CLOSE PATH, the shared Design tab's command (#core/close-path.js, #ui/close-path-actions.js).
-//  1. an open polyline is closed with ONE line (the chain's kind, sketch; coincident at both ends; nothing else added); the result is a loop findLoops returns;
-//  2. near-coincident ends (gap <= CLOSE_PATH_COINCIDENT_MM): made coincident, no new curve, the end of the LAST curve moves, by <= the tolerance;
+//  1. an open polyline is closed with ONE line (the chain's kind, sketch; TASK 1045: it SHARES both free end points; nothing added to the constraints); the
+//     result is a loop findLoops returns;
+//  2. near-coincident ends (gap <= CLOSE_PATH_COINCIDENT_MM): joined (TASK 1045: ONE shared point, no coincident), no new curve, the end of the LAST curve
+//     moves, by <= the tolerance;
 //  3. arc and bezier end curves (their end joints); a bezier chain closed is a findLoops loop (TASK 761: a bezier is an edge); an arc closed by its chord too;
 //  4. a chain inside a user group (an import's): the line joins the chain's innermost group, the group (not entered) stays ONE rigid block whose shape the
-//     solver keeps, state.constraints gains only the coincidents;
+//     solver keeps, state.constraints gains nothing (TASK 1045: shared ends);
 //  5. refused with the reason (never silent), no undo step: a branch (T junction), a closed outline, a circle, a single straight line;
 //  6. several chains: each closed, ONE undo step; undo / redo;
 //  7. the open-end markers' source (openChainEnds): every free end of every open chain of the active sketch, nothing of a hidden one;
@@ -54,8 +56,8 @@ const coincidents = (state) => state.constraints.filter((c) => c.type === CONSTR
   eq(st.shapes.length, nShapes + 1, '1: ONE line added');
   const line = st.shapes[st.shapes.length - 1];
   eq([line.type, line.isConstruction, line.sketchId], ['line', false, st.activeSketchId], '1: a normal line in the chain\'s sketch');
-  eq(st.constraints.length, nCons + 2, '1: two constraints added');
-  ok(st.constraints.slice(nCons).every((c) => c.type === CONSTRAINT_TYPES.COINCIDENT), '1: both are coincidents');
+  eq(st.constraints.length, nCons, '1: TASK 1045: no constraint added (the line SHARES the two free end points)');
+  eq(new Set(line.joints), new Set([segs[0].a, segs[2].b]), '1: TASK 1045: its two points ARE the free end points of the chain');
   const ends = [line.joints[0], line.joints[1]].map((j) => st.joints.get(j));
   eq(new Set(ends.map((p) => `${p.x},${p.y}`)), new Set(['0,0', '0,20']), '1: the line runs between the two free ends');
   ok(loopOf(st, [...segs.map((s) => s.id), line.id]), '1: findLoops returns the closed outline as a loop');
@@ -75,10 +77,10 @@ const coincidents = (state) => state.constraints.filter((c) => c.type === CONSTR
   eq([plan.ok, plan.mode], [true, 'coincident'], '2: planned as coincident');
   const res = applyClosePath(st, plan);
   eq(st.shapes.length, nShapes, '2: no new curve');
-  eq(st.constraints.length, nCons + 1, '2: one coincident');
-  const after = st.joints.get(moving);
-  eq([after.x, after.y], [st.joints.get(staying).x, st.joints.get(staying).y], '2: the END of the LAST curve moved onto the first end');
-  const moved = Math.hypot(after.x - before.x, after.y - before.y);
+  eq(st.constraints.length, nCons, '2: TASK 1045: no constraint added (the two ends are ONE shared point)');
+  const last = st.shapes.find((x) => x.id === segs[3].id);
+  eq([last.joints[1], st.joints.has(moving)], [staying, false], '2: the END of the LAST curve became the first end (its own point is gone)');
+  const moved = Math.hypot(before.x - st.joints.get(staying).x, before.y - st.joints.get(staying).y);
   ok(moved <= CLOSE_PATH_COINCIDENT_MM && Math.abs(res.moved - moved) < 1e-12, `2: moved ${moved} <= ${CLOSE_PATH_COINCIDENT_MM} mm`);
   eq(st.joints.get(staying).x === 0 && st.joints.get(staying).y === 0, true, '2: the first end did not move');
   ok(loopOf(st, segs.map((s) => s.id)), '2: findLoops returns the loop');
@@ -88,7 +90,8 @@ const coincidents = (state) => state.constraints.filter((c) => c.type === CONSTR
   st2.joints.get(s2[3].b).fixed = true;
   const [p2] = planClosePaths(st2, [s2[0].id]);
   applyClosePath(st2, p2);
-  eq([st2.joints.get(s2[3].b).y, st2.joints.get(s2[0].a).y], [gap, gap], '2: a fixed last end stays; the first end moves onto it');
+  const first2 = st2.shapes.find((x) => x.id === s2[0].id);
+  eq([st2.joints.get(s2[3].b).y, first2.joints[0]], [gap, s2[3].b], '2: a fixed last end stays; the first end moves onto it (and is that point)');
   // just over the tolerance -> a line
   const st3 = newSketchState();
   const s3 = polyline(st3, [[0, 0], [30, 0], [30, 20], [0, 20], [0, CLOSE_PATH_COINCIDENT_MM * 1.5]], false);
@@ -146,7 +149,7 @@ const coincidents = (state) => state.constraints.filter((c) => c.type === CONSTR
   run(st, [segs[0].id]);
   const line = st.shapes[st.shapes.length - 1];
   eq(line.userGroupId, chainGroup, '4: the line joined the chain\'s INNERMOST group');
-  eq(st.constraints.length - nCons, 2, '4: only the two coincidents added');
+  eq(st.constraints.length - nCons, 0, '4: TASK 1045: nothing added to the constraints (the line shares the two ends)');
   const blocks = rigidBlocks(st);
   const block = blocks.find((b) => b.shapes.some((s) => s.id === segs[0].id));
   ok(block && block.shapes.some((s) => s.id === line.id), '4: the line is in the chain\'s rigid block');
@@ -192,7 +195,7 @@ const coincidents = (state) => state.constraints.filter((c) => c.type === CONSTR
   eq([st.shapes.length, st.constraints.length, findLoops(st).length], [nShapes, nCons, 1], '6: undo puts both back');
   eq(st.joints.get(b[3].b).y, 0.003, '6: undo puts the moved end back');
   st.redo();
-  eq([st.shapes.length, st.constraints.length, findLoops(st).length], [nShapes + 1, nCons + 3, 3], '6: redo closes both again');
+  eq([st.shapes.length, st.constraints.length, findLoops(st).length], [nShapes + 1, nCons, 3], '6: redo closes both again (TASK 1045: shared joins, no constraint)');
 }
 
 // ── 6b. TASK 760b, the group rule: a chain reached only through a group holding other curves (a whole imported file) is closed only when near-closed

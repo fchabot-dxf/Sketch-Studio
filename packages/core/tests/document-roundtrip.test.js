@@ -25,12 +25,17 @@
             ...createSketches(),
         };
 
-        // 1) A coincident-welded rect: line shapes x4, HORIZONTAL/VERTICAL x4, COINCIDENT x4.
+        // 1) A rect: line shapes x4 on 4 SHARED corners (TASK 1045), HORIZONTAL/VERTICAL x4.
         const c1 = engine.genJ(); engine.addJoint(c1, 0, 0, false);
         const c3 = engine.genJ(); engine.addJoint(c3, 40, 30, false);
         const rect = makeRectFromTwoJoints(state.joints, c1, c3, engine.genJ);
         for (const s of rect.shapes) engine.addShape(s);
         for (const c of rect.constraints) ConstraintManager.createConstraint(state, c.type, c, { source: 'test' });
+        // 1b) A line glued to the rect's corner by a COINCIDENT (the Coincident tool's join; a file saved before task 1045 has its corners so).
+        const g1 = engine.genJ(); engine.addJoint(g1, 0, 0, false);
+        const g2 = engine.genJ(); engine.addJoint(g2, -20, -10, false);
+        engine.addShape({ id: 's_glued_line_test', type: 'line', joints: [g1, g2] });
+        ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.COINCIDENT, { joints: [g1, c1] }, { source: 'test' });
 
         // 2) A circle with a driving RADIUS dimension (a distance constraint, isRadius:true).
         const cc = engine.genJ(); engine.addJoint(cc, 60, 15, false);

@@ -14,6 +14,10 @@ import { compareWithFixture } from './harness/audit/fixture-compare.js';
 // (F2 'equal on circles is a no-op' and its two plate entries were deleted by task 515: a circle's radius is a solver unknown.)
 const KNOWN = {
   F8: 'shared-corner outline',
+  // TASK 1045: the Line tool's chain SHARES its corners now (Fusion's way), so the bracket outline IS F8's shared-corner outline. The same edit flipped
+  // its corner on main too with the corners as coincident pairs (measured by counting a coincident pair as the corner in signature(): the same 2 edits,
+  // the same corner); the orientation check only reads lines that SHARE a joint, so it did not see it there.
+  'bracket/E every dimension edits cleanly': 'F8 (shared-corner outline): an AB-length edit flips a corner sign',
 };
 // Edits that are MATHEMATICALLY impossible and must be refused cleanly (EXPECTED): the isosceles triangle's angle dimension reads 180 - base angle,
 // so 0.8 x 110 = 88 would need a base angle over 90 degrees (the apex at infinity); the refusal must leave the geometry untouched.

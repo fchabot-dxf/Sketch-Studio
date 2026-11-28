@@ -8,7 +8,8 @@ export const RES_TOL = 1e-3;           // the verifier's own eps: Fusion's geome
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const outcomeF = (st) => (!st.accepted ? 'refused' : st.driving === false ? 'reference' : 'accepted');
 const outcomeO = (o) => (!o.accepted ? 'refused' : o.driven ? 'reference' : 'accepted');
-const maxDev = (a, b) => { let d = 0; a.forEach((p, i) => { if (p && b[i]) d = Math.max(d, dist(p, b[i])); }); return d; };
+// Fusion's points `f` (recorded index) against ours `o` (our index); ix = our index -> recorded index (export.js recordedPointIndex)
+const maxDev = (f, o, ix) => { let d = 0; o.forEach((p, i) => { const q = f[ix[i]]; if (p && q) d = Math.max(d, dist(q, p)); }); return d; };
 const flagStr = (a) => a.map(x => (x == null ? '?' : x ? 'F' : '.')).join('');
 const sameFlags = (f, o) => f.every((x, i) => x == null || o[i] == null || x === o[i]);
 
@@ -25,7 +26,7 @@ export function compareDrawing(mod, fx) {
     add(`recipe/${i}/outcome`, label, oo, fo + (fs.error ? ` (${fs.error.slice(0, 60)})` : ''), fo === oo);
     if (fs.skipped) { rows[rows.length - 1].same = true; rows[rows.length - 1].note = 'skipped in Fusion (the arc keeps its radius structurally)'; return; }
     if (fs.accepted && os.accepted && fs.snap) {
-      const dev = maxDev(fs.snap.pts, os.pts);
+      const dev = maxDev(fs.snap.pts, os.pts, exp.fusionIx);
       const same = dev <= COORD_TOL;
       const branch = !same && os.fusionResidual != null && os.fusionResidual <= RES_TOL;
       add(`recipe/${i}/coords`, label, `max ${dev.toExponential(1)} mm apart`, os.fusionResidual != null ? `Fusion's geometry satisfies our constraints to ${os.fusionResidual.toExponential(1)}` : '', same || branch, same ? '' : branch ? 'another valid branch' : '');

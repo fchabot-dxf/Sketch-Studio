@@ -19,7 +19,7 @@
 
 import { inActiveSketch } from './sketch-model.js';
 import { removeGeometry } from './delete-manager.js';
-import { applySnapConstraint, onShapeSnap } from './snap-constraints.js';
+import { applySnapConstraint, onShapeSnap, SNAP_JOIN } from './snap-constraints.js';
 import { transferOrientationConstraints, lineParamAtPoint, arcOwnEquals, dropConstraints, splitArcConstraints, circleToArc } from './break.js';
 import { arcStructuralConstraints } from './shapes.js';
 import { curveGeom, curveParamAt, curvePointAt, curveCuts, boundsAround, curvePiece, CUT_EPS } from './curve-cuts.js';
@@ -78,7 +78,7 @@ export function trimShape(state, shapeId, clickPt) {
 
 // the cut end `jointId` at `pt` is held on every curve that cuts there (UX-11)
 const bindCutters = (state, jointId, cutters, pt) => {
-  for (const cutterId of cutters) applySnapConstraint(state, jointId, onShapeSnap(cutterId, pt));
+  for (const cutterId of cutters) applySnapConstraint(state, jointId, onShapeSnap(cutterId, pt), { join: SNAP_JOIN.GLUE });
 };
 const newJointAt = (state, pt) => {
   const id = state.genJ();

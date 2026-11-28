@@ -2,6 +2,9 @@
 // Each run() builds a tiny sketch through the same APIs the tools use and returns { ok, observed }: ok === true means the app behaves CORRECTLY,
 // ok === false means the bug is present today. tests/coverage-properties.test.js pins every ok === false as a KNOWN entry (and fails loudly when
 // one starts passing). `severity` / `diagnosis` feed docs/COVERAGE-AUDIT.md.
+// TASK 1045: a spec's `j` indexes the sketch's joints in order (prop-random.js buildGeometry ctx.J). The Line tool's polyline SHARES its corners now
+// (it was two stacked joints + a coincident per corner), so the indices of N-F6, N-U1 and N-U2 were rewritten to the same POINTS in the new joint
+// order (each old index -> the joint at its solved place; a corner's two stacked joints are its one shared joint now).
 import * as L from '../audit/lib.js';
 import { serializeDocument, deserializeDocument } from '#core/document.js';
 import { toggleDriving } from '#core/dimension-seams.js';
@@ -100,9 +103,9 @@ export const FINDINGS = [
     task: "Lock the tangent side and the arc's sweep sign at creation like perpendicular's branch (or on the first converged solve).",
     spec: [
       { geo: { kind: 'open', pts: [[28.775, 22.49], [65.471, 47.28], [80.985, 37.476], [104.038, 38.824]], circles: [[143.363, 85.138, 15.919], [96.677, 142.283, 8.89]], arcs: [] },
-        ops: [{ k: 'dist-vertical', j: [8, 0], f: 1 }, { k: 'horizontal', j: [5, 6] }, { k: 'dist-horizontal', j: [6, 0], f: 1 }, { k: 'tangent', l: [0], c: [1] }, { k: 'tangent', l: [2], c: [1] }], what: 'tangent circle flips sides' },
+        ops: [{ k: 'dist-vertical', j: [6, 0], f: 1 }, { k: 'horizontal', j: [3, 4] }, { k: 'dist-horizontal', j: [4, 0], f: 1 }, { k: 'tangent', l: [0], c: [1] }, { k: 'tangent', l: [2], c: [1] }], what: 'tangent circle flips sides' },
       { geo: { kind: 'closed', pts: [[171.344, 134.849], [160.509, 159.551], [113.575, 158.813], [93.26, 150.111], [96.522, 104.924], [108.011, 84.53], [143.853, 99.312]], circles: [[89.716, 117.147, 17.029], [130.438, 100.119, 6.453]], arcs: [[71.348, 116.763, 8.396, 4.846, 6.732]] },
-        ops: [{ k: 'dist-horizontal', j: [14, 19], f: 1.3 }], what: 'arc sweep inverts' },
+        ops: [{ k: 'dist-horizontal', j: [1, 12], f: 1.3 }], what: 'arc sweep inverts' },
     ],
     run() {
       const out = this.spec.map(sp => ({ what: sp.what, v: runCase({ seed: 0, geo: sp.geo, ops: sp.ops }, { only: 'I7' }).violations.filter(x => x.inv === 'I7') }));
@@ -130,7 +133,7 @@ export const FINDINGS = [
     diagnosis: 'Four ops on a 4-gon: dist-vertical, vertical, perpendicular (opposite sides), dist-vertical (0.001 apart). Not attributable to F1-F8 by ablation; it needs a closer look by the owner of the solver (task 510).',
     task: 'Investigate: why is the last dimension independent for the panel but dependent for finite differences.',
     spec: { geo: { kind: 'closed', pts: [[116.749, 71.77], [74.326, 115.608], [0.18, 49.4], [49.979, -6.621]], circles: [], arcs: [] },
-      ops: [{ k: 'dist-vertical', j: [6, 4], f: 1 }, { k: 'vertical', j: [7, 5] }, { k: 'perpendicular', l: [2, 0] }, { k: 'dist-vertical', j: [1, 2], f: 0.9 }], inv: 'I3' },
+      ops: [{ k: 'dist-vertical', j: [4, 3], f: 1 }, { k: 'vertical', j: [4, 3] }, { k: 'perpendicular', l: [2, 0] }, { k: 'dist-vertical', j: [1, 2], f: 0.9 }], inv: 'I3' },
     run() { const v = runCase({ seed: 0, geo: this.spec.geo, ops: this.spec.ops }, { only: this.spec.inv }).violations; return { ok: v.length === 0, observed: v.length ? v[0].msg : 'ok' }; },
   },
   {
@@ -139,7 +142,7 @@ export const FINDINGS = [
     diagnosis: 'Six ops on a triangle with an arc. The dimension edit converges (residual 1e-8) and the edit back converges, but a joint the nullspace calls determined ends up 8e-3 from its start: the solution of the system is not unique near that configuration, or the helper joint of the point-to-line dimension (isInternal) drifts.',
     task: 'Investigate with the point-to-line dimension (dimension-tool.js create-point-to-line) removed from the case.',
     spec: { geo: { kind: 'closed', pts: [[95.84, 111.836], [7.958, 163.025], [15.84, 89.506]], circles: [], arcs: [[62.513, 76.915, 20.232, 5.901, 6.824]] },
-      ops: [{ k: 'dist-horizontal', j: [4, 8], f: 1 }, { k: 'vertical', j: [3, 4] }, { k: 'dist-point-line', j: [1], l: [1] }, { k: 'dist-line', j: [3, 4], f: 1 }, { k: 'dist-vertical', j: [0, 6], f: 1.1 }, { k: 'parallel', l: [1, 2] }], inv: 'I7' },
+      ops: [{ k: 'dist-horizontal', j: [3, 5], f: 1 }, { k: 'vertical', j: [2, 3] }, { k: 'dist-point-line', j: [1], l: [1] }, { k: 'dist-line', j: [2, 3], f: 1 }, { k: 'dist-vertical', j: [0, 1], f: 1.1 }, { k: 'parallel', l: [1, 2] }], inv: 'I7' },
     run() { const v = runCase({ seed: 0, geo: this.spec.geo, ops: this.spec.ops }, { only: this.spec.inv }).violations; return { ok: v.length === 0, observed: v.length ? v[0].msg : 'ok' }; },
   },
 ];

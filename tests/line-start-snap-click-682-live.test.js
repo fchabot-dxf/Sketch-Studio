@@ -1,6 +1,8 @@
 // tests/line-start-snap-click-682-live.test.js — TASK 682 (live headless, REAL mouse & REAL phone touch, Pen Plotter = shared Design tab):
 // Line tool click 3-4 px off an existing joint (both active sketch and another visible sketch), then second click elsewhere:
-// starts the line AT the snapped joint (coincident, no new start joint), never aborts. Dragging from a joint still commits in one gesture.
+// starts the line AT the snapped joint, never aborts. Dragging from a joint still commits in one gesture. TASK 1045 (Fusion measured 2026-11-27): the
+// start is a new point joined at the commit: on a line END of the active sketch it SHARES that point (no extra joint); on another sketch's point it is
+// glued by a coincident (a point of another sketch is not shared).
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -108,8 +110,8 @@ await (async () => {
       const offClickAct = { x: sAct.x + 3.5, y: sAct.y + 1 };
       const jCountBeforeAct = await evalJs(`${STATE}.joints.size`);
       await pointers[kind].tap(offClickAct);
-      const activeAfterClick1 = await evalJs(`(${STATE}.active ? { mode: ${STATE}.active.mode, start: ${STATE}.active.start } : null)`);
-      assert.deepStrictEqual(activeAfterClick1, { mode: 'line', start: 'j_act_b' }, `[${kind}] 3.5px off-center click on active joint must start Line at j_act_b (not abort)`);
+      const activeAfterClick1 = await evalJs(`(${STATE}.active ? { mode: ${STATE}.active.mode, on: ${STATE}.active.startSnapTarget && ${STATE}.active.startSnapTarget.targetId } : null)`);
+      assert.deepStrictEqual(activeAfterClick1, { mode: 'line', on: 'j_act_b' }, `[${kind}] 3.5px off-center click on active joint must start Line on j_act_b (not abort)`);
       await pointers[kind].tap(sActEnd);
       const actResult = await evalJs(`(() => {
         const st = ${STATE};
@@ -119,8 +121,8 @@ await (async () => {
       })()`);
       assert.strictEqual(actResult.shapes, 3, `[${kind}] active joint 2-click created line`);
       assert.strictEqual(actResult.segStart, 'j_act_b', `[${kind}] line starts directly at j_act_b`);
-      // End click commits the line AND polyline automatically stages 1 floating chain joint, so +2 joints vs before (1 end + 1 next-chain start, NO extra start joint)
-      assert.strictEqual(actResult.joints, jCountBeforeAct + 2, `[${kind}] no extra start joint created at j_act_b`);
+      // TASK 1045: the end is the one new joint (the start is j_act_b itself, shared; the chain goes on from the end, no floating joint)
+      assert.strictEqual(actResult.joints, jCountBeforeAct + 1, `[${kind}] no extra start joint created at j_act_b`);
       await key('Escape', 'Escape', 27);
       await evalJs(`document.getElementById('tool-line').click()`); await sleep(100);
 
@@ -128,17 +130,18 @@ await (async () => {
       const offClickOth = { x: sOth.x + 3.5, y: sOth.y + 1 };
       const jCountBeforeOth = await evalJs(`${STATE}.joints.size`);
       await pointers[kind].tap(offClickOth);
-      const activeAfterClickOth1 = await evalJs(`(${STATE}.active ? { mode: ${STATE}.active.mode, start: ${STATE}.active.start } : null)`);
-      assert.deepStrictEqual(activeAfterClickOth1, { mode: 'line', start: 'j_oth_b' }, `[${kind}] 3.5px off-center click on sketch-2 joint must start Line at j_oth_b (not abort)`);
+      const activeAfterClickOth1 = await evalJs(`(${STATE}.active ? { mode: ${STATE}.active.mode, on: ${STATE}.active.startSnapTarget && ${STATE}.active.startSnapTarget.targetId } : null)`);
+      assert.deepStrictEqual(activeAfterClickOth1, { mode: 'line', on: 'j_oth_b' }, `[${kind}] 3.5px off-center click on sketch-2 joint must start Line on j_oth_b (not abort)`);
       await pointers[kind].tap(sOthEnd);
       const othResult = await evalJs(`(() => {
         const st = ${STATE};
-        const seg = st.shapes[st.shapes.length - 1];
-        return { shapes: st.shapes.length, joints: st.joints.size, segStart: seg?.joints[0] };
+        const seg = st.shapes[st.shapes.length - 1], s0 = seg && seg.joints[0], p0 = s0 && st.joints.get(s0), q = st.joints.get('j_oth_b');
+        return { shapes: st.shapes.length, joints: st.joints.size, segStart: s0, at: !!p0 && Math.hypot(p0.x - q.x, p0.y - q.y) < 1e-6,
+          glued: st.constraints.some((c) => c.type === 'coincident' && c.joints.includes(s0) && c.joints.includes('j_oth_b')) };
       })()`);
       assert.strictEqual(othResult.shapes, 4, `[${kind}] other-sketch joint 2-click created line`);
-      assert.strictEqual(othResult.segStart, 'j_oth_b', `[${kind}] line starts directly at j_oth_b`);
-      assert.strictEqual(othResult.joints, jCountBeforeOth + 2, `[${kind}] no extra start joint created at j_oth_b`);
+      assert.ok(othResult.segStart !== 'j_oth_b' && othResult.at && othResult.glued, `[${kind}] line starts AT j_oth_b, its own point glued to it (another sketch's point): ${JSON.stringify(othResult)}`);
+      assert.strictEqual(othResult.joints, jCountBeforeOth + 2, `[${kind}] the start and the end are the two new joints`);
       await key('Escape', 'Escape', 27);
       await evalJs(`document.getElementById('tool-line').click()`); await sleep(100);
 

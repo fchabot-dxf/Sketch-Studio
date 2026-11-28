@@ -10,7 +10,7 @@
 //     a. Select: hover and a click on the body pick it; a body drag moves its two end joints AND its control points by the same vector; a double click
 //        selects its chain (the two beziers the Bezier tool drew);
 //     b. the Bezier tool CLOSES on its first anchor: the snap marker (state.snapTarget) is on the first anchor while the pointer is within the magnet;
-//        the press there makes ONE coincident (the new joint, the first anchor) and ends the path; findLoops returns the loop of the 3 beziers; a
+//        the press there ends the path ON the first anchor (TASK 1045: shared, no coincident); findLoops returns the loop of the 3 beziers; a
 //        DRAGGED closing anchor is smooth (the first segment leaves along the closing handle), a clicked one a corner; a press outside the magnet
 //        places an ordinary anchor;
 //     c. every refused tool pressed on the body: the declared notice (#core/curve-kinds.js CURVE_REFUSALS), nothing changed, the tool kept; Mirror's
@@ -167,9 +167,10 @@ for (const host of ['sketchstudio', 'shaper']) {
       ok(st.snapTarget && st.snapTarget.type === 'joint' && st.snapTarget.targetId === first, `${host} b: the snap marker is on the first anchor: ${JSON.stringify(st.snapTarget && [st.snapTarget.type, st.snapTarget.targetId])}`);
       if (smooth) app.drag({ x: A.x + 5, y: A.y - 4 }, { x: A.x + 5 - 40, y: A.y - 4 }, 6); else app.click(A.x + 5, A.y - 4);
       ok(st.shapes.length === 3 && st.shapes.every((s) => s.type === 'bezier'), `${host} b: three beziers: ${st.shapes.map((s) => s.type)}`);
-      ok(JSON.stringify(st.constraints.map((c) => c.type)) === '["coincident"]', `${host} b: ONE coincident: ${st.constraints.map((c) => c.type)}`);
-      const last = st.shapes[2], k = st.constraints[0];
-      ok(k.joints.includes(first) && k.joints.includes(last.joints[1]), `${host} b: the coincident ties the closing joint to the first anchor: ${k.joints}`);
+      // TASK 1045 (Fusion measured 2026-11-27: a drawing tool's new point on an existing curve END point shares it): the closing anchor IS the first one
+      ok(st.constraints.length === 0, `${host} b: no constraint (the closing anchor is shared): ${st.constraints.map((c) => c.type)}`);
+      const last = st.shapes[2];
+      ok(last.joints[1] === first, `${host} b: the closing segment ends ON the first anchor: ${last.joints}`);
       const pa = st.joints.get(first), pz = st.joints.get(last.joints[1]);
       ok(Math.hypot(pa.x - pz.x, pa.y - pz.y) < 1e-6, `${host} b: the closing joint is on the first anchor`);
       ok(!st.active, `${host} b: the path ended`);

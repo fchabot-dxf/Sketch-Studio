@@ -39,12 +39,12 @@ for (const [name, run] of Object.entries(scenarios)) {
 }
 for (const [name, r] of Object.entries(results)) {
   assert(r.shapes >= 1, name + ': a shape was drawn');
-  if (name === 'line start') continue;
-  if (name === 'line end (24px off)') { assert(r.originCoincident === 0, name + ': outside the joint marker nothing is locked'); continue; } // the line's start joint IS j_origin (checked below)
+  if (name === 'line end (24px off)') { assert(r.originCoincident === 0, name + ': outside the joint marker nothing is locked'); continue; }
   assert(r.originCoincident >= 1, name + ': a COINCIDENT constraint with j_origin exists; got ' + JSON.stringify(r.constraints));
 }
 
-// a line STARTED on the origin reuses j_origin itself as its start joint (nothing can drift: it is the origin)
+// TASK 1045: a line STARTED on the origin is a separate point + a Coincident with j_origin (Fusion, MEASURED by the advisor 2026-11-27: a line start at the
+// origin -> separate point + Coincident); it used to reuse j_origin itself as its start joint
 {
   const app = await fresh();
   try {
@@ -52,7 +52,8 @@ for (const [name, r] of Object.entries(results)) {
     app.click(o.x + 300, o.y + 200); app.esc();
     app.tool(TOOL.l); app.click(o.x, o.y); app.click(o.x + 160, o.y - 90); app.esc();
     const g = (await app.storedDoc()).geometry;
-    assert(g.shapes.length === 1 && g.shapes[0].joints.includes('j_origin'), 'a line started on the origin uses j_origin as its start joint: ' + JSON.stringify(g.shapes[0] && g.shapes[0].joints));
+    assert(g.shapes.length === 1 && !g.shapes[0].joints.includes('j_origin'), 'a line started on the origin has its own start point: ' + JSON.stringify(g.shapes[0] && g.shapes[0].joints));
+    assert(g.constraints.some((c) => refersOrigin(c) && c.joints.includes(g.shapes[0].joints[0])), 'its start is glued to j_origin by a coincident: ' + JSON.stringify(g.constraints));
   } finally { await app.close(); }
 }
 

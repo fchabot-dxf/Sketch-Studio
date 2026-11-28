@@ -100,9 +100,10 @@ try {
     assert.strictEqual(pol.length, 1, '2pt rect Enter: first corner keeps pointOnLine constraint');
   }
 
-  // 4. 2-point rect: first corner on endpoint -> coincident; on midpoint -> midpoint
+  // 4. 2-point rect: first corner on endpoint -> SHARED (TASK 1045, Fusion measured 2026-11-27: the corner IS the line's end, 1 point used by 3
+  // curves, no constraint); on midpoint -> midpoint
   for (const [label, pt, expectType] of [
-    ['endpoint', [200, 120], 'coincident'],
+    ['endpoint', [200, 120], 'shared'],
     ['midpoint', [300, 120], 'midpoint'],
   ]) {
     const { S, baseLine } = await freshWithLine();
@@ -115,6 +116,11 @@ try {
     const rectLines = app.state.shapes.filter((s) => s.type === 'line' && s.groupId && s.groupId.startsWith('rect_'));
     const firstCornerId = rectLines[0].joints[0];
     const added = app.state.constraints.slice(beforeCons);
+    if (expectType === 'shared') {
+      assert.ok(firstCornerId === baseLine.joints[0] && app.state.shapes.filter((s) => s.joints.includes(firstCornerId)).length === 3 && !added.some((c) => norm(c.type) === 'coincident'),
+        `2pt rect first corner on ${label}: the corner IS the end point (used by 3 curves, no coincident), got ${JSON.stringify(added.map((c) => c.type))}`);
+      continue;
+    }
     const matched = added.filter((c) => {
       if (norm(c.type) !== expectType) return false;
       if (expectType === 'coincident') return c.joints && c.joints.includes(firstCornerId) && c.joints.includes(baseLine.joints[0]);

@@ -71,14 +71,17 @@ try {
     assert.strictEqual(pol.length, 1, `the vertex has a point-on-line (${JSON.stringify(app.state.constraints.map((k) => k.type))})`);
   }
 
-  // D2. polygon vertex 4 px off a line's end point: coincident
+  // D2. polygon vertex 4 px off a line's end point: TASK 1045 (Fusion measured 2026-11-27: a drawing tool's new point on an existing curve END point
+  // shares it): the vertex IS that end point, no coincident
   {
     const { S, line } = await fresh();
     app.tool('polygon');
     click(S(300, 220), 0, 0);
     click(S(400, 120), 0, OFF);
     const coin = app.state.constraints.filter((k) => norm(k.type) === 'coincident' && (k.joints || []).includes(line.joints[1]));
-    assert.strictEqual(coin.length, 1, 'the vertex is coincident with the end point');
+    const sides = app.state.shapes.filter((s) => s.type === 'line' && s.id !== line.id && !s.isConstruction);
+    assert.strictEqual(coin.length, 0, 'no coincident with the end point');
+    assert.ok(sides.filter((s) => s.joints.includes(line.joints[1])).length === 2, 'the vertex IS the end point (two polygon sides use it)');
   }
 
   // E. 3-point arc slot: the arc point 4 px off an existing point is that point (point-on-arc)

@@ -43,10 +43,11 @@ export const RECIPE = [
   { label: 'hole radius 8', type: 'distance', shape: 'hole', isRadius: true, value: 8 },
 ];
 
-// opts.shared: the same outline with ONE joint per corner (what a DXF/SVG import or a weld produces) instead of the line tool's coincident pairs.
+// opts.shared: the same outline with ONE joint per corner (what a DXF/SVG import or a weld produces). TASK 1045: the line tool's chain shares its
+// corners too now, so both builds have one joint per corner.
 export function build(S, opts = {}) {
-  // the outline is drawn with the line tool: 8 segments A->B->...->H->A, each owning its two joints, corners joined by coincident constraints.
-  // A corner's name is the START joint of the segment that begins there (its partner, the end of the previous segment, is coincident with it).
+  // the outline is drawn with the line tool: 8 segments A->B->...->H->A, consecutive segments SHARING their corner joint (TASK 1045).
+  // A corner's name is the START joint of the segment that begins there.
   const pts = [[0, 0], [130, 0], [140, 10], [140, 40], [40, 40], [40, 140], [10, 140], [0, 130]];
   const ring = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
   const names = {};

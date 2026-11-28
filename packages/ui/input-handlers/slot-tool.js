@@ -351,18 +351,20 @@ function commitSlot(svg, state, cursorPt) {
 
     for (const s of built.shapes) state.shapes.push(s);
     for (const c of built.constraints) addConstraint(state, c.type, c);
-    for (const [jid, snap] of snapsToApply) applyLockedSnap(state, jid, snap);
+    // TASK 1045: a slot point placed on an existing curve end point is SHARED with it: its joint id is that point's from here on (`live`)
+    const sharedAs = new Map(snapsToApply.map(([jid, snap]) => [jid, applyLockedSnap(state, jid, snap)]));
+    const live = (id) => sharedAs.get(id) || id;
     // R1-08: the centreline lies on the inferred Horizontal / Vertical: the constraint (the Line tool's apply)
     const centreJoints = mode === SLOT_MODES.OVERALL
-        ? (built.meta && built.meta.t1Id && built.meta.t2Id ? [built.meta.t1Id, built.meta.t2Id] : null)
-        : (built.meta && !isArcMode(mode) && built.meta.c1Id && built.meta.c2Id ? [built.meta.c1Id, built.meta.c2Id] : null);
+        ? (built.meta && built.meta.t1Id && built.meta.t2Id ? [live(built.meta.t1Id), live(built.meta.t2Id)] : null)
+        : (built.meta && !isArcMode(mode) && built.meta.c1Id && built.meta.c2Id ? [live(built.meta.c1Id), live(built.meta.c2Id)] : null);
     if (centreJoints && active.spanInference) applyLineInference(state, active.spanInference, centreJoints[0], centreJoints[1], null);
     // TASK 782 / 1013 (B-19c): a typed span length becomes a driving span dimension in ALL straight slot modes (C2C, Overall, Center-Point) and Center-Point Arc
     // (its radius). TASK 1028 (B-04): and the 3-point arc slot: its span box is the distance between its two end centres (resolveSpanEnd), so that distance.
     if (active.typedSpan > 0 && built.meta) {
         const spanJoints = mode === SLOT_MODES.OVERALL
-            ? (built.meta.t1Id && built.meta.t2Id ? [built.meta.t1Id, built.meta.t2Id] : null)
-            : (mode !== SLOT_MODES.CENTER_POINT_ARC && built.meta.c1Id && built.meta.c2Id ? [built.meta.c1Id, built.meta.c2Id] : null);
+            ? (built.meta.t1Id && built.meta.t2Id ? [live(built.meta.t1Id), live(built.meta.t2Id)] : null)
+            : (mode !== SLOT_MODES.CENTER_POINT_ARC && built.meta.c1Id && built.meta.c2Id ? [live(built.meta.c1Id), live(built.meta.c2Id)] : null);
         if (spanJoints) {
             if (active.typedSpanAssign) applyLiveAssign(state, active.typedSpanAssign);
             ConstraintManager.createConstraint(state, CONSTRAINT_TYPES.DISTANCE, {

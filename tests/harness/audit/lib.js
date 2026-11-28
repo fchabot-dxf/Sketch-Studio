@@ -41,7 +41,7 @@ export function line(S, a, b, construction = false) {
   S.state.shapes.push({ id, type: 'line', joints: [a, b], isConstruction: construction });
   return id;
 }
-// Line tool polyline (#core/tool-ops.js polyline): every segment owns its two joints, the corners are joined by the auto coincident the line tool adds
+// Line tool polyline (#core/tool-ops.js polyline): TASK 1045: consecutive segments SHARE their corner joint (no coincident), as the Line tool's chain
 export function polyline(S, pts, closed = true) { return ops.polyline(S.state, pts, closed); }
 // Circle tool (#core/tool-ops.js circle) -> { id, c }
 export function circle(S, cx, cy, r) { return ops.circle(S.state, cx, cy, r); }

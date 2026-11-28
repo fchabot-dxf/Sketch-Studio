@@ -220,7 +220,7 @@ const NEAR = 1e-6; // two corners closer than this (mm) are ONE point (a frame e
 // Board OUTLINES (world polygons: frame-calc's frame, Y down) -> the sketch, drawn with the LINE TOOL: every edge is split at the corners lying
 // on it and each piece is drawn ONCE (a seam two boards share is one line). Each board's pieces not drawn yet are drawn as polylines along the
 // board (the whole outline closed when none is drawn yet); a polyline starts on a corner's joint when that corner has one, and ends on it (the
-// Line tool's coincident). Each corner's FIRST joint is its joint for the rules and the dimensions (`homes`: corners given a joint beforehand).
+// Line tool's join: TASK 1045, the corner's point, shared). Each corner's FIRST joint is its joint for the rules and the dimensions (`homes`: corners given a joint beforehand).
 // -> { J(q): a corner's joint, corners: [{ q, j }], pieces: [{ a, b, shape }] (a, b: corners; in drawing order) }
 function drawBoards(d, polys, homes = []) {
   const corners = [];

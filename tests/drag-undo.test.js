@@ -59,8 +59,17 @@ assert.deepStrictEqual(DRAG_SHAPE_UNDO_LABELS, { line: 'drag line', circle: 'dra
 }
 {
   const S = L.newSketch();
-  const segs = L.polyline(S, [[100, 100], [200, 100], [200, 200]], false); // corner joints joined by a coincident constraint: a cluster
-  oneStep('cluster drag', S, () => drag(S, { joint: segs[0].b }, { x: 200, y: 100 }, { x: 240, y: 70 }), 'drag points');
+  // two corner joints joined by a coincident constraint: a cluster (TASK 1045: a Line-tool chain SHARES its corner now, so the cluster is glued
+  // the Coincident tool's way, as a file saved before keeps it)
+  const a = L.point(S, 100, 100), b = L.point(S, 200, 100), b2 = L.point(S, 200, 100), c = L.point(S, 200, 200);
+  L.line(S, a, b); L.line(S, b2, c);
+  ConstraintManager.createConstraint(S.state, 'coincident', { joints: [b, b2] }, { source: 'toolbar' });
+  oneStep('cluster drag', S, () => drag(S, { joint: b }, { x: 200, y: 100 }, { x: 240, y: 70 }), 'drag points');
+}
+{
+  const S = L.newSketch();
+  const segs = L.polyline(S, [[100, 100], [200, 100], [200, 200]], false); // TASK 1045: a chain's corner is ONE shared point: a point drag
+  oneStep('shared corner drag', S, () => drag(S, { joint: segs[0].b }, { x: 200, y: 100 }, { x: 240, y: 70 }), 'drag point');
 }
 
 // ---- a click (press, no move) and a drag that returns to its start leave no step

@@ -8,7 +8,7 @@ import { build } from '../coverage/matrix-build.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { toggleFixedSelection } from '#ui/input-manager.js';
 import { commitDimensionEdit } from '#core/dimension-seams.js';
-import { serDoc } from './export.js';
+import { serDoc, recordedPointIndex } from './export.js';
 
 export const TOL_F = 1e-6;      // Fusion: stayed < 1e-6 mm
 export const TOL_O = 1e-4;      // ours: the solver's stop tolerance
@@ -271,9 +271,11 @@ export function fusionMove(M, fres) {
   const step = fres.steps[fres.steps.length - 1];
   if (!fres.initial || !step) return null;
   if (!step.accepted) return { accepted: false, error: step.error };
-  // positions are stored by index (joint order of the document minus the origin, shape order): map them onto this build's ids
+  // positions are stored by index (joint order of the document minus the origin, shape order): map them onto this build's ids (TASK 1045: by the
+  // initial place, export.js recordedPointIndex; M is still as built)
   const jids = [...M.S.state.joints.keys()].filter(j => j !== ORIGIN), sids = M.S.state.shapes.map(s => s.id);
-  const toMap = (snap) => { const pts = {}, radii = {}; jids.forEach((j, i) => { pts[j] = snap.pts[i]; }); sids.forEach((s, i) => { if (snap.radii[i] != null) radii[s] = snap.radii[i]; }); return { pts, radii }; };
+  const ix = recordedPointIndex(jids.map((j) => { const p = M.S.state.joints.get(j); return [p.x, p.y]; }), fres.initial.pts);
+  const toMap = (snap) => { const pts = {}, radii = {}; jids.forEach((j, i) => { pts[j] = snap.pts[ix[i]]; }); sids.forEach((s, i) => { if (snap.radii[i] != null) radii[s] = snap.radii[i]; }); return { pts, radii }; };
   const before = toMap(fres.initial), after = toMap(step.snap);
   const full = {}; sids.forEach((s, i) => { full[s] = step.snap.full ? step.snap.full[i] : null; });
   return { accepted: true, mv: moveOf(M, before, after, TOL_F), originOk: step.snap.origin[0] === 0 && step.snap.origin[1] === 0, valueError: step.valueError, full, driving: step.driving };

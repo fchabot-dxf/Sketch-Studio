@@ -1,5 +1,5 @@
 // packages/ui/close-path-actions.js — TASK 760: THE Close path command of the Design tab, in every app (SketchStudio, Shaper, Pen Plotter, Trace).
-// The geometry is #core/close-path.js; this module is the command: ONE undo step per run (recordConstraintStep: saved only when something was
+// The geometry is #core/close-path.js; this module is the command: ONE undo step per run (recordCloseStep: saved only when something was
 // closed), the notice that says what was left open and why anything was refused (TASK 878: a run that closed everything it was given says nothing: the
 // closed outlines are selected), and the import's offer. Its entries:
 //   the ribbon button (Modify, beside Break: #ui/tool-ribbon.js) and its key (tool.closePath, #ui/shortcuts.js) switch to the CLOSE_PATH tool;
@@ -12,9 +12,17 @@
 
 import { planCommandClose, applyClosePath, closeOfferedChains, nearClosedChains, closePathPick, CLOSE_PATH_UNDO_LABEL } from '#core/close-path.js';
 import { lengthText } from '#core/settings-manager.js';
-import { recordConstraintStep } from '#ui/input-handlers/constraint-tools.js';
 import { warnOtherSketch } from '#ui/input-handlers/active-sketch-warning.js';
 import { track } from '#ui/analytics.js';
+
+// THE undo step of a run: saved when `run` closed something (TASK 1045: a close adds no constraint any more, its ends are SHARED, so the step is not
+// told by the constraint count, constraint-tools.js recordConstraintStep, as it was). -> run's result.
+function recordCloseStep(state, run, closedOf) {
+  const before = state.captureUndoSnapshot();
+  const result = run();
+  if (closedOf(result)) state.saveStateForce(CLOSE_PATH_UNDO_LABEL, before);
+  return result;
+}
 
 const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 const gapText = (mm) => lengthText(mm, { show: 'unit', fractions: false });
@@ -35,7 +43,7 @@ function reasonsText(refused) {
 export function closePathOnShapes(state, shapeIds, notify = () => {}) {
   const { plans: ok, refused, leftOpen } = planCommandClose(state, shapeIds);
   if (!ok.length && !refused.length && !leftOpen.length) { notify('Close path: no open outline picked (click a line, an arc or a curve of the active sketch).', 'info'); return { closed: [], refused, leftOpen }; }
-  const results = ok.length ? recordConstraintStep(state, CLOSE_PATH_UNDO_LABEL, () => ok.map((p) => applyClosePath(state, p))) : [];
+  const results = ok.length ? recordCloseStep(state, () => ok.map((p) => applyClosePath(state, p)), (rs) => rs.some((r) => r.ok)) : [];
   if (ok.length) {
     track('close-path');
     selectClosed(state, ok, results);
@@ -119,7 +127,7 @@ const OFFER_MS = 20000;
 
 /** The offer's "Close them": exactly the offered chains that are still those open chains, in ONE undo step of their own; they are selected. */
 export function closeOffered(state, offered, notify = () => {}) {
-  const res = recordConstraintStep(state, CLOSE_PATH_UNDO_LABEL, () => closeOfferedChains(state, offered));
+  const res = recordCloseStep(state, () => closeOfferedChains(state, offered), (r) => r.closed.length > 0);
   if (res.closed.length) {
     track('close-path');
     selectClosed(state, res.closed, res.results);

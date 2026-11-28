@@ -8,7 +8,7 @@ import { TOOL_MODES, POLYGON_SIDES, CONSTRAINT_TYPES } from '#core/constants.js'
 import { addConstraint } from '#core/constraints.js';
 import { ConstraintManager } from '#core/constraint-manager.js';
 import { makePolygon, clampPolygonSides } from '#core/shapes.js';
-import { applySnapConstraint } from '#core/snap-constraints.js';
+import { applySnapConstraint, SNAP_JOIN } from '#core/snap-constraints.js';
 import { clearPreview } from '#ui/preview-manager.js';
 import { hideInput } from '#ui/numeric-input-manager.js';
 import { checkDragThreshold, beginDrawing, resetToolState, safeUpdatePreview, setupDimensionListeners, openCreationBoxes, followCreationBoxes, applyLockedSnap, shownSnap, snapPoint, MIN_SHAPE_SIZE, liveExpression, liveName, liveAssign, applyLiveAssign } from '#ui/input-handlers/base-tool.js';
@@ -170,7 +170,7 @@ export function createPolygon(state, endPt, vertexSnap = null) {
         }, { source: 'polygon' });
     }
     try {
-        if (state.active.centerSnapTarget && state.active.centerSnapTarget.isLocked) applySnapConstraint(state, state.active.start, state.active.centerSnapTarget);
+        if (state.active.centerSnapTarget && state.active.centerSnapTarget.isLocked) applySnapConstraint(state, state.active.start, state.active.centerSnapTarget, { join: SNAP_JOIN.DRAW });
     } catch (_) { /* a snap that cannot constrain still leaves a valid polygon */ }
     applyLockedSnap(state, vertexId, vertexSnap, [state.active.start]);
     state.endUndoGroup();

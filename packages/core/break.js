@@ -13,7 +13,7 @@
 import { inActiveSketch } from './sketch-model.js';
 import { CONSTRAINT_TYPES } from './constants.js';
 import { arcStructuralConstraints } from './shapes.js';
-import { applySnapConstraint, onShapeSnap } from './snap-constraints.js';
+import { applySnapConstraint, onShapeSnap, SNAP_JOIN } from './snap-constraints.js';
 import { curveGeom, curveParamAt, curvePointAt, curveCuts, heldJointsOn, boundsAround, inPiece, sameU } from './curve-cuts.js';
 
 /**
@@ -249,7 +249,7 @@ export function breakCircle(state, shapeId, cut0, cut1) {
     dropConstraints(state, heldOn);
     splitArcConstraints(state, shape, piece, g, cut0.u, cut1.u);
     state.constraints.push(...arcStructuralConstraints(shape), ...arcStructuralConstraints(piece));
-    for (const [id, cut] of minted) for (const cutterId of cut.cutters) applySnapConstraint(state, id, onShapeSnap(cutterId, cut.pt));
+    for (const [id, cut] of minted) for (const cutterId of cut.cutters) applySnapConstraint(state, id, onShapeSnap(cutterId, cut.pt), { join: SNAP_JOIN.GLUE });
   }
   return { newShapeId, joints: [j0, j1] };
 }

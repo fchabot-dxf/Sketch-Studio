@@ -10,7 +10,8 @@
 // two, symmetric per direction, suppression -> ONE RectangularPatternConstraint.
 //
 // THE OBJECTS (patternSources): the picked lines / arcs / circles and points. Every point of the objects (shape by shape, then the picked points)
-// gets ONE copy point per instance; points JOINED in the objects (a shared joint or a coincident cluster: line chains, rectangles) are ONE point
+// gets ONE copy point per instance; points JOINED in the objects (a shared joint: line chains, rectangles since task 1045; or a coincident
+// cluster: the Coincident tool's join, a file saved before) are ONE point
 // (its first one leads), so a copied chain stays joined and a copied rectangle stays closed. Stored as
 //   sources: { shapes: [ids], points: [the leading joint ids], shapeJoints: [[the point index of each joint of each shape]] }.
 // THE INSTANCES (patternSlots): the source is instance 0; the others are numbered `at`:

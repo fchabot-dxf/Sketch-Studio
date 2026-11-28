@@ -35,6 +35,9 @@ const fillet = (corner, r) => {
 };
 const dimension = (picks, place) => { app.tool('dim'); for (const p of picks) click(...p); click(...place); app.enter(); esc2(); app.tool('select'); };
 const constrain = (toolName, ...picks) => { app.tool(toolName); for (const p of picks) click(...p); esc2(); app.tool('select'); };
+// TASK 1045: a line that USES the origin joint itself, as a file saved before task 1045 stores it (the Line tool started a line ON j_origin then; since 1045
+// a line started at the origin is its own point glued to it by a Coincident, Fusion measured). Such files load unchanged, so the rule is tested on both.
+const oldOriginLine = (to) => { const st = app.state, id = st.genJ(); st.joints.set(id, { x: to[0], y: to[1] }); st.shapes.push({ id: 's_old_' + id, type: 'line', joints: ['j_origin', id] }); st.saveState('old file line'); app.frames(2); };
 
 async function openBlank(host = 'sketchstudio', w = 200) {
   if (app) await app.close();
@@ -105,8 +108,9 @@ for (const host of ['sketchstudio', 'shaper', 'penplotter']) {
 
 // ---------------------------------------------------------------- the origin (O-08b / O-08c / D-20): the key and the footer agree: nothing + the origin's hint
 await section('the origin', async () => {
+// (a) the lines USE j_origin (a file saved before task 1045)
 await openBlank();
-line([0, 0], [30, 20]); line([0, 0], [-30, 25]);
+oldOriginLine([30, 20]); oldOriginLine([-30, 25]);
 for (const name of ['key', 'backspace', 'footer']) {
   esc2(); click(0, 0);
   assert(app.state.selectedJoints.has('j_origin'), name + ': the origin is selected');
@@ -118,6 +122,22 @@ for (const name of ['key', 'backspace', 'footer']) {
   assert(!toastText().includes(CURVE_HINT), name + ': not the corner-mark sentence for the origin');
   const o = app.state.joints.get('j_origin');
   assert(o && o.x === 0 && o.y === 0 && o.fixed, name + ': the origin stays at (0, 0), fixed');
+}
+// (b) TASK 1045: the Line tool's lines from the origin: each its own start point, glued to the origin; a click there picks one of the stacked points
+await openBlank();
+line([0, 0], [30, 20]); line([0, 0], [-30, 25]);
+assert(!app.state.shapes.some((s) => s.joints.includes('j_origin')) && app.state.constraints.some((c) => c.type === 'coincident' && c.joints.includes('j_origin')), '1045: the lines start at the origin glued to it, none uses it');
+for (const name of ['key', 'backspace', 'footer']) {
+  esc2(); click(0, 0);
+  const picked = [...app.state.selectedJoints][0];
+  assert(picked && Math.hypot(app.state.joints.get(picked).x, app.state.joints.get(picked).y) < 1e-9, name + ' (1045): a point at the origin is selected');
+  const before = docKey(); clearToasts();
+  PATHS[name]();
+  assert.strictEqual(docKey(), before, name + ' (1045): nothing is deleted');
+  const hint = picked === 'j_origin' ? ORIGIN_HINT : CURVE_HINT;
+  assert(toastText().includes(hint), `${name} (1045): the hint of the point picked (${picked}: got "${toastText()}")`);
+  const o = app.state.joints.get('j_origin');
+  assert(o && o.x === 0 && o.y === 0 && o.fixed, name + ' (1045): the origin stays at (0, 0), fixed');
 }
 });
 
@@ -158,19 +178,25 @@ line([-40, 10], [-10, 10]); line([10, 10], [40, 10]);
 
 // ---------------------------------------------------------------- BUG-A (O-09b / O-09c): the OTHER curves' ties to the origin survive
 await section('BUG-A', async () => {
+// (a) the deleted line USES j_origin (a file saved before task 1045); (b) TASK 1045: the Line tool's line from the origin, its start glued to it
+for (const structure of ['uses the origin', 'glued (1045)']) {
 for (const [id, tie] of [['O-09b', 'distance'], ['O-09c', 'coincident']]) {
   await openBlank();
-  line([0, 0], [30, 20]); line([-40, 25], [-20, 30]);
+  if (structure === 'uses the origin') oldOriginLine([30, 20]);
+  line([-40, 25], [-20, 30]);
+  const other = jointAt(-20, 30);
   if (tie === 'distance') dimension([[-20, 30], [0, 0]], [-40, -10]);
   else constrain('coincident', [-20, 30], [0, 0]);
-  const ties = () => app.state.constraints.filter((c) => c && c.type === tie && (c.joints || []).includes('j_origin'));
-  assert.strictEqual(ties().length, 1, id + ': the other line has its ' + tie + ' to the origin');
+  if (structure !== 'uses the origin') line([0, 0], [30, 20]); // drawn after the tie: the tie's pick at (0, 0) is the origin alone
+  const ties = () => app.state.constraints.filter((c) => c && c.type === tie && (c.joints || []).includes('j_origin') && (c.joints || []).includes(other));
+  assert.strictEqual(ties().length, 1, `${id} (${structure}): the other line has its ${tie} to the origin`);
   esc2(); click(15, 10);
-  assert.strictEqual(app.state.selectedShapes.size, 1, id + ': the line from the origin is selected');
+  assert.strictEqual(app.state.selectedShapes.size, 1, `${id} (${structure}): the line from the origin is selected`);
   app.key('Delete');
-  assert.strictEqual(app.state.shapes.filter((s) => s.type === 'line').length, 1, id + ': the line from the origin is deleted');
-  assert.strictEqual(ties().length, 1, id + ': the other line\'s ' + tie + ' to the origin SURVIVES');
-  assert(app.state.joints.has('j_origin'), id + ': the origin stays');
+  assert.strictEqual(app.state.shapes.filter((s) => s.type === 'line').length, 1, `${id} (${structure}): the line from the origin is deleted`);
+  assert.strictEqual(ties().length, 1, `${id} (${structure}): the other line's ${tie} to the origin SURVIVES`);
+  assert(app.state.joints.has('j_origin'), `${id} (${structure}): the origin stays`);
+}
 }
 });
 

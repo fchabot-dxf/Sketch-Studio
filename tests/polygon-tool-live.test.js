@@ -1,7 +1,7 @@
 // tests/polygon-tool-live.test.js — TASK 483 (live headless, REAL mouse): the regular Polygon tool is in the Create group of EVERY
 // host that mounts the shared ribbon (SketchStudio, Shaper, Pen Plotter, Trace's Edit tab). TASK 596: the ribbon has NO Sides field; the
 // number of sides is typed in the on-canvas box that shows after the centre click, and is remembered across a reload. Real clicks draw
-// N plain lines + N construction radii, and ONE Undo click removes the whole polygon.
+// N plain lines + ONE polygon constraint (TASK 1050: no construction radii), and ONE Undo click removes the whole polygon.
 
 import assert from 'node:assert';
 import { resetBufferLive } from './helpers/reset-buffer.js';
@@ -68,7 +68,7 @@ await (async () => {
     await key('Escape', 'Escape', 27);
     assert.deepStrictEqual(await boxes(), [], 'Esc closes them');
 
-    // ---- 3. a REAL-mouse octagon in the Pen Plotter: 8 plain lines + 8 construction radii, closed; ONE Undo removes it all
+    // ---- 3. a REAL-mouse octagon in the Pen Plotter: 8 plain lines + ONE polygon constraint (TASK 1050), closed; ONE Undo removes it all
     const pp = HOSTS.penplotter;
     const stateOf = (h) => `(${h.state})`;
     const summary = (h) => evalJs(`(() => { const s = ${stateOf(h)}; return JSON.stringify({ shapes: s.shapes.length, lines: s.shapes.filter(x => x.type === 'line').length, sides: s.shapes.filter(x => !x.isConstruction).length, radii: s.shapes.filter(x => x.isConstruction).length, constraints: s.constraints.length, joints: s.joints.size }); })()`).then(JSON.parse);
@@ -78,8 +78,8 @@ await (async () => {
     await placePolygon(pp.canvas, 8);
     const octo = await summary(pp);
     console.log('Pen Plotter octagon:', JSON.stringify(octo));
-    assert.strictEqual(octo.sides, 8, '8 sides'); assert.strictEqual(octo.radii, 8, '8 construction radii'); assert.strictEqual(octo.lines, 16, 'plain lines only');
-    assert.strictEqual(octo.constraints, 14, '2(N-1) equal constraints'); assert.strictEqual(octo.joints, before.joints + 9, 'centre + 8 corners');
+    assert.strictEqual(octo.sides, 8, '8 sides'); assert.strictEqual(octo.radii, 0, 'no construction radius (TASK 1050)'); assert.strictEqual(octo.lines, 8, 'plain lines only');
+    assert.strictEqual(octo.constraints, 1, 'ONE polygon constraint (TASK 1050; was 2(N-1) equals)'); assert.strictEqual(octo.joints, before.joints + 9, 'centre + 8 corners');
     const regular = await evalJs(`(() => { const s = ${stateOf(pp)}; const d = (sh) => { const a = s.joints.get(sh.joints[0]), b = s.joints.get(sh.joints[1]); return Math.hypot(a.x - b.x, a.y - b.y); }; const L = s.shapes.filter(x => !x.isConstruction).map(d); return Math.max(...L) - Math.min(...L); })()`);
     assert(regular < 1e-6, 'equal sides within 1e-6 after the live solve: ' + regular);
     await clickEl('#btn-undo');
@@ -99,7 +99,7 @@ await (async () => {
       await placePolygon(h.canvas, 6);
       const hex = await summary(h);
       // (a delta: the design is carried across apps, so Shaper may open with what the plotter autosaved)
-      assert.strictEqual(hex.sides - c0.sides, 6, name + ': a hexagon'); assert.strictEqual(hex.lines - c0.lines, 12);
+      assert.strictEqual(hex.sides - c0.sides, 6, name + ': a hexagon'); assert.strictEqual(hex.lines - c0.lines, 6); // TASK 1050: 6 sides, no radii
       await clickEl('#btn-undo');
       assert.deepStrictEqual(await summary(h), c0, name + ': one Undo removes it');
     }

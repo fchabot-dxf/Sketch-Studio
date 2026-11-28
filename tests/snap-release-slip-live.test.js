@@ -77,11 +77,12 @@ await (async () => {
     assert(r1.filter((r) => r.type === 'pointermove').pop().none, 'the release point has no snap of its own: ' + JSON.stringify(r1));
     const flickMs = up1.t - down1.t;
     assert(flickMs < 200, 'the flick ran inside the 200 ms recovery window (press -> release ' + flickMs + ' ms)');
-    // the corner (the first radius' far joint) on screen: where the pointer was released, never back on the centre 120 px away
-    const poly = await evalJs(`import('#ui/coords.js').then(({ worldToScreen }) => { const s = ${S}; const sides = s.shapes.filter((x) => !x.isConstruction); const radii = s.shapes.filter((x) => x.isConstruction); const v = radii[0] && s.joints.get(radii[0].joints[1]); const p = v && worldToScreen(document.querySelector('#design-canvas'), v); return { sides: sides.length, radii: radii.length, cornerPxFromRelease: p ? Math.hypot(p.x - ${end.x}, p.y - ${end.y}) : null }; })`);
+    // the corner (the polygon constraint's first corner, TASK 1050: [centre, v0, ...]; no construction radius) on screen: where the pointer was
+    // released, never back on the centre 120 px away
+    const poly = await evalJs(`import('#ui/coords.js').then(({ worldToScreen }) => { const s = ${S}; const sides = s.shapes.filter((x) => !x.isConstruction); const radii = s.shapes.filter((x) => x.isConstruction); const pc = s.constraints.find((c) => c.type === 'polygon'); const v = pc && s.joints.get(pc.joints[1]); const p = v && worldToScreen(document.querySelector('#design-canvas'), v); return { sides: sides.length, radii: radii.length, cornerPxFromRelease: p ? Math.hypot(p.x - ${end.x}, p.y - ${end.y}) : null }; })`);
     console.log('flick from the origin: press -> release', Math.round(flickMs), 'ms', JSON.stringify(poly));
     assert.strictEqual(poly.sides, 6, 'a fast flick from the snapped origin draws the hexagon (6 sides): ' + JSON.stringify(poly));
-    assert.strictEqual(poly.radii, 6, '6 construction radii');
+    assert.strictEqual(poly.radii, 0, 'no construction radius (TASK 1050, Fusion: none)');
     assert(poly.cornerPxFromRelease !== null && poly.cornerPxFromRelease < 1, 'the corner is where the pointer was released, not back on the centre: ' + JSON.stringify(poly));
     await clickEl('#btn-undo');
     assert.strictEqual(await evalJs(`${S}.shapes.length`), 0, 'one Undo removes the polygon');

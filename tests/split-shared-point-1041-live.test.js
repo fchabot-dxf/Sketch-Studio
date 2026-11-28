@@ -1,6 +1,7 @@
 // tests/split-shared-point-1041-live.test.js — TASK 1041: SPLIT A SHARED POINT (Fusion's SharedPointCoincident, #core/shared-point.js) in a real
 // browser, SketchStudio desktop 1280 x 800 (real mouse, the Delete key, Ctrl+Z) and phone 390 x 844 (real touch, the footer Delete).
-// Each device: a Polygon (its first corner is ONE joint shared by 2 sides + the construction radius), then a Line from that corner (a SEPARATE
+// Each device: a Polygon and a Line drawn from its first corner (that corner is ONE joint shared by 2 sides + the drawn line; TASK 1050: a polygon
+// has no construction radius any more), then a Line glued on that corner (a SEPARATE
 // joint glued on by a coincident: the mixed stack Fusion measured). Nothing selected: no glyph at the corner. A press on the corner (it picks one
 // of the two stacked points) shows BOTH kinds side by side: the 2 shared-point glyphs (n - 1 of 3 curves) and the line's coincident (BUG-410:
 // every glyph of the spot, whichever stacked point the press picked). A press on a shared-point glyph selects it; Delete splits the point (one new
@@ -89,13 +90,19 @@ async function run({ width, height, tag }) {
     const centre = at(0.4, 0.5), corner = { x: centre.x + Math.round(Math.min(r.w, r.h) * 0.25), y: centre.y };
     const lineEnd = { x: corner.x + Math.round(Math.min(r.w, r.h) * 0.12), y: corner.y - Math.round(Math.min(r.w, r.h) * 0.2) };
     const lineStart = { x: lineEnd.x + Math.round(Math.min(r.w, r.h) * 0.08), y: lineEnd.y + Math.round(Math.min(r.w, r.h) * 0.12) };
+    // 15 degrees below the horizontal: parallel / perpendicular to no side of the hexagon (no Line-tool inference), clear of the glued line and of the X axis
+    const sharedEnd = { x: corner.x + Math.round(Math.min(r.w, r.h) * 0.26), y: corner.y + Math.round(Math.min(r.w, r.h) * 0.075) };
 
     // 1. a polygon (centre, corner), then a line from the corner (a separate joint glued on)
     await pressRibbonTool(evalJs, tap, 'tool-polygon');
     await tap(centre); await tap(corner); await esc(); await esc();
+    // TASK 1050: the third curve at the corner is a Line drawn FROM it (it shares the end point); the polygon itself has no radius
+    await pressRibbonTool(evalJs, tap, 'tool-line');
+    await tap(corner); await tap(sharedEnd); await esc(); await esc();
     let g = await readDoc();
     const cornerId = g.shapes.find((s) => !s.isConstruction).joints[0];
-    check(curvesAt(g, cornerId).length === 3, `[${tag}] the polygon's first corner is ONE joint of 3 curves (2 sides + the radius): ${curvesAt(g, cornerId).length}`);
+    check(curvesAt(g, cornerId).length === 3, `[${tag}] the polygon's first corner is ONE joint of 3 curves (2 sides + the line drawn from it): ${curvesAt(g, cornerId).length}`);
+    check(!g.constraints.some((c) => ['parallel', 'perpendicular', 'horizontal', 'vertical'].includes(c.type)), `[${tag}] the drawn line took no inferred direction constraint (${JSON.stringify(g.constraints.map((c) => c.type))})`);
     // a free line, then the Coincident tool: the corner, then the line's start (the second pick gives way: the line's start moves onto the corner;
     // Fusion's mixed stack: a separate joint glued on the shared corner)
     await pressRibbonTool(evalJs, tap, 'tool-line');

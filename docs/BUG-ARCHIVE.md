@@ -3598,7 +3598,7 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Fix:** the end step declares its winding as a `path` (`WINDING` in `arc-tool.js`): the session adds every hover AND the step's own point to it (`#ui/tool-session.js`, one rule), so a tap with no hover before it winds the short way, as a hovered click does.
 - **Task id(s):** `1039`
 - **Fix merge sha:** open (`agents/arc-session-1039`, awaiting merge)
-- **Guarding test file(s):** `tests/arc-session-1039-node.test.js` (`CB3 touch: tap centre, start, p` = `CB1 mouse: click centre, start, wind, click p`: the same document, `sweep:true`), `tests/arc-session-1039-live.test.js` (phone `centre-tap-x3` / `centre-finger-drag-tap`: the short way round)
+- **Guarding test file(s):** `tests/arc-session-1039-node.test.js` (`CB3 touch: tap centre, start, p` = `CB1 mouse: click centre, start, wind, click p`: the same document, `sweep:true`), `tests/arc-session-1039-phone-live.test.js` (split from `arc-session-1039-live.test.js` by task `1043`; phone `centre-tap-x3` / `centre-finger-drag-tap`: the short way round)
 - **Status:** fixed
 - **Family:** `ui-input`
 - **History:** found in task `1039` -> fixed in task `1039`. Probe `C04 tap-tap-tap`, before: `"sweep":false,"type":"arc"` (end `{"x":-14.8889,"y":39.5614}`, the clicks' `C01` `"sweep":true`); after: `"sweep":true,"type":"arc"`.
@@ -3651,20 +3651,82 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **History:** measured by the advisor 2026-11-27 -> fixed in task `1040`. Counts after (`tests/svg-loops-1040-node.test.js`): rect + line `closed 1, open 1`, two rects `closed 2`, slot `closed 1`, filleted rect `closed 1`.
 
 ### BUG-402
-- **Date / turn:** 2026-11-27 (found in task `1040`)
+- **Date / turn:** 2026-11-27 (found in task `1040`; fixed in task `1043`)
 - **Reported by:** task `1040` (the DXF check the task asked for)
 - **App(s) & host:** SketchStudio (Export, "Download DXF")
 - **Report:** the DXF export never joins curves: every line / arc / bezier / circle is its own entity (`LINE` / `ARC` / `SPLINE` / `CIRCLE`), no closed outline is ever one `LWPOLYLINE` (with bulges for arcs). One closed rectangle: `{"LINE":4}`.
 - **What was wrong:** a closed outline is 4 (or more) loose entities in the DXF, the same problem BUG-401 fixed in the SVG.
 - **Cause:** `apps/sketchstudio/ui/export-manager.js` `buildDXF` writes one entity per exported shape; it reads no loop.
-- **Fix:** open (task `1040` stopped on DXF, as told: not fixed there)
-- **Task id(s):** `1040` (found)
+- **Fix:** task `1043`. The decomposition BUG-401's fix wrote inline in `buildSVG` (`findLoops` / `findOpenChains` / `chainWalk` on `exportedShapes`, each curve in one place) is now ONE helper, `exportOutlines(state)` in `export-manager.js`, read by BOTH `buildSVG` (its output byte-identical: 453 fixture exports compared before / after) and `buildDXF`.
+  - Closed outlines: each is ONE closed R12 polyline: `POLYLINE` (`66` = 1, its point the R12 dummy 0, `70` = 1), then a `VERTEX` per point, then `SEQEND`. An arc is a bulge `42` = tan(sweep / 4) on the VERTEX that starts it; its sign is the way the walk turns in the DXF's Y-up plane, from the one `arcSweepInfo`.
+  - Beziers: a bezier is its sampled points inside the polyline. This is the kind's own sampling (`#core/curve-kinds.js` `CURVE_KINDS.bezier.points`, chord deviation <= `CURVE_TOLERANCE_MM` = 0.005 mm), so an outline with a bezier is ONE closed POLYLINE too and no SPLINE is ever written (BUG-421).
+  - Open strokes of 2+ curves: each is ONE open `POLYLINE` (`70` = 0).
+  - Single entities: a circle is a `CIRCLE`; a lone line or arc is its `LINE` / `ARC` (advisor ruling b).
+  - Bulge decimals: `precision` + log10(chord / (4 bulge^2)), so a nearly flat arc reads back as exact as a coordinate. At the coordinates' 6 decimals, the 17188 mm arc of `angle-dimension/owner-trapezoid-angle.json` came back 0.1 mm off.
+  - Shared end points: a step's ends are its NODES' points (coincident joints merged, `buildNodeMap`), so two curves meeting at a node are written at the very same coordinates.
+  - Y-up as before (BUG-301: the writer negates Y; "Invert Y axis" is SVG only). Construction stays out (`exportedShapes`).
+  - arcApprox: arcs are sampled (arcSeg segments) into the polylines, with no bulge. A circle is one closed `POLYLINE` of its points (was arcSeg `LINE`s).
+  - NOT `LWPOLYLINE`: the advisor measured Fusion's DXF import (importManager, 2026-11-27) refusing every LWPOLYLINE sample of the first version (`InternalValidationError : bRet`), also with a HEADER (`$ACADVER` AC1015, `$INSUNITS`) and subclass markers. A headerless R12 `POLYLINE` / `VERTEX` / `SEQEND` (66 = 1, 70 = 1, bulge 42 on the VERTEX) imported: a closed slot came in as 2 lines + 2 arcs, 1 profile. The Export view's default is R12 too.
+- **Declared limit:** our own DXF import (`#core/dxf-import`) reads a bezier back as the lines of its samples, not as a bezier. Advisor ruling (a) (bezier = SPLINE + open polylines) was REVERSED after Fusion refused every SPLINE file (BUG-421).
+- **Task id(s):** `1040` (found), `1043` (fixed)
+- **Fix merge sha:** open (`agents/dxf-loops-1043`, awaiting merge)
+- **Guarding test file(s):**
+  - `tests/dxf-loops-1043-node.test.js`:
+    - `D-1`: the svg-loops-1040 drawings, drawn with the real tools. Checks entity kinds / counts, closed flags, bulges and their sign, and every curve once. A bezier must be one chain of segments from its start to its end, every vertex on the curve, the curve within `CURVE_TOLERANCE_MM` of the chain. Also no SPLINE, no LWPOLYLINE, every POLYLINE in R12 form (66, dummy point, VERTEXes, SEQEND), and Y-up.
+    - `D-2`: arcApprox.
+    - `D-3`: the round trip through `#core/dxf-import`: exactly the file's segments come back (arcs: centre / radius / direction), a bezier as lines, the same loops.
+    - `D-4`: the 151 fixture drawings of bezier-loops-761, the same checks.
+  - `tests/export-roundtrip-1027-node.test.js`: the 3-line chain is one `POLYLINE`.
+  - `tests/bezier-loops-761-node.test.js`: its `studioDxf` facet changed on purpose; the bezier outline is one POLYLINE, no SPLINE, read back as lines.
+  - `tests/text-845-node.test.js`: the letters are POLYLINEs, no SPLINE.
+  - `tests/bezier-loops-761-sketchstudio-live.test.js`: the Export button's DXF is 1 closed POLYLINE (82 VERTEXes), no LINE / LWPOLYLINE / SPLINE.
+- **Status:** fixed
+- **Family:** `export-svg`
+- **Related:** BUG-301, BUG-401, BUG-420, BUG-421
+- **History:** found in task `1040` (`.evidence/1040/sample-output.txt`: `DXF of one closed rectangle (4 lines): {"LINE":4}`) -> fixed in task `1043` (fail-first: `dxf-loops-1043-node: 1 passed, 9 failed` on the old writer; after: `11 passed, 0 failed`).
+  - The first version (LWPOLYLINE) was refused by Fusion (advisor, measured) and rewritten as R12 POLYLINE in the same task.
+  - The advisor measured the R12 samples in Fusion: rect-filleted OK (4 lines + 1 arc, convex, 1 profile), slot OK (2 lines + 2 arcs, 1 profile), two-rects-and-circle OK (7 lines + circle, 3 profiles); bezier-loop (with a SPLINE) failed, see BUG-421. The bezier-loop sample was then rewritten as one POLYLINE; its Fusion import is still to be measured.
+
+---
+
+### BUG-420
+- **Date / turn:** 2026-11-27 (found in task `1043`)
+- **Reported by:** task `1043`
+- **App(s) & host:** SketchStudio (Export, "Download DXF")
+- **Report:** the Export view's "DXF version" select (`#export-dxf-version`: "R12 (default)" / "R2000") is read into the options (`dxfVersion`, `ui-manager.js`; `main.js` passes `'r12'`), but `buildDXF` never reads it, and the file has no HEADER section (no `$ACADVER`, no `$INSUNITS`).
+  - Task `1043` writes R12 entities only: its polylines are R12 `POLYLINE` / `VERTEX` / `SEQEND` (Fusion refused `LWPOLYLINE`), and there is no `SPLINE` (BUG-421). So the file matches the default "R12"; choosing "R2000" still changes nothing.
+  - Units: a headerless DXF imports into Fusion in the DOCUMENT's units (the advisor, measured 2026-11-27). An mm file opened in an inch document comes in 25.4x too big; the files exported before task `1043` did the same.
+- **What was wrong:** a choice offered to the user does nothing; the file declares no version or units (our own import assumes mm and says so; Fusion takes the open document's units).
+- **Cause:** `apps/sketchstudio/ui/export-manager.js` `buildDXF` ignores `opts.dxfVersion` and writes the ENTITIES section only.
+- **Fix:** open (not in task `1043`'s scope: reported)
+- **Task id(s):** `1043` (found)
 - **Fix merge sha:** none
 - **Guarding test file(s):** none yet
 - **Status:** open
 - **Family:** `export-svg`
-- **Related:** BUG-401
-- **History:** found in task `1040` (`.evidence/1040/sample-output.txt`: `DXF of one closed rectangle (4 lines): {"LINE":4}`).
+- **Related:** BUG-402, BUG-421
+- **History:** found in task `1043` (`grep -n dxfVersion`: read in `ui-manager.js:107`, passed in `main.js:74`, used nowhere in `export-manager.js`).
+
+---
+
+### BUG-421
+- **Date / turn:** 2026-11-27 (found in task `1043`, measured by the advisor; pre-existing since task `761`)
+- **Reported by:** advisor (Fusion `importManager` DXF 2D import)
+- **App(s) & host:** SketchStudio (Export, "Download DXF")
+- **Report:** any SketchStudio DXF holding a bezier was refused by Fusion (`InternalValidationError`). Both cases fail: the task-1043 `bezier-loop.dxf` (an R12 POLYLINE + a SPLINE), and a headerless SPLINE-only file cut from it, which is exactly what origin/main's export wrote for a bezier.
+- **What was wrong:** a drawing with a curve (a bezier, a text's letters) could not be brought into Fusion from our DXF at all.
+- **Cause:** `buildDXF` wrote a bezier as a cubic `SPLINE` entity (TASK 761: degree 3, knots 0 0 0 0 1 1 1 1). SPLINE is an R13+ entity, and the file is a headerless R12 one, which cannot carry it.
+- **Fix:** task `1043`: no SPLINE is written. A bezier is its sampled points inside the R12 polyline of its outline or chain (`CURVE_KINDS.bezier.points`, chord deviation <= `CURVE_TOLERANCE_MM` = 0.005 mm, the tolerance the hold part / pocket clearing / plotter polylines use), so an outline with a bezier is one closed POLYLINE. A lone bezier is one open POLYLINE.
+- **Declared limit:** our DXF import reads such a curve back as lines. The SVG export keeps the exact cubic.
+- **Task id(s):** `761` (introduced the SPLINE), `1043` (found, fixed)
+- **Fix merge sha:** open (`agents/dxf-loops-1043`, awaiting merge)
+- **Guarding test file(s):**
+  - `tests/dxf-loops-1043-node.test.js`: no SPLINE in any file (D-1, D-4). A bezier is one chain of segments, every vertex on the curve, the curve within `CURVE_TOLERANCE_MM`. `dxf/part-mm.dxf`'s SPLINE, imported as a bezier, is exported as a POLYLINE.
+  - `tests/bezier-loops-761-node.test.js`, `tests/text-845-node.test.js`, `tests/bezier-loops-761-sketchstudio-live.test.js`.
+- **Status:** fixed (Fusion import of the regenerated `bezier-loop.dxf` to be measured by the advisor)
+- **Family:** `export-svg`
+- **Related:** BUG-402, BUG-420
+- **History:** the SPLINE was written since task `761`; Fusion refused it, measured by the advisor 2026-11-27 -> fixed in task `1043`.
 
 ### BUG-410
 - **Date / turn:** 2026-11-27 (found in task `1041`)
@@ -3780,7 +3842,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | Family | Timeline (oldest first) |
 |---|---|
 | `build-deploy` | BUG-062 (11-21) |
-| `export-svg` | BUG-300 (11-27), BUG-301 (11-27), BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19), BUG-371 (11-27), BUG-376 (11-27), BUG-401 (11-27), BUG-402 (11-27, open) |
+| `export-svg` | BUG-300 (11-27), BUG-301 (11-27), BUG-022 (11-16), BUG-025 (11-16), BUG-034 (11-16), BUG-035 (11-17), BUG-043 (11-18), BUG-049 (11-19), BUG-371 (11-27), BUG-376 (11-27), BUG-401 (11-27), BUG-402 (11-27), BUG-420 (11-27, open), BUG-421 (11-27) |
 | `flaky-test` | BUG-004 (11-15), BUG-011 (11-15), BUG-016 (11-15), BUG-047 (11-19), BUG-052 (11-19), BUG-068 (11-22), BUG-069 (11-23), BUG-087 (11-25) |
 | `fusion-frame` | BUG-024 (11-16), BUG-048 (11-19), BUG-064 (11-21), BUG-071 (11-23), BUG-077 (11-23), BUG-084 (11-25), BUG-085 (11-25), BUG-086 (11-25), BUG-089 (11-25), BUG-173 (11-26) |
 | `layout-overlap` | BUG-006 (11-15), BUG-007 (11-15), BUG-017 (11-15), BUG-019 (11-16), BUG-020 (11-16), BUG-028 (11-16), BUG-030 (11-16), BUG-031 (11-16), BUG-040 (11-18), BUG-041 (11-18), BUG-055 (11-20), BUG-057 (11-20), BUG-070 (11-20), BUG-078 (11-23), BUG-083 (11-24), BUG-224 (11-26), BUG-226 (11-26) |

@@ -55,7 +55,13 @@ try {
   out.svgCubic = (svg.match(/ C /g) || []).length;
   assert.strictEqual(out.svgCubic, 1, '2: the SVG writes the bezier as one cubic C');
   const dxf = await exportAs('dxf');
-  out.dxf = ['LINE', 'SPLINE'].map((k) => (dxf.match(new RegExp('\\r?\\n' + k + '\\r?\\n', 'g')) || []).length);
-  assert.deepStrictEqual(out.dxf, [3, 1], '2: the DXF writes 3 LINEs and 1 SPLINE');
-  console.log(`bezier-loops-761-sketchstudio-live: ALL CHECKS PASSED ${JSON.stringify({ svgCubic: out.svgCubic, dxf: out.dxf, tint: out.tint[0] })}`);
+  // TASK 1043 (BUG-402, BUG-421): the outline (3 lines + the bezier) is ONE closed R12 POLYLINE, the bezier its sampled points: no SPLINE (Fusion refuses a
+  // DXF holding one)
+  out.dxf = ['LINE', 'POLYLINE', 'SEQEND', 'LWPOLYLINE', 'SPLINE'].map((k) => (dxf.match(new RegExp('\\r?\\n' + k + '\\r?\\n', 'g')) || []).length);
+  assert.deepStrictEqual(out.dxf, [0, 1, 1, 0, 0], '2: the DXF writes the outline as 1 POLYLINE (a SEQEND), no LINE, no LWPOLYLINE, no SPLINE');
+  out.vertices = (dxf.match(/\r?\nVERTEX\r?\n/g) || []).length;
+  assert.ok(out.vertices > 4, `2: the POLYLINE holds the 3 lines' corners and the bezier's samples (${out.vertices} VERTEXes)`);
+  const poly = /\r?\nPOLYLINE\r?\n[\s\S]*?\r?\n66\r?\n(\d+)\r?\n[\s\S]*?\r?\n70\r?\n(\d+)\r?\n/.exec(dxf);
+  assert.deepStrictEqual(poly && [poly[1], poly[2]], ['1', '1'], '2: the POLYLINE: vertices follow (66 = 1), closed (70 = 1)');
+  console.log(`bezier-loops-761-sketchstudio-live: ALL CHECKS PASSED ${JSON.stringify({ svgCubic: out.svgCubic, dxf: out.dxf, vertices: out.vertices, tint: out.tint[0] })}`);
 } finally { await cdp.close(); fs.rmSync(dlDir, { recursive: true, force: true }); }

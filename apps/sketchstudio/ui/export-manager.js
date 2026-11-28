@@ -1,10 +1,11 @@
-// Export manager: build SVG or DXF exports from sketch data (lines, arcs and, TASK 761, beziers: a cubic `C` / a DXF SPLINE)
+// Export manager: build SVG or DXF exports from sketch data (lines, arcs and, TASK 761, beziers: a cubic `C` / in a DXF its sampled points, TASK 1043); TASK 1043: both from ONE decomposition
+// (exportOutlines: closed outlines + open chains), an SVG closed <path>s, a DXF closed R12 POLYLINEs
 import { CONSTRAINT_TYPES } from '#core/constants.js';
 import SettingsManager from '#core/settings-manager.js';
 import { arcSweepInfo } from '#core/geometry.js';
 import { CURVE_KINDS, bezierPoints, exportedShapes } from '#core/curve-kinds.js'; // TASK 761: a bezier's control points / sampled points, declared once; TASK 1036: what is exported (BUG-300's rule, moved there)
 import { track } from '#ui/analytics.js'; // TASK 738
-import { findLoops, findOpenChains, buildNodeMap, curveEnds } from '#core/loop-finder.js'; // TASK 1040: the closed outlines and open chains an SVG writes (the finder Shaper reads)
+import { findLoops, findOpenChains, buildNodeMap, curveEnds } from '#core/loop-finder.js'; // TASK 1040 / 1043: the closed outlines and open chains an export writes (the finder Shaper reads)
 import { chainWalk } from '#core/loop-geometry.js'; // TASK 1040: an open chain's walk, end to end (the one chainToPathD writes)
 
 // Task 614: the stroke width of an export when the caller passes none. A DECLARED export constant (was the LINE_STROKE display knob, whose
@@ -48,6 +49,41 @@ function sampleCirclePoints(cx, cy, r, segments) {
   return pts;
 }
 
+// TASK 1040 (BUG-401) / TASK 1043 (BUG-402): WHAT an export writes, read ONCE for both writers (buildSVG and buildDXF) from the app's ONE closed-shape
+// finder (#core/loop-finder.js, the one Shaper's Prepare and cut file read), on the exported shapes only (exportedShapes: never construction):
+//   outlines: every closed outline (findLoops: lines, arcs, beziers, mixed), as { circle } (a circle) or { steps } (its walk, one step per curve);
+//   chains:   every other curve, in the open chains (findOpenChains), each chain its strokes (#core/loop-geometry.js chainWalk), each stroke its steps.
+// A step = { shape, fromP, toP, forward }: the curve walked from the point `fromP` to `toP`, `forward` = from its kind's start end. EVERY CURVE IS IN ONE
+// STEP: an outline is kept closed only when none of its curves is taken yet (the finder's order); a loop that shares a curve with one taken before (a
+// rectangle with a divider: the two halves share it) leaves its other curves to the open chains. A step's ends are its NODES' points (the coincident
+// joints merged, buildNodeMap's one joint per node), so two curves meeting at a node are written meeting at the very same point.
+// → null (nothing to export) | { shapes, outlines, chains }
+function exportOutlines(state) {
+  const shapes = exportedShapes(state);
+  if (shapes.length === 0) return null;
+  const J = (jid) => state.joints.get(jid);
+  const view = { joints: state.joints, shapes, constraints: state.constraints || [] };
+  const node = buildNodeMap(view);
+  const byId = new Map(shapes.map((s) => [s.id, s]));
+  const taken = new Set();
+  const closed = [];
+  for (const loop of findLoops(view)) {
+    if (new Set(loop.edges).size !== loop.edges.length || loop.edges.some((id) => taken.has(id))) continue;
+    closed.push(loop);
+    for (const id of loop.edges) taken.add(id);
+  }
+  // the loop's walk: edge k joins node k to node k + 1 (the last one closes back to node 0)
+  const outlines = closed.map((loop) => {
+    const first = byId.get(loop.edges[0]);
+    if (first.type === 'circle') return { circle: first };
+    const n = loop.joints.length;
+    return { steps: loop.edges.map((id, k) => { const s = byId.get(id), from = loop.joints[k]; return { shape: s, fromP: J(from), toP: J(loop.joints[(k + 1) % n]), forward: node(curveEnds(s)[0]) === from }; }) };
+  });
+  const atNode = (st) => { const [a, b] = curveEnds(st.shape); return { ...st, fromP: J(node(st.forward ? a : b)), toP: J(node(st.forward ? b : a)) }; };
+  const chains = findOpenChains(view, closed).map((chain) => chainWalk(chain, view).map((stroke) => stroke.map(atNode)));
+  return { shapes, outlines, chains };
+}
+
 export function buildSVG(state, opts = {}) {
   const precision = (typeof opts.precision === 'number') ? opts.precision : 6;
   const scale = (typeof opts.scale === 'number') ? opts.scale : 1;
@@ -58,8 +94,9 @@ export function buildSVG(state, opts = {}) {
   const lineJoin = opts.lineJoin || SettingsManager.get('LINE_JOIN') || 'round';
   const lineStroke = (typeof opts.strokeWidth === 'number') ? opts.strokeWidth : EXPORT_STROKE_WIDTH;
 
-  const shapes = exportedShapes(state);
-  if (shapes.length === 0) return null;
+  const out = exportOutlines(state);
+  if (!out) return null;
+  const { shapes } = out;
 
   // TASK 1036 (BUG-371, N-3): THE Y flip of the SVG export: every point written (an outline's / a path's points, an arc's end, a circle's centre, a
   // bezier's control points, a sampled curve's points) goes through it; a mirror also turns an arc's direction round (`turn`).
@@ -113,25 +150,11 @@ export function buildSVG(state, opts = {}) {
   const elems = [];
   const pathEl = (d) => elems.push(`<path d="${d}" stroke="black" stroke-width="${formatNum(lineStroke, precision)}" stroke-linecap="${lineCap}" stroke-linejoin="${lineJoin}" fill="none" />`);
 
-  // TASK 1040 (BUG-401): WHAT is written is read from the app's ONE closed-shape finder (#core/loop-finder.js, the one Shaper's Prepare and cut file read),
-  // on the exported shapes only: every closed outline (findLoops: lines, arcs, beziers, mixed) is ONE closed <path ... Z>, a circle stays a <circle>, and
-  // every other curve is in an open chain (findOpenChains), each chain ONE <path> (its walk, #core/loop-geometry.js chainWalk). EVERY CURVE IS WRITTEN
-  // ONCE: an outline is written closed only when none of its curves is written yet (the finder's order); a loop that shares a curve with one written
-  // before (a rectangle with a divider: the two halves share it) leaves its other curves to the open chains.
-  const view = { joints: state.joints, shapes, constraints: state.constraints || [] };
-  const node = buildNodeMap(view);
-  const byId = new Map(shapes.map((s) => [s.id, s]));
-  const written = new Set();
-  const closed = [];
-  for (const loop of findLoops(view)) {
-    if (new Set(loop.edges).size !== loop.edges.length || loop.edges.some((id) => written.has(id))) continue;
-    closed.push(loop);
-    for (const id of loop.edges) written.add(id);
-  }
-  for (const loop of closed) {
-    const first = byId.get(loop.edges[0]);
-    if (first.type === 'circle') { // BUG-300 (F-81): a circle as a <circle> (or, with arcApprox, its sampled closed polyline)
-      const c0 = J(first.joints[0]);
+  // TASK 1040 (BUG-401): what is written is exportOutlines' decomposition (the one the DXF writes too): every closed outline is ONE closed <path ... Z>,
+  // a circle stays a <circle>, every open chain ONE <path> (a stroke per M); every curve written once.
+  for (const o of out.outlines) {
+    if (o.circle) { // BUG-300 (F-81): a circle as a <circle> (or, with arcApprox, its sampled closed polyline)
+      const first = o.circle, c0 = J(first.joints[0]);
       if (!(first.radius > 0)) continue;
       if (arcApprox) {
         const pts = sampleCirclePoints(c0.x, c0.y, first.radius, arcSeg).map(transform);
@@ -142,18 +165,14 @@ export function buildSVG(state, opts = {}) {
       }
       continue;
     }
-    // the loop's walk: edge k joins joint k to joint k + 1 (the last one closes back to joint 0); a line closing it is left to Z
-    const n = loop.joints.length;
-    let d = `M ${xy(transform(J(loop.joints[0])))}`;
-    loop.edges.forEach((id, k) => {
-      const s = byId.get(id), from = loop.joints[k], to = loop.joints[(k + 1) % n];
-      if (k === n - 1 && s.type === 'line') return;
-      d += ' ' + seg(s, J(from), J(to), node(curveEnds(s)[0]) === from);
-    });
+    // a line closing the outline is left to Z
+    const n = o.steps.length;
+    let d = `M ${xy(transform(o.steps[0].fromP))}`;
+    o.steps.forEach((st, k) => { if (!(k === n - 1 && st.shape.type === 'line')) d += ' ' + seg(st.shape, st.fromP, st.toP, st.forward); });
     pathEl(d + ' Z');
   }
-  for (const chain of findOpenChains(view, closed)) {
-    const d = chainWalk(chain, view).map((stroke) => `M ${xy(transform(stroke[0].fromP))} ` + stroke.map((st) => seg(st.shape, st.fromP, st.toP, st.forward)).join(' ')).join(' ');
+  for (const strokes of out.chains) {
+    const d = strokes.map((stroke) => `M ${xy(transform(stroke[0].fromP))} ` + stroke.map((st) => seg(st.shape, st.fromP, st.toP, st.forward)).join(' ')).join(' ');
     if (d) pathEl(d);
   }
 
@@ -174,76 +193,100 @@ export function buildDXF(state, opts = {}) {
   const arcApprox = !!opts.arcApprox;
   const arcSeg = parseInt(opts.arcSeg || 32, 10) || 32;
 
-  const shapes = exportedShapes(state);
-  if (shapes.length === 0) return null;
+  const out = exportOutlines(state);
+  if (!out) return null;
 
   // BUG-301 (F-84): DXF is Y-up and the world is Y-down, so the DXF writer ALWAYS negates Y (the importer, #core/dxf-import, negates it back); the
   // Export view's "Invert Y axis" box is for SVG only and does not reach a DXF. Everything below is computed from the points AS WRITTEN (`to`), so an
   // arc's angles and direction are the ones of the DXF's own plane.
   const flip = true;
   const to = (p) => ({ x: p.x * scale, y: (flip ? -p.y : p.y) * scale });
+  const f = (v) => formatNum(v, precision);
+  const J = (jid) => getJointPos(state, jid);
 
   const lines = [];
   lines.push('0','SECTION','2','ENTITIES');
-  for (const s of shapes) {
-    if (s.type === 'line') {
-      const a0 = getJointPos(state, s.joints[0]);
-      const b0 = getJointPos(state, s.joints[1]);
-      if (!a0 || !b0) continue;
-      const a = to(a0); const b = to(b0);
-      lines.push('0','LINE','8','0','10',formatNum(a.x, precision),'20',formatNum(a.y, precision),'11',formatNum(b.x, precision),'21',formatNum(b.y, precision));
-    } else if (s.type === 'arc') {
-      const c0 = getJointPos(state, s.joints[0]);
-      const st0 = getJointPos(state, s.joints[1]);
-      const en0 = getJointPos(state, s.joints[2]);
-      if (!c0 || !st0 || !en0) continue;
-      const c = to(c0), st = to(st0), en = to(en0);
-      const r = Math.hypot(st.x - c.x, st.y - c.y);
-      let startAngle = deg(Math.atan2(st.y - c.y, st.x - c.x));
-      let endAngle = deg(Math.atan2(en.y - c.y, en.x - c.x));
-      if (startAngle < 0) startAngle += 360; if (endAngle < 0) endAngle += 360;
-      // a DXF ARC runs counter-clockwise (increasing angle) from 50 to 51: an arc in the decreasing direction is written end -> start
-      // (TASK 550: the direction from the one arc-sweep function, so a fillet arc without a stored flag is written the way it is drawn;
-      // negating Y turns the direction round)
-      const dir = arcSweepInfo(c0, st0, en0, { sweep: s.sweep }).dir * (flip ? -1 : 1);
-      if (dir < 0) { const tmp = startAngle; startAngle = endAngle; endAngle = tmp; }
-
-      if (arcApprox) {
-        // approximate arc using line segments (always increasing angle from startAngle to endAngle, as the ARC entity)
-        const pts = sampleArcPoints(c.x, c.y, r, startAngle * Math.PI/180, endAngle * Math.PI/180, true, arcSeg);
-        for (let i = 0; i < pts.length - 1; i++) {
-          const p1 = pts[i], p2 = pts[i+1];
-          lines.push('0','LINE','8','0','10',formatNum(p1.x, precision),'20',formatNum(p1.y, precision),'11',formatNum(p2.x, precision),'21',formatNum(p2.y, precision));
-        }
-      } else {
-        lines.push('0','ARC','8','0','10',formatNum(c.x, precision),'20',formatNum(c.y, precision),'40',formatNum(r, precision),'50',formatNum(startAngle, precision),'51',formatNum(endAngle, precision));
-      }
-    } else if (s.type === 'circle') {
-      // BUG-300 (F-81): a circle is a CIRCLE entity (a DXF has no winding to keep), or with arcApprox its sampled points as LINEs
-      const c0 = getJointPos(state, s.joints[0]);
-      if (!c0 || !(s.radius > 0)) continue;
-      if (arcApprox) {
-        const pts = sampleCirclePoints(c0.x, c0.y, s.radius, arcSeg).map(to);
-        for (let i = 0; i < pts.length - 1; i++) lines.push('0','LINE','8','0','10',formatNum(pts[i].x, precision),'20',formatNum(pts[i].y, precision),'11',formatNum(pts[i+1].x, precision),'21',formatNum(pts[i+1].y, precision));
-      } else {
-        const c = to(c0);
-        lines.push('0','CIRCLE','8','0','10',formatNum(c.x, precision),'20',formatNum(c.y, precision),'40',formatNum(s.radius * scale, precision));
-      }
-    } else if (s.type === 'bezier') {
-      // TASK 761: a bezier is a cubic SPLINE (degree 3, its four control points, knots 0 0 0 0 1 1 1 1: what #core/dxf-import reads back as one
-      // bezier), or with arcApprox its sampled points as LINEs (#core/curve-kinds)
-      const P = bezierPoints(s, state.joints);
-      if (!P) continue;
-      if (arcApprox) {
-        const pts = CURVE_KINDS.bezier.points(s, state).map(to);
-        for (let i = 0; i < pts.length - 1; i++) lines.push('0','LINE','8','0','10',formatNum(pts[i].x, precision),'20',formatNum(pts[i].y, precision),'11',formatNum(pts[i+1].x, precision),'21',formatNum(pts[i+1].y, precision));
-      } else {
-        lines.push('0','SPLINE','8','0','70','8','71','3','72','8','73','4','74','0');
-        for (const k of [0, 0, 0, 0, 1, 1, 1, 1]) lines.push('40', String(k));
-        for (const q of P.map(to)) lines.push('10', formatNum(q.x, precision), '20', formatNum(q.y, precision), '30', formatNum(0, precision));
-      }
+  const lineEnt = (a0, b0) => { const a = to(a0), b = to(b0); lines.push('0','LINE','8','0','10',f(a.x),'20',f(a.y),'11',f(b.x),'21',f(b.y)); };
+  const arcEnt = (s) => {
+    const c0 = J(s.joints[0]), st0 = J(s.joints[1]), en0 = J(s.joints[2]);
+    const c = to(c0), st = to(st0), en = to(en0);
+    const r = Math.hypot(st.x - c.x, st.y - c.y);
+    let startAngle = deg(Math.atan2(st.y - c.y, st.x - c.x));
+    let endAngle = deg(Math.atan2(en.y - c.y, en.x - c.x));
+    if (startAngle < 0) startAngle += 360; if (endAngle < 0) endAngle += 360;
+    // a DXF ARC runs counter-clockwise (increasing angle) from 50 to 51: an arc in the decreasing direction is written end -> start
+    // (TASK 550: the direction from the one arc-sweep function, so a fillet arc without a stored flag is written the way it is drawn;
+    // negating Y turns the direction round)
+    const dir = arcSweepInfo(c0, st0, en0, { sweep: s.sweep }).dir * (flip ? -1 : 1);
+    if (dir < 0) { const tmp = startAngle; startAngle = endAngle; endAngle = tmp; }
+    lines.push('0','ARC','8','0','10',f(c.x),'20',f(c.y),'40',f(r),'50',f(startAngle),'51',f(endAngle));
+  };
+  // TASK 1043 (BUG-402): ONE R12 polyline: POLYLINE (66 = 1: vertices follow; its 10 / 20 / 30 the R12 dummy point 0; flag 70: 1 closed, 0 open), a VERTEX
+  // per point of `verts` = [{ p (world), bulge }], then SEQEND. A vertex's bulge (42) is the segment to the next one (0 a line; tan(sweep / 4) an arc, positive
+  // counter-clockwise in the DXF's Y-up plane). NOT an LWPOLYLINE: Fusion's DXF import refuses LWPOLYLINE files (measured by the advisor 2026-11-27, with and
+  // without a HEADER: "InternalValidationError : bRet") and reads this R12 form (a closed slot: 2 lines + 2 arcs, 1 profile); the Export view's default is
+  // R12. A bulge is written with the decimals that keep the arc read back as exact as a written coordinate: an error e in a bulge b on a chord c moves the
+  // arc's centre (and radius) by about c e / (4 b^2), so it takes `precision` + log10(c / (4 b^2)) decimals (a nearly flat arc of a large radius needs more
+  // than its coordinates' decimals)
+  const polyEnt = (verts, closed) => {
+    lines.push('0','POLYLINE','8','0','66','1','10',f(0),'20',f(0),'30',f(0),'70',closed ? '1' : '0');
+    verts.forEach((v, i) => {
+      const q = to(v.p);
+      lines.push('0','VERTEX','8','0','10', f(q.x), '20', f(q.y));
+      if (!v.bulge) return;
+      const w = to(verts[(i + 1) % verts.length].p), c = Math.hypot(w.x - q.x, w.y - q.y);
+      lines.push('42', formatNum(v.bulge, Math.min(20, precision + Math.max(0, Math.ceil(Math.log10(c / (4 * v.bulge * v.bulge)))))));
+    });
+    lines.push('0','SEQEND','8','0');
+  };
+  // a step's vertices, its end left out (the next step's start): a line its start; an arc its start with the bulge of its sweep turning the way it is walked
+  // (the one arc-sweep function; negating Y turns it round), with arcApprox its sampled points (arcSeg segments) as straight segments; a bezier ALWAYS its
+  // sampled points, the kind's own sampling (#core/curve-kinds CURVE_KINDS.bezier.points: chord deviation <= CURVE_TOLERANCE_MM, 0.005 mm, the tolerance the
+  // hold part / pocket clearing / plotter polylines stand for a curve at), from the walk's own end points. TASK 1043 (BUG-421): NO SPLINE is written: a
+  // headerless R12 DXF cannot carry one, and Fusion's DXF import refuses any file holding a SPLINE (the advisor, measured 2026-11-27), so an outline with a
+  // bezier is ONE closed POLYLINE too
+  const stepVerts = (st) => {
+    const s = st.shape;
+    if (s.type === 'arc') {
+      const c0 = J(s.joints[0]), st0 = J(s.joints[1]), en0 = J(s.joints[2]);
+      const info = arcSweepInfo(c0, st0, en0, { sweep: s.sweep });
+      const dir = st.forward ? info.dir : -info.dir;
+      if (!arcApprox) return [{ p: st.fromP, bulge: dir * (flip ? -1 : 1) * Math.tan(info.span / 4) }];
+      const a0 = Math.atan2(st.fromP.y - c0.y, st.fromP.x - c0.x), a1 = Math.atan2(st.toP.y - c0.y, st.toP.x - c0.x);
+      const pts = sampleArcPoints(c0.x, c0.y, Math.hypot(st0.x - c0.x, st0.y - c0.y), a0, a1, dir > 0, arcSeg);
+      return [st.fromP, ...pts.slice(1, -1)].map((p) => ({ p, bulge: 0 }));
     }
+    if (s.type === 'bezier') {
+      const pts = CURVE_KINDS.bezier.points(s, state);
+      return [st.fromP, ...(st.forward ? pts : pts.slice().reverse()).slice(1, -1)].map((p) => ({ p, bulge: 0 }));
+    }
+    return [{ p: st.fromP, bulge: 0 }];
+  };
+  // a walk (an outline's steps, closed, or an open stroke's) as ONE polyline; an open walk of ONE curve that has its own R12 entity stays that entity (a
+  // LINE, an ARC; a bezier has none: its polyline)
+  const writeWalk = (steps, closed) => {
+    if (!steps.length) return;
+    if (!closed && steps.length === 1 && steps[0].shape.type === 'line') return lineEnt(steps[0].fromP, steps[0].toP);
+    if (!closed && steps.length === 1 && steps[0].shape.type === 'arc' && !arcApprox) return arcEnt(steps[0].shape);
+    const verts = steps.flatMap(stepVerts);
+    if (!closed) verts.push({ p: steps[steps.length - 1].toP, bulge: 0 });
+    polyEnt(verts, closed);
+  };
+
+  // TASK 1043 (BUG-402): what is written is exportOutlines' decomposition (the one the SVG writes too): every closed outline ONE closed polyline, a circle
+  // a CIRCLE, every open stroke ONE open polyline; every curve written once
+  for (const o of out.outlines) {
+    if (o.circle) {
+      // BUG-300 (F-81): a circle is a CIRCLE entity (a DXF has no winding to keep), or with arcApprox its sampled points as one closed polyline
+      const s = o.circle, c0 = J(s.joints[0]);
+      if (!c0 || !(s.radius > 0)) continue;
+      if (arcApprox) polyEnt(sampleCirclePoints(c0.x, c0.y, s.radius, arcSeg).slice(0, -1).map((p) => ({ p, bulge: 0 })), true);
+      else { const c = to(c0); lines.push('0','CIRCLE','8','0','10',f(c.x),'20',f(c.y),'40',f(s.radius * scale)); }
+      continue;
+    }
+    writeWalk(o.steps, true);
   }
+  for (const strokes of out.chains) for (const stroke of strokes) writeWalk(stroke, false);
   lines.push('0','ENDSEC','0','EOF');
   return lines.join('\r\n');
 }

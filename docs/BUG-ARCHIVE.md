@@ -3790,16 +3790,16 @@ An archive of bugs reported by the owner and bugs found by the advisor or worker
 - **Date / turn:** 2026-11-27 (found in task `1045`)
 - **Reported by:** task `1045` (`tests/shared-corners-1045-live.test.js`, phone 390 x 844)
 - **App(s) & host:** SketchStudio (phone: touch)
-- **Report:** on the phone, a tap on a rectangle corner (2 sides share it) shows its shared-point glyph; a tap ON that glyph (on its drawn icon, 31 to 51 px from the corner) does not select the glyph: the corner stays selected, so the footer Delete deletes the point instead of splitting it. The desktop click selects the glyph. The task 1041 phone test (a polygon corner, 3 curves + a glued line) selects its glyph by the same tap.
-- **What was wrong:** not found. Seen: `document.elementFromPoint` at the tap is the canvas grid (the glyph's own hit path is not under it on the phone), and the select tool keeps the corner.
-- **Cause:** open (candidate: the touch tap's pick falls back to the last snap target, the corner, input-manager pointer down "Unlocked-snapTarget fallback").
-- **Fix:** open. The live test splits the phone's corner through the point's menu "Delete Coincident" meanwhile.
-- **Task id(s):** `1045` (found)
-- **Fix merge sha:** open
-- **Guarding test file(s):** none yet
-- **Status:** open
+- **Report:** on the phone, a tap on a rectangle corner (2 sides share it) shows its shared-point glyph; a tap ON that glyph (on its drawn icon, 31 to 51 px from the corner) did not select the glyph: the corner stayed selected, so the footer Delete answered for the point instead of splitting it. The desktop click selected the glyph.
+- **What was wrong:** the select tool's pick took the joint in reach before the glyph's ink (the phone's touch reach is wider than the 31 px from the corner to the glyph).
+- **Cause:** `packages/ui/hover-manager.js` `selectPick` (joint reach first), fixed by task `1044` (BUG-D: ONE pick rule `glyphOrJointPick`: the point's drawn ring, then the glyph's ink, then the joint reach).
+- **Fix:** task `1044` (merged in `6f321a9c`). Re-checked in task `1045` after merging it: the phone's tap on the glyph selects it and the footer Delete splits the corner (`.evidence/1045/bug441-probe.txt`: `ok [phone] the corner is SPLIT: one new joint (7 -> 8), the corner keeps one side (1)`; screenshot `.evidence/1045/live-bug441-glyph-tapped-phone.png`: the glyph and its side selected).
+- **Task id(s):** `1045` (found), `1044` (fixed)
+- **Fix merge sha:** `6f321a9c` (task 1044)
+- **Guarding test file(s):** `tests/shared-corners-1045-live.test.js` (phone: the tap on the glyph + the footer Delete)
+- **Status:** fixed
 - **Family:** `ui-input`
-- **History:** found in task `1045` (`.evidence/1045/live-glyph-selected-phone.png`: the corner still selected after the tap on its glyph).
+- **History:** found in task `1045` (`.evidence/1045/live-glyph-selected-phone.png`: the corner still selected after the tap on its glyph) -> fixed by task `1044`'s pick rule, re-checked in task `1045` after merging origin/main.
 
 ---
 
@@ -3824,7 +3824,7 @@ Entries in each family are listed in chronological date order (`MM-DD`, oldest f
 | `sync` | BUG-001 (11-14), BUG-002 (11-14), BUG-012 (11-15), BUG-013 (11-15), BUG-036 (11-17), BUG-038 (11-17), BUG-065 (11-21), BUG-081 (11-24), BUG-082 (11-24) |
 | `tool-bypasses-constraint-manager` | BUG-074 (11-23) |
 | `toolpath-geometry` | BUG-032 (11-16), BUG-033 (11-16), BUG-044 (11-18), BUG-051 (11-19), BUG-054 (11-20), BUG-056 (11-20), BUG-061 (11-20), BUG-066 (11-21), BUG-067 (11-22), BUG-374 (11-27, open), BUG-400 (11-27) |
-| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27), BUG-410 (11-27), BUG-430 (11-27), BUG-432 (11-27), BUG-434 (11-27), BUG-441 (11-27, open) |
+| `ui-input` | BUG-003 (11-14), BUG-009 (11-15), BUG-010 (11-15), BUG-021 (11-16), BUG-027 (11-16), BUG-042 (11-18), BUG-045 (11-18), BUG-053 (11-20), BUG-093 (11-26), BUG-097 (11-26), BUG-100 (11-26), BUG-101 (11-26), BUG-102 (11-26), BUG-103 (11-26), BUG-104 (11-26), BUG-105 (11-26), BUG-110 (11-26), BUG-111 (11-26), BUG-112 (11-26), BUG-113 (11-26), BUG-115 (11-26), BUG-124 (11-26), BUG-125 (11-26), BUG-135 (11-26), BUG-140 (11-26), BUG-141 (11-26), BUG-142 (11-26), BUG-143 (11-26), BUG-144 (11-26), BUG-145 (11-26), BUG-147 (11-26), BUG-150 (11-26), BUG-151 (11-26), BUG-153 (11-26), BUG-161 (11-26), BUG-172 (11-26), BUG-174 (11-26), BUG-180 (11-26), BUG-182 (11-26), BUG-190 (11-26), BUG-194 (11-26), BUG-199 (11-26), BUG-200 (11-26), BUG-211 (11-27), BUG-214 (11-27), BUG-215 (11-27, open), BUG-216 (11-27, open), BUG-220 (11-26), BUG-221 (11-26), BUG-222 (11-26), BUG-223 (11-26), BUG-228 (11-26), BUG-307 (11-27), BUG-310 (11-27), BUG-312 (11-27), BUG-313 (11-27), BUG-314 (11-27), BUG-315 (11-27), BUG-316 (11-27), BUG-318 (11-27), BUG-319 (11-27), BUG-320 (11-27), BUG-321 (11-27), BUG-322 (11-27), BUG-323 (11-27), BUG-324 (11-27), BUG-325 (11-27), BUG-326 (11-27), BUG-327 (11-27), BUG-328 (11-27), BUG-329 (11-27), BUG-330 (11-27), BUG-331 (11-27), BUG-332 (11-27), BUG-333 (11-27), BUG-340 (11-27), BUG-351 (11-27), BUG-361 (11-27), BUG-370 (11-27), BUG-382 (11-27), BUG-390 (11-27), BUG-391 (11-27), BUG-392 (11-27), BUG-410 (11-27), BUG-430 (11-27), BUG-432 (11-27), BUG-434 (11-27), BUG-441 (11-27) |
 | `import-svg` | BUG-302 (11-27), BUG-303 (11-27), BUG-304 (11-27) |
 | `units` | BUG-026 (11-16), BUG-029 (11-16), BUG-037 (11-17), BUG-039 (11-17), BUG-181 (11-26) |
 

@@ -1,9 +1,9 @@
 // tests/shared-corners-1045-live.test.js — TASK 1045: SHARED CORNERS in a real browser, SketchStudio desktop 1280 x 800 (real mouse, the Delete key) and
 // phone 390 x 844 (real touch, the footer Delete). Fusion, MEASURED by the advisor 2026-11-27: every drawing tool joins meeting ends with ONE shared
 // point (rectangles: all 3; Line tool chains). Each device: a 2-point Rectangle (2 taps) and a Line chain (3 taps, Esc): the rectangle is 4 joints, the
-// chain 3, no coincident anywhere; nothing selected: no glyph; a tap on a rectangle corner shows its ONE shared-point glyph (task 1041); desktop: a
-// click on the glyph selects it and Delete splits the corner (one new joint, the corner keeps its other side); phone: the corner's menu (touch and
-// hold) "Delete Coincident" splits it; the chain's middle point offers "Delete Coincident" in its menu (right click / touch and hold), which splits it.
+// chain 3, no coincident anywhere; nothing selected: no glyph; a tap on a rectangle corner shows its ONE shared-point glyph (task 1041); a tap on the
+// glyph selects it and Delete (desktop: the key; phone: the footer red X) splits the corner (one new joint, the corner keeps its other side); the
+// chain's middle point offers "Delete Coincident" in its menu (right click / touch and hold), which splits it.
 // The node twin (every rectangle variant, the Line tool's ends, the other tools, close path, old files, undo): tests/shared-corners-1045-node.test.js.
 // Evidence: .evidence/1045/live-<step>-<device>.png
 import assert from 'node:assert';
@@ -101,24 +101,24 @@ async function run({ width, height, tag }) {
     const cornerId = rect[0].joints[1], corner = await toScreen(posOf(g, cornerId));
     await shot('rect-drawn', corner);
 
-    // 2. a tap on the corner: ONE shared-point glyph. Desktop: a click on the glyph selects it and the Delete key splits the corner. Phone: the corner's
-    //    menu (touch and hold) "Delete Coincident" splits it (a tap on the glyph beside the just-tapped corner picks the corner again on the phone:
-    //    reported in the task 1045 REPORT, not this task's)
+    // 2. a tap on the corner: ONE shared-point glyph; a tap on the glyph selects it; Delete (desktop: the key; phone: the footer red X) splits the
+    //    corner (BUG-441: before task 1044's pick rule the phone's tap there re-selected the corner)
     await tap(corner);   // Esc twice above left the drawing tool: the Select tool picks
     const shown = await glyphs('sharedPointCoincident');
     check(shown.length === 1, `[${tag}] the corner tapped: its ONE shared-point glyph shows (${shown.length})`);
     await shot('corner-glyph', corner);
     const before = used(g).size;
-    if (!isPhone) {
-      const p = shown.length ? await onIcon(shown[0].shape, corner) : null;
-      check(!!p, `[${tag}] the glyph is on screen (a point on its icon ${p && Math.round(p.d)} px from the corner)`);
-      if (p) { await tap(p); await shot('glyph-selected', corner); await sendRealKey(send, 'Delete', 'Delete', 46, 0, ''); await sleep(300); }
-    } else {
-      await esc();
-      await menuOn(corner);
-      const item = await deleteCoincidentItem();
-      check(!!item && /Delete Coincident/.test(item.text), `[${tag}] the corner's menu offers "Delete Coincident" (${item && item.text})`);
-      if (item) await tap(item);
+    const p = shown.length ? await onIcon(shown[0].shape, corner) : null;
+    check(!!p, `[${tag}] the glyph is on screen (a point on its icon ${p && Math.round(p.d)} px from the corner)`);
+    if (p) {
+      await tap(p);
+      await shot('glyph-selected', corner);
+      if (isPhone) {
+        const b = await evalJs(`(() => { const b = document.getElementById('btn-delete-selection'); if (!b || b.disabled) return null; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+        check(!!b, `[${tag}] the footer Delete is enabled with the glyph selected`);
+        if (b) await tap(b);
+      } else await sendRealKey(send, 'Delete', 'Delete', 46, 0, '');
+      await sleep(300);
     }
     g = await readDoc();
     check(used(g).size === before + 1 && curvesAt(g, cornerId).length === 1, `[${tag}] the corner is SPLIT: one new joint (${before} -> ${used(g).size}), the corner keeps one side (${curvesAt(g, cornerId).length})`);
